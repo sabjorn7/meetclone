@@ -1,0 +1,1 @@
+{"name":"text-diff-comparison","version":"1.4.0","scripts":{"build":"weweb build","serve":"weweb serve"},"dependencies":{"diff":"^5.1.0"},"devDependencies":{}}

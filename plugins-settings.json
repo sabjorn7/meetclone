@@ -1,0 +1,56 @@
+{
+    "2bd1c688-31c5-443e-ae25-59aa5b6431fb": {
+        "id": "cc7ac695-7344-4df9-a2f8-c84eb4610995",
+        "name": "REST API",
+        "designId": "c64190db-b628-4e09-b006-ec381176a34c",
+        "pluginId": "2bd1c688-31c5-443e-ae25-59aa5b6431fb",
+        "publicData": {}
+    },
+    "832d6f7a-42c3-43f1-a3ce-9a678272f811": {
+        "id": "339fca7c-3e21-48a9-8548-e690656e9834",
+        "name": "Date",
+        "designId": "c64190db-b628-4e09-b006-ec381176a34c",
+        "pluginId": "832d6f7a-42c3-43f1-a3ce-9a678272f811",
+        "publicData": {
+            "favoriteFormat": ""
+        }
+    },
+    "f9ef41c3-1c53-4857-855b-f2f6a40b7186": {
+        "id": "d7de2287-2cd6-4f45-b449-2bab6f43ed9e",
+        "name": "Supabase",
+        "designId": "c64190db-b628-4e09-b006-ec381176a34c",
+        "pluginId": "f9ef41c3-1c53-4857-855b-f2f6a40b7186",
+        "publicData": {
+            "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICAgInJvbGUiOiAiYW5vbiIsCiAgICAiaXNzIjogInN1cGFiYXNlIiwKICAgICJpYXQiOiAxNzQ1NDQyMDAwLAogICAgImV4cCI6IDE5MDMyMDg0MDAKfQ.6o8FlA2X8jsM4lUKF1mqKSC-v_GX5iE0dY20b6x8bnw",
+            "projectUrl": "https://sb.meetgu.ru",
+            "realtimeTables": {
+                "shop": true,
+                "test": true,
+                "chats": true,
+                "order": true,
+                "sales": true,
+                "users": true,
+                "course": true,
+                "lessons": true,
+                "articles": true,
+                "messages": true,
+                "chat_users": true,
+                "user_course": true,
+                "articles_logs": true,
+                "Peertube_System": true,
+                "articles_rating": true,
+                "article_comments": true
+            }
+        }
+    },
+    "1fa0dd68-5069-436c-9a7d-3b54c340f1fa": {
+        "id": "06b67ccc-072c-4bfa-8b3c-97e5fc8d9dd0",
+        "name": "Supabase Auth",
+        "designId": "c64190db-b628-4e09-b006-ec381176a34c",
+        "pluginId": "1fa0dd68-5069-436c-9a7d-3b54c340f1fa",
+        "publicData": {
+            "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICAgInJvbGUiOiAiYW5vbiIsCiAgICAiaXNzIjogInN1cGFiYXNlIiwKICAgICJpYXQiOiAxNzQ1NDQyMDAwLAogICAgImV4cCI6IDE5MDMyMDg0MDAKfQ.6o8FlA2X8jsM4lUKF1mqKSC-v_GX5iE0dY20b6x8bnw",
+            "projectUrl": "https://sb.meetgu.ru"
+        }
+    }
+}

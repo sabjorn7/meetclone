@@ -59,12 +59,6 @@ export default {
     triggerEvents: [
         { name: 'focus', label: { en: 'On focus' }, event: null },
         { name: 'blur', label: { en: 'On blur' }, event: null },
-        { name: 'mousedown', label: { en: 'On mouse down' }, event: null },
-        { name: 'mouseup', label: { en: 'On mouse up' }, event: null },
-        { name: 'mouseleave', label: { en: 'On mouse leave' }, event: null },
-        { name: 'touchstart', label: { en: 'On touch start' }, event: null },
-        { name: 'touchend', label: { en: 'On touch end' }, event: null },
-        { name: 'touchcancel', label: { en: 'On touch cancel' }, event: null },
         { name: 'keydown', label: { en: 'On key down' }, event: null },
         { name: 'keyup', label: { en: 'On key up' }, event: null },
     ],

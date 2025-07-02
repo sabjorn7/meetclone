@@ -1,6 +1,12 @@
 <template>
     <div class="ww-rich-text-temp">
-        <div v-if="hasContent" class="ww-rich-text-temp" :style="richTextStyle" ww-responsive="richtext" v-html="html"></div>
+        <div
+            v-if="hasContent"
+            class="ww-rich-text-temp"
+            :style="richTextStyle"
+            ww-responsive="richtext"
+            v-html="html"
+        ></div>
     </div>
 </template>
 
@@ -180,6 +186,7 @@ export default {
         font-weight: var(--h2-fontWeight);
         text-align: var(--h2-textAlign);
         color: var(--h2-color);
+        line-height: var(--h2-lineHeight);
         margin-top: var(--h2-margin-top);
         margin-bottom: var(--h2-margin-bottom);
     }
@@ -225,10 +232,9 @@ export default {
     }
     font-size: var(--p-fontSize);
     font-family: var(--p-fontFamily);
-    font-weight: var(--p-fontSize);
+    font-weight: var(--p-fontWeight);
     text-align: var(--p-textAlign);
     color: var(--p-color);
-    line-height: var(--p-lineHeight);
 
     table {
         margin: 64px 0 !important;

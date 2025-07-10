@@ -8,7 +8,7 @@ export default {
     \================================================================================================*/
     async _onLoad(settings) {
         /* wwFront:start */
-        await this.load(settings.publicData.projectUrl, settings.publicData.apiKey);
+        await this.load(settings.publicData.customDomain || settings.publicData.projectUrl, settings.publicData.apiKey);
         /* wwFront:end */
     },
     async _initAuth() {

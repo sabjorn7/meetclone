@@ -9,7 +9,7 @@ export default {
         Plugin API
     \================================================================================================*/
     async _onLoad(settings) {
-        await this.load(settings.publicData.projectUrl, settings.publicData.apiKey);
+        await this.load(settings.publicData.customDomain || settings.publicData.projectUrl, settings.publicData.apiKey);
         this.subscribeTables(settings.publicData.realtimeTables || {});
     },
     /*  Called by supabase auth plugin
@@ -243,8 +243,8 @@ export default {
         const query = Array.isArray(queries)
             ? queries
             : queries && typeof queries === 'object'
-            ? Object.keys(queries).map(k => ({ key: k, value: queries[k] }))
-            : [];
+                ? Object.keys(queries).map(k => ({ key: k, value: queries[k] }))
+                : [];
         const queryString = query.length
             ? query.reduce((result, item) => `${result}${item.key}=${item.value}&`, '?')
             : '';
@@ -311,14 +311,14 @@ export default {
             path,
             options.transform
                 ? {
-                      transform: {
-                          ...(options.transform.format ? { format: options.transform.format } : {}),
-                          ...(options.transform.quality ? { quality: options.transform.quality } : {}),
-                          ...(options.transform.resize ? { resize: options.transform.resize } : {}),
-                          ...(options.transform.width ? { width: options.transform.width } : {}),
-                          ...(options.transform.height ? { height: options.transform.height } : {}),
-                      },
-                  }
+                    transform: {
+                        ...(options.transform.format ? { format: options.transform.format } : {}),
+                        ...(options.transform.quality ? { quality: options.transform.quality } : {}),
+                        ...(options.transform.resize ? { resize: options.transform.resize } : {}),
+                        ...(options.transform.width ? { width: options.transform.width } : {}),
+                        ...(options.transform.height ? { height: options.transform.height } : {}),
+                    },
+                }
                 : {}
         );
         if (error) throw new Error(error.message, { cause: error });
@@ -370,12 +370,12 @@ export default {
                 download: options.download ? options.download.filename || true : false,
                 transform: options.transform
                     ? {
-                          ...(options.transform.format ? { format: options.transform.format } : {}),
-                          ...(options.transform.quality ? { quality: options.transform.quality } : {}),
-                          ...(options.transform.resize ? { resize: options.transform.resize } : {}),
-                          ...(options.transform.width ? { width: options.transform.width } : {}),
-                          ...(options.transform.height ? { height: options.transform.height } : {}),
-                      }
+                        ...(options.transform.format ? { format: options.transform.format } : {}),
+                        ...(options.transform.quality ? { quality: options.transform.quality } : {}),
+                        ...(options.transform.resize ? { resize: options.transform.resize } : {}),
+                        ...(options.transform.width ? { width: options.transform.width } : {}),
+                        ...(options.transform.height ? { height: options.transform.height } : {}),
+                    }
                     : null,
             });
         } else {
@@ -396,14 +396,14 @@ export default {
             download: options.download ? options.download.filename || true : false,
             ...(options.transform
                 ? {
-                      transform: {
-                          ...(options.transform.format ? { format: options.transform.format } : {}),
-                          ...(options.transform.quality ? { quality: options.transform.quality } : {}),
-                          ...(options.transform.resize ? { resize: options.transform.resize } : {}),
-                          ...(options.transform.width ? { width: options.transform.width } : {}),
-                          ...(options.transform.height ? { height: options.transform.height } : {}),
-                      },
-                  }
+                    transform: {
+                        ...(options.transform.format ? { format: options.transform.format } : {}),
+                        ...(options.transform.quality ? { quality: options.transform.quality } : {}),
+                        ...(options.transform.resize ? { resize: options.transform.resize } : {}),
+                        ...(options.transform.width ? { width: options.transform.width } : {}),
+                        ...(options.transform.height ? { height: options.transform.height } : {}),
+                    },
+                }
                 : {}),
         });
         if (error) throw new Error(error.message, { cause: error });
@@ -572,10 +572,10 @@ const applyModifiers = (query, { select, order, limit, range, single, maybeSingl
             select.mode === 'minimal'
                 ? ''
                 : select.mode === 'guided'
-                ? select?.fields.length
-                    ? select.fields.join(', ')
-                    : '*'
-                : select?.fieldsAdvanced
+                    ? select?.fields.length
+                        ? select.fields.join(', ')
+                        : '*'
+                    : select?.fieldsAdvanced
         );
     }
 

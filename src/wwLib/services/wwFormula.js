@@ -13,12 +13,25 @@ export default {
     useFormula() {
         const bindingContext = inject('bindingContext', null);
         const localContext = inject('_wwLocalContext', null);
+        const wwLayoutContext = inject('wwLayoutContext', null);
+        const libraryComponentContext = inject('_wwLibraryComponentContext', null);
+        const dropzoneContext = inject('_wwDropzoneContext', null);
 
         const resolveMappingFormula = (formula, mappingContext = null, defaultValue = null) => {
             if (!formula || !formula.code || !formula.type) return defaultValue;
             const evaluate = formula.type === 'f' ? evaluateFormula : evaluateCode;
             try {
-                const result = evaluate({ code: formula.code }, { mapping: mappingContext, item: bindingContext });
+                const result = evaluate(
+                    { code: formula.code },
+                    {
+                        mapping: mappingContext,
+                        item: bindingContext || {},
+                        layout: wwLayoutContext ? { id: wwLayoutContext.layoutId } : {},
+                        component: libraryComponentContext?.component,
+                        dropzone: dropzoneContext,
+                        local: localContext?.value || {},
+                    }
+                );
                 return result.value;
             } catch (error) {
                 return defaultValue;
@@ -30,7 +43,13 @@ export default {
                 const evaluate = formula.type === 'f' ? evaluateFormula : evaluateCode;
                 return evaluate(
                     { code: formula.code },
-                    { item: bindingContext, local: { data: localContext.value.data } }
+                    {
+                        item: bindingContext || {},
+                        layout: wwLayoutContext ? { id: wwLayoutContext.layoutId } : {},
+                        component: libraryComponentContext?.component,
+                        dropzone: dropzoneContext,
+                        local: localContext?.value || {},
+                    }
                 );
             } catch (error) {
                 return defaultValue;

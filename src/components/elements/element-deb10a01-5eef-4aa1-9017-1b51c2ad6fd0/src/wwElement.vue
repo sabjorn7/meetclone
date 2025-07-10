@@ -83,6 +83,7 @@ export default {
         'update:sidepanel-content',
     ],
     setup(props, { emit }) {
+
         const isEditing = computed(() => {
             return false;
         });

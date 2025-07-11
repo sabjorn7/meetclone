@@ -9,7 +9,14 @@ export const useIconsStore = defineStore('icons', () => {
             if (values[name]) {
                 return await values[name];
             }
-            const url = `/icons/${name}.svg`;
+
+            const baseTag = window.wwg_designInfo?.baseTag;
+            let href = baseTag?.href || null;
+            if (href) {
+                if (!href.startsWith('/')) href = `/${href}`;
+                if (!href.endsWith('/')) href = `${href}/`;
+            }
+            const url = `${href ?? '/'}icons/${name}.svg`;
             values[name] = fetch(url).then(response => {
                 if (!response.ok) {
                     return null;

@@ -37,6 +37,7 @@
                 "chat_users": true,
                 "user_course": true,
                 "articles_logs": true,
+                "course_to_user": true,
                 "Peertube_System": true,
                 "articles_rating": true,
                 "article_comments": true

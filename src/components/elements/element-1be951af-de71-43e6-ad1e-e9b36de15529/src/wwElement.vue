@@ -5,7 +5,7 @@ v-if="videoUuid"
 :title="content.title || 'Meetgu Video'"
 :width="content.width || '100%'"
 :height="content.height || '100%'"
-:src="videoUuid ? `https://video.meetgu.ru/videos/embed/${videoUuid}` : ''"
+:src="videoUuid ? `https://video.meetgu.ru/videos/embed/${videoUuid}?peertubeLink=0?title=0` : ''"
 frameborder="0"
 allowfullscreen
 sandbox="allow-same-origin allow-scripts allow-popups allow-forms"

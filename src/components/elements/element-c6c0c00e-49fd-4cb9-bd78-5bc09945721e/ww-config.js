@@ -57,11 +57,9 @@ export default {
                 ],
             },
             defaultValue: 'center',
-            hidden: content => content.type !== 'modal',
             bindable: true,
         },
         customPositionX: {
-            hidden: content => content.sideModal !== 'custom' || content.type !== 'modal',
             label: {
                 en: 'Horizontal',
                 fr: 'Horizontal',
@@ -91,12 +89,11 @@ export default {
                     { value: 'bottom', label: { en: 'Bottom', fr: 'Bas' } },
                 ],
             },
-            hidden: content => content.type !== 'sheet',
+            hidden: (content, sidepanelcontent) => content.type !== 'sheet' || sidepanelcontent?.isStacked,
             defaultValue: 'top',
             bindable: true,
         },
         align: {
-            hidden: content => content.type !== 'modal',
             label: {
                 en: 'Align',
                 fr: 'Alignement',
@@ -115,7 +112,6 @@ export default {
             bindable: true,
         },
         customPositionY: {
-            hidden: content => content.align !== 'custom' || content.type !== 'modal',
             label: {
                 en: 'Vertical',
                 fr: 'Vertical',
@@ -149,7 +145,8 @@ export default {
             bindable: true,
         },
         slideInDirection: {
-            hidden: content => content.animation !== 'slide-in' || content.animation === null,
+            hidden: (content, sidepanelcontent) =>
+                content.animation !== 'slide-in' || content.animation === null || sidepanelcontent?.isStacked,
             label: {
                 en: 'Direction',
                 fr: 'Direction',
@@ -180,7 +177,7 @@ export default {
                 max: 10000,
             },
             bindable: true,
-            hidden: content => content.animation === null,
+            hidden: (content, sidepanelcontent) => content.animation === null || sidepanelcontent?.isStacked,
         },
         animationEasing: {
             label: {
@@ -200,7 +197,7 @@ export default {
             },
             defaultValue: 'linear',
             bindable: true,
-            hidden: content => content.animation === null,
+            hidden: (content, sidepanelcontent) => content.animation === null || sidepanelcontent?.isStacked,
         },
 
         preventScroll: {
@@ -252,7 +249,6 @@ export default {
             propertyHelp: {
                 tooltip: 'Whether the dialog should be closed when the user clicks outside the dialog.',
             },
-            hidden: content => content.overlay,
         },
         overlayClickCloses: {
             type: 'OnOff',
@@ -266,7 +262,6 @@ export default {
             propertyHelp: {
                 tooltip: 'You can prevent the dialog from closing when the user clicks the overlay.',
             },
-            hidden: content => !content.overlay,
         },
         overlayBackgroundColor: {
             label: {
@@ -278,7 +273,7 @@ export default {
             bindable: true,
             responsive: true,
             classes: true,
-            hidden: content => !content.overlay,
+            hidden: (content, sidepanelcontent) => !content.overlay || sidepanelcontent?.isStacked,
             options: {
                 nullable: true,
             },

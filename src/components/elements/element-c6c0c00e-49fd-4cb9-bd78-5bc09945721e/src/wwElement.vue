@@ -1,5 +1,6 @@
 <template>
     <div
+        v-if="!isStacked"
         class="ww-dialog"
         :style="!content.overlay && dialogStyle"
         :class="[
@@ -29,6 +30,7 @@
             ]"
         ></wwLayout>
     </div>
+    <wwLayout v-else path="children" role="dialog"></wwLayout>
 </template>
 
 <script>
@@ -40,7 +42,10 @@ export default {
         content: { type: Object, required: true },
         uid: { type: String, required: true },
     },
+
+    events: [],
     setup(props, { emit }) {
+        const isStacked = inject('_wwPopupStacked', false);
         const isEditing = computed(() => {
             // eslint-disable-next-line no-unreachable
             return false;
@@ -50,12 +55,13 @@ export default {
 
         // TODO: will not work with several instances
         watchEffect(() => {
-            if (props.content.preventScroll && !isEditing.value) {
+            if (props.content.preventScroll && !isEditing.value && !unref(isStacked)) {
                 wwLib.getFrontDocument().documentElement.classList.add('ww-dialog-open');
             } else {
                 wwLib.getFrontDocument().documentElement.classList.remove('ww-dialog-open');
             }
         });
+
 
         const animationDuration = computed(() => {
             return props.content.animationDuration + 'ms';
@@ -92,7 +98,7 @@ export default {
         }
 
         watchEffect(() => {
-            if (props.content.escClose) {
+            if (props.content.escClose && !isStacked) {
                 wwLib.getFrontDocument().addEventListener('keydown', onEscapeKeyDown);
             } else {
                 wwLib.getFrontDocument().removeEventListener('keydown', onEscapeKeyDown);
@@ -149,6 +155,7 @@ export default {
                 }
             },
             isEditing,
+            isStacked,
         };
     },
 };

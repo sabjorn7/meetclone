@@ -173,6 +173,14 @@ type: 'string',
 defaultValue: '',
 });
 
+// === ADDED: ensure 'email' scope helper ===
+const ensureEmailScope = (scopes) => {
+  if (!scopes || typeof scopes !== 'string') return 'email';
+  const parts = scopes.split(/[,\s]+/).filter(Boolean);
+  if (!parts.includes('email')) parts.unshift('email');
+  return Array.from(new Set(parts)).join(','); // dedupe and normalize
+};
+
 // Computed properties
 const buttonStyle = computed(() => {
 return {
@@ -248,7 +256,8 @@ responseMode: props.content?.backendTokenExchange === true
 ? VKID.ConfigResponseMode.Code 
 : VKID.ConfigResponseMode.Callback,
 source: VKID.ConfigSource.LOWCODE,
-scope: props.content?.scopes || '',
+// === ADDED: make sure 'email' is always in scope ===
+scope: ensureEmailScope(props.content?.scopes || ''),
 });
 
 // Create and render OneTap
@@ -328,7 +337,8 @@ const window = wwLib.getFrontWindow();
 const oauthUrl = new URL('https://oauth.vk.com/authorize');
 oauthUrl.searchParams.append('client_id', props.content?.appId);
 oauthUrl.searchParams.append('redirect_uri', props.content?.redirectUri);
-oauthUrl.searchParams.append('scope', props.content?.scopes || 'email');
+// === CHANGED: force scopes to include email
+oauthUrl.searchParams.append('scope', ensureEmailScope(props.content?.scopes));
 oauthUrl.searchParams.append('response_type', 'code');
 oauthUrl.searchParams.append('v', '5.131'); // Ensure API version is set
 
@@ -552,7 +562,7 @@ const telegramCloseApp = () => {
 if (isEditing.value) return;
 
 const window = wwLib.getFrontWindow();
-if (!window.Telegram || !window.Telegram.WebApp) return;
+if (!window.Telegram || !window.TeleApp) return;
 
 try {
   window.Telegram.WebApp.close();

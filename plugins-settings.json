@@ -15,6 +15,16 @@
             "favoriteFormat": ""
         }
     },
+    "1fa0dd68-5069-436c-9a7d-3b54c340f1fa": {
+        "id": "06b67ccc-072c-4bfa-8b3c-97e5fc8d9dd0",
+        "name": "Supabase Auth",
+        "designId": "c64190db-b628-4e09-b006-ec381176a34c",
+        "pluginId": "1fa0dd68-5069-436c-9a7d-3b54c340f1fa",
+        "publicData": {
+            "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICAgInJvbGUiOiAiYW5vbiIsCiAgICAiaXNzIjogInN1cGFiYXNlIiwKICAgICJpYXQiOiAxNzQ1NDQyMDAwLAogICAgImV4cCI6IDE5MDMyMDg0MDAKfQ.6o8FlA2X8jsM4lUKF1mqKSC-v_GX5iE0dY20b6x8bnw",
+            "projectUrl": "https://sb.meetgu.ru"
+        }
+    },
     "f9ef41c3-1c53-4857-855b-f2f6a40b7186": {
         "id": "d7de2287-2cd6-4f45-b449-2bab6f43ed9e",
         "name": "Supabase",
@@ -42,16 +52,6 @@
                 "articles_rating": true,
                 "article_comments": true
             }
-        }
-    },
-    "1fa0dd68-5069-436c-9a7d-3b54c340f1fa": {
-        "id": "06b67ccc-072c-4bfa-8b3c-97e5fc8d9dd0",
-        "name": "Supabase Auth",
-        "designId": "c64190db-b628-4e09-b006-ec381176a34c",
-        "pluginId": "1fa0dd68-5069-436c-9a7d-3b54c340f1fa",
-        "publicData": {
-            "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICAgInJvbGUiOiAiYW5vbiIsCiAgICAiaXNzIjogInN1cGFiYXNlIiwKICAgICJpYXQiOiAxNzQ1NDQyMDAwLAogICAgImV4cCI6IDE5MDMyMDg0MDAKfQ.6o8FlA2X8jsM4lUKF1mqKSC-v_GX5iE0dY20b6x8bnw",
-            "projectUrl": "https://sb.meetgu.ru"
         }
     }
 }

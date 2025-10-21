@@ -33,6 +33,12 @@
         "publicData": {
             "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICAgInJvbGUiOiAiYW5vbiIsCiAgICAiaXNzIjogInN1cGFiYXNlIiwKICAgICJpYXQiOiAxNzQ1NDQyMDAwLAogICAgImV4cCI6IDE5MDMyMDg0MDAKfQ.6o8FlA2X8jsM4lUKF1mqKSC-v_GX5iE0dY20b6x8bnw",
             "projectUrl": "https://sb.meetgu.ru",
+            "environments": {
+                "production": {
+                    "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICAgInJvbGUiOiAiYW5vbiIsCiAgICAiaXNzIjogInN1cGFiYXNlIiwKICAgICJpYXQiOiAxNzQ1NDQyMDAwLAogICAgImV4cCI6IDE5MDMyMDg0MDAKfQ.6o8FlA2X8jsM4lUKF1mqKSC-v_GX5iE0dY20b6x8bnw",
+                    "projectUrl": "https://sb.meetgu.ru"
+                }
+            },
             "realtimeTables": {
                 "shop": true,
                 "test": true,

@@ -5,124 +5,157 @@ export default {
         bubble: { icon: 'upload' },
         customSettingsPropertiesOrder: [
             // UX properties
+            'type',
+            'reorder',
+            'drop',
+            'maxFileSize',
+            'minFileSize',
+            'maxTotalFileSize',
+            'maxFiles',
+            'required',
+            'readonly',
+            'extensions',
+            'customExtensions',
+            'exposeBase64',
+            'exposeBinary',
             ['formInfobox', 'fieldName', 'customValidation', 'validation'],
-            [
-                'type',
-                'reorder',
-                'drop',
-                'maxFileSize',
-                'minFileSize',
-                'maxTotalFileSize',
-                'maxFiles',
-                'required',
-                'readonly',
-                'extensions',
-                'customExtensions',
-                'exposeBase64',
-                'exposeBinary',
-            ],
         ],
         customStylePropertiesOrder: [
             // Dropzone properties
-            [
-                'dropzoneTitle',
-                'dropzoneBorderColor',
-                'dropzoneBorderStyle',
-                'dropzoneBorderWidth',
-                'dropzoneBorderRadius',
-                'dropzoneBackground',
-                'dropzoneBackgroundHover',
-                'dropzoneBackgroundDragging',
-                'dropzonePadding',
-                'dropzoneMinHeight',
-            ],
+            {
+                label: "Dropzone",
+                isCollapsible: true,
+                properties: [
+                    'dropzoneBorderColor',
+                    'dropzoneBorderStyle',
+                    'dropzoneBorderWidth',
+                    'dropzoneBorderRadius',
+                    'dropzoneBackground',
+                    'dropzoneBackgroundHover',
+                    'dropzoneBackgroundDragging',
+                    'dropzonePadding',
+                    'dropzoneMinHeight',
+                ],
+            },
             // Icon properties
-            [
-                'iconTitle',
-                'showUploadIcon',
-                'uploadIcon',
-                'uploadIconColor',
-                'uploadIconSize',
-                'uploadIconMargin',
-                'uploadIconPosition',
-            ],
+            {
+                label: "Icon",
+                isCollapsible: true,
+                properties: [
+                    'showUploadIcon',
+                    'uploadIcon',
+                    'uploadIconColor',
+                    'uploadIconSize',
+                    'uploadIconMargin',
+                    'uploadIconPosition',
+                ],
+            },
             // Label properties
-            [
-                'labelTitle',
-                'labelMessage',
-                'labelFontFamily',
-                'labelFontSize',
-                'labelFontWeight',
-                'labelColor',
-                'labelMargin',
-            ],
+            {
+                label: "Label",
+                isCollapsible: true,
+                properties: [
+                    'labelMessage',
+                    'labelFontFamily',
+                    'labelFontSize',
+                    'labelFontWeight',
+                    'labelColor',
+                    'labelMargin',
+                ],
+            },
             // Info messages properties
-            [
-                'infoMessagesTitle',
-                'extensionsMessage',
-                'extensionsMessageFontFamily',
-                'extensionsMessageFontSize',
-                'extensionsMessageFontWeight',
-                'extensionsMessageColor',
-                'extensionsMessageMargin',
-                'maxFileMessage',
-                'maxFileMessageFontFamily',
-                'maxFileMessageFontSize',
-                'maxFileMessageFontWeight',
-                'maxFileMessageColor',
-                'maxFileMessageMargin',
-            ],
+            {
+                label: "Info messages",
+                isCollapsible: true,
+                properties: [
+                    'extensionsMessage',
+                    'extensionsMessageFontFamily',
+                    'extensionsMessageFontSize',
+                    'extensionsMessageFontWeight',
+                    'extensionsMessageColor',
+                    'extensionsMessageMargin',
+                    'maxFileMessage',
+                    'maxFileMessageFontFamily',
+                    'maxFileMessageFontSize',
+                    'maxFileMessageFontWeight',
+                    'maxFileMessageColor',
+                    'maxFileMessageMargin',
+                ],
+            },
             // File list properties
-            [
-                'fileListTitle',
-                'fileItemBackground',
-                'fileItemBorderColor',
-                'fileItemBorderRadius',
-                'fileItemPadding',
-                'fileItemMargin',
-                'fileItemShadow',
-                'progressBarColor',
-                'progressBarColorWarning',
-                'fileItemHoverTitle',
-                'fileItemHoverBorderColor',
-                'fileItemHoverBackground',
-                'fileItemHoverShadow',
-            ],
+            {
+                label: "File list",
+                isCollapsible: true,
+                properties: [
+                    'fileListTitle',
+                    'fileItemBackground',
+                    'fileItemBorderColor',
+                    'fileItemBorderRadius',
+                    'fileItemPadding',
+                    'fileItemMargin',
+                    'fileItemShadow',
+                    'progressBarColor',
+                    'progressBarColorWarning',
+                ],
+            },
+            {
+                label: "File item hover states",
+                isCollapsible: true,
+                properties: [
+                    'fileItemHoverBorderColor',
+                    'fileItemHoverBackground',
+                    'fileItemHoverShadow',
+                ],
+            },
             // File details properties
-            [
-                'fileNameTitle',
-                'fileNameFontFamily',
-                'fileNameFontSize',
-                'fileNameFontWeight',
-                'fileNameColor',
-                'fileDetailsTitle',
-                'showFileInfo',
-                'fileDetailsFontFamily',
-                'fileDetailsFontSize',
-                'fileDetailsFontWeight',
-                'fileDetailsColor',
-            ],
+            {
+                label: "File name",
+                isCollapsible: true,
+                properties: [
+                    'fileNameFontFamily',
+                    'fileNameFontSize',
+                    'fileNameFontWeight',
+                    'fileNameColor',
+                ],
+            },
+            {
+                label: "File details",
+                isCollapsible: true,
+                properties: [
+                    'showFileInfo',
+                    'fileDetailsFontFamily',
+                    'fileDetailsFontSize',
+                    'fileDetailsFontWeight',
+                    'fileDetailsColor',
+                ],
+            }, 
             // Action buttons properties
-            [
-                'actionButtonsTitle',
-                'actionButtonSize',
-                'actionButtonBackground',
-                'actionButtonHoverBackground',
-                'actionButtonColor',
-                'actionButtonBorderColor',
-                'actionButtonHoverBorderColor',
-                'actionButtonBorderRadius',
-                'actionButtonMargin',
-            ],
+            {
+                label: "Remove buttons",
+                isCollapsible: true,
+                properties:  [
+                    'actionButtonSize',
+                    'actionButtonBackground',
+                    'actionButtonHoverBackground',
+                    'actionButtonColor',
+                    'actionButtonBorderColor',
+                    'actionButtonHoverBorderColor',
+                    'actionButtonBorderRadius',
+                    'actionButtonMargin',
+                ],
+            },
             // Circle animation properties
-            [
-                'circleAnimationTitle',
-                'enableCircleAnimation',
-                'circleSize',
-                'circleColor',
-                'circleOpacity',
-                'animationSpeed',
-            ],
+            {
+                label: "Drag & drop animation",
+                isCollapsible: true,
+                properties: [
+                    'enableCircleAnimation',
+                    'circleSize',
+                    'circleColor',
+                    'circleOpacity',
+                    'animationSpeed',
+                ],
+            },
         ],
         hint: (_, sidePanelContent) => {
             if (!sidePanelContent.parentSelection) return null;
@@ -293,11 +326,6 @@ export default {
         },
 
         // ======== DROPZONE PROPERTIES ========
-        dropzoneTitle: {
-            type: 'Title',
-            label: { en: 'Dropzone' },
-            section: 'style',
-        },
         dropzoneBorderColor: {
             label: { en: 'Border color' },
             type: 'Color',
@@ -413,11 +441,6 @@ export default {
         },
 
         // ======== ICON PROPERTIES ========
-        iconTitle: {
-            type: 'Title',
-            label: { en: 'Icon' },
-            section: 'icon',
-        },
         showUploadIcon: {
             label: { en: 'Show upload icon' },
             type: 'OnOff',
@@ -491,11 +514,6 @@ export default {
         },
 
         // ======== LABEL PROPERTIES ========
-        labelTitle: {
-            type: 'Title',
-            label: { en: 'Label' },
-            section: 'style',
-        },
         labelMessage: {
             label: { en: 'Label' },
             type: 'Text',
@@ -571,11 +589,6 @@ export default {
         },
 
         // ======== INFO MESSAGES PROPERTIES ========
-        infoMessagesTitle: {
-            type: 'Title',
-            label: { en: 'Info Messages' },
-            section: 'style',
-        },
         extensionsMessage: {
             label: { en: 'Extensions message' },
             type: 'Text',
@@ -724,11 +737,6 @@ export default {
         },
 
         // ======== FILE LIST PROPERTIES ========
-        fileListTitle: {
-            type: 'Title',
-            label: { en: 'File List' },
-            section: 'style',
-        },
         fileItemBackground: {
             label: { en: 'Background color' },
             type: 'Color',
@@ -813,11 +821,6 @@ export default {
             },
             editorOnly: true,
         },
-        fileItemHoverTitle: {
-            type: 'Title',
-            label: { en: 'File Item Hover States' },
-            section: 'style',
-        },
         fileItemHoverBorderColor: {
             label: { en: 'Hover border color' },
             type: 'Color',
@@ -850,11 +853,6 @@ export default {
         },
 
         // ======== FILE DETAILS PROPERTIES ========
-        fileNameTitle: {
-            type: 'Title',
-            label: { en: 'File Name' },
-            section: 'style',
-        },
         fileNameFontFamily: {
             label: { en: 'Font family' },
             type: 'FontFamily',
@@ -911,11 +909,6 @@ export default {
             states: true,
             responsive: true,
             bindable: true,
-        },
-        fileDetailsTitle: {
-            type: 'Title',
-            label: { en: 'File Details' },
-            section: 'style',
         },
         fileDetailsFontFamily: {
             label: { en: 'Font family' },
@@ -976,11 +969,6 @@ export default {
         },
 
         // ======== ACTION BUTTON PROPERTIES ========
-        actionButtonsTitle: {
-            type: 'Title',
-            label: { en: 'Remove Buttons' },
-            section: 'style',
-        },
         actionButtonSize: {
             label: { en: 'Size' },
             type: 'Length',
@@ -1076,11 +1064,6 @@ export default {
         },
 
         // ======== CIRCLE ANIMATION PROPERTIES ========
-        circleAnimationTitle: {
-            type: 'Title',
-            label: { en: 'Drag & Drop Animation' },
-            section: 'style',
-        },
         enableCircleAnimation: {
             label: { en: 'Enable circle animation' },
             type: 'OnOff',

@@ -8,34 +8,34 @@ export default {
     },
     icon: "history",
     customStylePropertiesOrder: [
-      [
-        "markerStyle",
-        "markerShape",
-        "markerSize",
-        "markerBackgroundColor",
-        "markerIconOnOff",
-        "markerIcon",
-        "markerIconColor",
-        "markerIconSize",
-      ],
-      [
-        "timelineStyle",
-        "connectorColor",
-        "connectorWidth",
-        "timelineLayout",
-        "eventsAlignment",
-      ],
+      {
+        label: "Marker style",
+        isCollapsible: true,
+        properties:  [
+          "markerShape",
+          "markerSize",
+          "markerBackgroundColor",
+          "markerIconOnOff",
+          "markerIcon",
+          "markerIconColor",
+          "markerIconSize",
+        ],
+      },
+      {
+        label: "Timeline style",
+        isCollapsible: true,
+        properties: [
+          "connectorColor",
+          "connectorWidth",
+          "timelineLayout",
+          "eventsAlignment",
+        ],
+      },  
     ],
-    customSettingsPropertiesOrder: [["data"]],
+    customSettingsPropertiesOrder: ["data"],
   },
   properties: {
     // Marker styling
-    markerStyle: {
-      type: "Title",
-      label: { en: "Marker Style" },
-      section: "style",
-      editorOnly: true,
-    },
     markerShape: {
       label: { en: "Marker Shape" },
       type: "TextRadioGroup",
@@ -110,12 +110,6 @@ export default {
     },
 
     // Timeline styling
-    timelineStyle: {
-      type: "Title",
-      label: { en: "Timeline Style" },
-      section: "style",
-      editorOnly: true,
-    },
     connectorColor: {
       label: { en: "Connector Color" },
       type: "Color",

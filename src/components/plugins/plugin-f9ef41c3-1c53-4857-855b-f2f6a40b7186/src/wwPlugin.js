@@ -83,17 +83,30 @@ export default {
             this.subscribeTables(settings.publicData.realtimeTables || {});
         }
     },
-    async requestAPI({ method, path, data, params }, retry = true) {
+    async requestAPI({ method, path, data, params, signal }, retry = true) {
         try {
+            // Get current environment and send it explicitly
+            const config = getCurrentSupabaseSettings('supabase');
+            const currentEnv = config.environment; // 'editor', 'staging', or 'production'
+
             return await wwAxios({
                 method,
                 url: `${wwLib.wwApiRequests._getPluginsUrl()}/designs/${
                     wwLib.$store.getters['websiteData/getDesignInfo'].id
                 }/supabase${path}`,
                 data,
-                params,
+                params: {
+                    ...params,
+                    wwEnv: currentEnv, // Send environment explicitly
+                },
+                signal, // Support AbortController signal
             });
         } catch (error) {
+            // Don't retry if request was aborted
+            if (error.name === 'AbortError' || error.code === 'ERR_CANCELED') {
+                throw error;
+            }
+
             const isOauthToken = wwLib.wwPlugins.supabase.settings.privateData.accessToken?.startsWith('sbp_oauth');
             if (retry && [401, 403].includes(error.response?.status) && isOauthToken) {
                 const { data } = await wwAxios.post(
@@ -101,7 +114,7 @@ export default {
                         wwLib.$store.getters['websiteData/getDesignInfo'].id
                     }/supabase/refresh`
                 );
-                return await this.requestAPI({ method, path, data, params }, false);
+                return await this.requestAPI({ method, path, data, params, signal }, false);
             }
             wwLib.wwNotification.open({ text: 'Error while requesting the supabase project.', color: 'red' });
             throw error;

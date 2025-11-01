@@ -224,7 +224,7 @@ export default {
     },
     modelType() {
       if (this.content.dateMode === "date") return "yyyy-MM-dd";
-      if (this.content.dateMode === "time") return "HH:mm:ss";
+      if (this.content.dateMode === "time") return "HH:mm:SS";
       if (this.content.dateMode === "month") return "yyyy-MM";
       return null;
     },
@@ -310,7 +310,7 @@ export default {
       else if (this.content.selectionMode === "range") {
         if (!value.start && !value.end) return null;
         return [value.start || null, value.end || null].filter(
-          (item) => item !== null && item !== ""
+          (value) => value !== null && value !== ""
         );
       } else if (this.content.selectionMode === "multi") return value;
     },

@@ -3,7 +3,13 @@ export default {
     init(router) {
         if (!wwLib.wwWebsiteData.getInfo()) return;
         this.defaultLang = wwLib.wwWebsiteData.getInfo().langs.find(lang => lang.default)?.lang || 'en';
-        wwLib.$store.dispatch('front/setLang', router.resolve(window.location.pathname)?.meta?.lang?.lang);
+
+        const base = wwLib.useBaseTag() ? wwLib.getBaseTag() : '/';
+
+        wwLib.$store.dispatch(
+            'front/setLang',
+            router.resolve(window.location.pathname.replace(base, '/'))?.meta?.lang?.lang
+        );
     },
     /**
      * @PUBLIC_API

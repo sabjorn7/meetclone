@@ -86,8 +86,11 @@ async function fetchData(pageId) {
 
     /* wwFront:start */
     try {
-        const lang = window.location.pathname.startsWith(`/${wwLib.wwLang.lang}/`) ? wwLib.wwLang.lang : '';
         const base = wwLib.useBaseTag() ? wwLib.getBaseTag() : '/';
+        const lang = window.location.pathname.replace(base, '/').startsWith(`/${wwLib.wwLang.lang}/`)
+            ? wwLib.wwLang.lang
+            : '';
+
         let url = `${base}data/${pageId.split('_')[0]}.json?wwlang=${lang}&_wwcv=${window.wwg_cacheVersion}`;
 
         const {

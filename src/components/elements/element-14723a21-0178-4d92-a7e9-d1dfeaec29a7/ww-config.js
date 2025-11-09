@@ -23,6 +23,13 @@ export default {
           { value: "right-click", label: { en: "Right click" } }
         ],
       },
+      bindable: true,
+      classes: true,
+      states: true,
+      bindingValidation: {
+        type: 'string',
+        tooltip: 'A string that defines the trigger type of the dropdown. Possible values are click, hover, and right-click.',
+      }
     },
     position: {
       label: {
@@ -38,6 +45,14 @@ export default {
           { value: "left", label: { en: "Left" } },
         ],
       },
+      bindable: true,
+      classes: true,
+      states: true,
+      responsive: true,
+      bindingValidation: {
+        type: 'string',
+        tooltip: 'A string that defines the position of the dropdown. Possible values are top, right, bottom, and left.',
+      }
     },
     alignment: {
       label: { en: "Align" },
@@ -78,8 +93,14 @@ export default {
         }
       },
       defaultValue: "start",
+      bindable: true,
       classes: true,
       states: true,
+      responsive: true,
+      bindingValidation: {
+        type: 'string',
+        tooltip: 'A string that defines the alignment of the dropdown. Possible values are start, center, and end.',
+      }
     },
     offsetX: {
       type: "Length",

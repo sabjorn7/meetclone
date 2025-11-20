@@ -6,6 +6,7 @@
       @mouseenter="handleHoverIn"
       @mouseleave="handleHoverOut"
       @contextmenu.prevent="handleRightClick"
+      :data-trigger-uid="id"
     >
       <wwLayout class="layout content-layout" path="triggerLayout" />
     </div>
@@ -15,6 +16,7 @@
         class="dropdown"
         ww-responsive="dropdown"
         ref="dropdownElement"
+        :data-dropdown-uid="id"
       >
         <div @mouseenter="handleHoverIn" @mouseleave="handleHoverOut">
           <Transition :name="content.animated ? 'slide' : ''">
@@ -35,6 +37,8 @@ import {
   watch,
   nextTick,
   onMounted,
+  inject,
+  provide,
 } from "vue";
 export default {
   props: {
@@ -57,6 +61,33 @@ export default {
     const triggerElementRef = useTemplateRef("triggerElement");
     const dropdownElementRef = useTemplateRef("dropdownElement");
 
+    const id = wwLib.wwUtils.getUid();
+    const registerAsChild = inject("__ww-dropdown_registerAsChild", () => {});
+    const unregisterAsChild = inject(
+      "__ww-dropdown_unregisterAsChild",
+      () => {}
+    );
+    const ids = [id];
+    provide("__ww-dropdown_registerAsChild", (childId) => {
+      if (!ids.includes(childId)) {
+        ids.push(childId);
+      }
+      registerAsChild(childId);
+    });
+    provide("__ww-dropdown_unregisterAsChild", (childId) => {
+      const index = ids.indexOf(childId);
+      if (index !== -1) {
+        ids.splice(index, 1);
+      }
+      unregisterAsChild(childId);
+    });
+    onMounted(() => {
+      registerAsChild(id);
+    });
+    onUnmounted(() => {
+      unregisterAsChild(id);
+    });
+
     const triggerBox = ref({});
     const synchronizeTriggerBox = () => {
       if (!triggerElementRef?.value) return;
@@ -78,16 +109,16 @@ export default {
         props.wwFrontState.screenSize === "default"
       )
         return;
-      if (
-        dropdownElementRef.value &&
-        dropdownElementRef.value.contains(event.target)
-      )
-        return;
-      if (
-        triggerElementRef.value &&
-        triggerElementRef.value.contains(event.target)
-      )
-        return;
+      const triggerParent = event.target.closest("[data-trigger-uid]");
+      if (triggerParent) {
+        const triggerUid = triggerParent.getAttribute("data-trigger-uid");
+        if (ids.includes(triggerUid)) return;
+      }
+      const dropdownParent = event.target.closest("[data-dropdown-uid]");
+      if (dropdownParent) {
+        const dropdownUid = dropdownParent.getAttribute("data-dropdown-uid");
+        if (ids.includes(dropdownUid)) return;
+      }
       isOpened.value = false;
     }
 
@@ -196,6 +227,7 @@ export default {
       isDisplayed,
       delayedIsClosed,
       delayedIsOpen,
+      id,
     };
   },
   computed: {
@@ -394,4 +426,3 @@ export default {
   transform: translate(var(--slideOriginX), var(--slideOriginY)) scale(0.1);
 }
 </style>
-

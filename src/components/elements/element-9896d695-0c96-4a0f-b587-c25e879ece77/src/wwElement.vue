@@ -6,9 +6,9 @@
       `ww-timeline--align-${validAlignment}`,
     ]"
     :style="{
+      '--marker-size': content.markerSize,
       '--connector-color': content.connectorColor,
       '--connector-width': content.connectorWidth,
-      '--marker-size': content.markerSize,
       '--marker-icon-size': content.markerIconSize,
       '--marker-icon-color': content.markerIconColor,
       '--marker-background-color': content.markerBackgroundColor,

@@ -10,7 +10,7 @@
         <input 
           :id="'file-input-' + props.uid" 
           type="file" 
-          accept=".mp4" 
+          accept=".webm,.ogv,.ogg,.mp4,.mkv,.mov,.qt,.mqv,.m4v,.flv,.f4v,.wmv,.avi,.3gp,.3gpp,.3g2,.3gpp2,.nut,.mts,.m2ts,.mpv,.m2v,.m1v,.mpg,.mpe,.mpeg,.vob,.mxf"
           @change="onFileSelected"
           :disabled="isUploading"
         >
@@ -36,8 +36,10 @@
   </div>
 </template>
 
+
 <script>
 import { ref, computed, watch } from 'vue';
+
 
 export default {
   props: {
@@ -51,6 +53,7 @@ export default {
       // eslint-disable-next-line no-unreachable
       return false;
     });
+
 
     // Component state
     const selectedFile = ref(null);
@@ -105,10 +108,23 @@ export default {
       defaultValue: '',
     });
     
+    // Список разрешённых расширений PeerTube (как в конфиге transcoding.allow_additional_extensions).[web:79]
+    const allowedExtensions = [
+      '.webm','.ogv','.ogg','.mp4','.mkv','.mov','.qt','.mqv','.m4v',
+      '.flv','.f4v','.wmv','.avi','.3gp','.3gpp','.3g2','.3gpp2',
+      '.nut','.mts','.m2ts','.mpv','.m2v','.m1v',
+      '.mpg','.mpe','.mpeg','.vob','.mxf'
+    ];
+    
+    const hasAllowedExtension = (name) => {
+      const lower = name.toLowerCase();
+      return allowedExtensions.some(ext => lower.endsWith(ext));
+    };
+
     // Computed properties
     const canUpload = computed(() => {
       return selectedFile.value && 
-             selectedFile.value.type === 'video/mp4' && 
+             hasAllowedExtension(selectedFile.value.name) && 
              accessToken.value && 
              !isUploading.value;
     });
@@ -126,8 +142,8 @@ export default {
       const file = event.target.files[0];
       if (!file) return;
       
-      if (file.type !== 'video/mp4') {
-        statusMessage.value = 'Выберите MP4 файл!';
+      if (!hasAllowedExtension(file.name)) {
+        statusMessage.value = 'Этот формат видео не поддерживается PeerTube';
         selectedFile.value = null;
         return;
       }
@@ -259,11 +275,13 @@ export default {
   let id = null, shortUUID = null, uuid = null;
   let responseJson = {};
 
+
   try {
     responseJson = await chunkResponse.json();
   } catch (e) {
     console.warn('Пустой ответ JSON при завершении загрузки:', e);
   }
+
 
   if (responseJson?.video?.uuid) {
     id = responseJson.video.id;
@@ -274,6 +292,7 @@ export default {
     statusMessage.value = 'Завершаем загрузку...';
     await new Promise(resolve => setTimeout(resolve, 2000));
 
+
     try {
       const confirmRes = await fetch(`${apiBaseUrl.value}/api/v1/videos/uploaded?uploadId=${currentUploadId}`, {
         method: 'GET',
@@ -282,8 +301,10 @@ export default {
         }
       });
 
+
       const confirmJson = await confirmRes.json();
       const video = confirmJson?.data?.[0];
+
 
       if (video?.uuid) {
         id = video.id;
@@ -304,8 +325,10 @@ export default {
     }
   }
 
+
   statusMessage.value = 'Видео успешно загружено!';
   progressPercent.value = 100;
+
 
   emit('trigger-event', {
     name: 'uploadSuccess',
@@ -316,6 +339,7 @@ export default {
       uploadId: currentUploadId
     }
   });
+
 
   resetUploader();
   break;
@@ -429,6 +453,8 @@ export default {
   }
 };
 </script>
+
+
 
 <style lang="scss" scoped>
 .peertube-uploader {

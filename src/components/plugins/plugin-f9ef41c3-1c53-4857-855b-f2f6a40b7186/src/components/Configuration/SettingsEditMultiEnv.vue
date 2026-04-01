@@ -154,9 +154,10 @@
                             @update:modelValue="val => changeApiKey(val, env)"
                         />
 
-                        <wwEditorFormRow label="Service role key">
+                        <wwEditorFormRow label="Service role key" :required="env === 'production'">
                             <div class="flex items-center">
                                 <wwEditorInputText
+                                    :required="env === 'production'"
                                     type="password"
                                     placeholder="Enter your service role key"
                                     large
@@ -280,9 +281,10 @@
                 @update:modelValue="val => changeApiKey(val, env)"
             />
 
-            <wwEditorFormRow label="Service role key">
+            <wwEditorFormRow label="Service role key" :required="env === 'production'">
                 <div class="flex items-center">
                     <wwEditorInputText
+                        :required="env === 'production'"
                         type="password"
                         placeholder="Enter your service role key"
                         large
@@ -319,7 +321,7 @@
 </template>
 
 <script>
-import { isEnvironmentConfigured } from '../../helpers/environmentConfig';
+import { isEnvironmentConfigured, getCurrentSupabaseSettings } from '../../helpers/environmentConfig';
 
 export default {
     props: {
@@ -730,10 +732,13 @@ export default {
                 const ref = baseRef;
                 const paramsBaseRef = cfg.baseProjectRef || overrideRef || '';
                 if (!ref || !this.hasOAuthToken()) return;
-                const { data } = await wwLib.wwPlugins.supabase.requestAPI({
+                const config = getCurrentSupabaseSettings('supabase');
+                const { data } = await wwAxios({
                     method: 'GET',
-                    path: `/projects/${ref}/branches`,
-                    params: { baseProjectRef: paramsBaseRef },
+                    url: `${wwLib.wwApiRequests._getPluginsUrl()}/designs/${
+                        wwLib.$store.getters['websiteData/getDesignInfo'].id
+                    }/supabase/projects/${ref}/branches`,
+                    params: { baseProjectRef: paramsBaseRef, wwEnv: config.environment },
                 });
                 const branches = data?.data || [];
                 this.branches = { ...(this.branches || {}), [env]: branches };
@@ -770,10 +775,10 @@ export default {
                     }
                 }
             } catch (e) {
-                const msg = e?.response?.data?.error || e?.message || 'Unable to load branches';
                 this.branches = { ...(this.branches || {}), [env]: [] };
-                this.branchErrors = { ...(this.branchErrors || {}), [env]: msg };
-                console.warn('[Supabase plugin] loadBranches error', { env, status: e?.response?.status, msg });
+                const errors = { ...(this.branchErrors || {}) };
+                delete errors[env];
+                this.branchErrors = errors;
             }
         },
 

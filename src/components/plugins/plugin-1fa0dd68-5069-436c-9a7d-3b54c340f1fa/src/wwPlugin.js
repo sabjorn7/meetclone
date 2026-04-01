@@ -16,7 +16,7 @@ export default {
     \================================================================================================*/
     async _onLoad(settings) {
         const config = getCurrentSupabaseSettings('supabaseAuth');
-        
+
         /* wwFront:start */
         await this.load(config.projectUrl, config.publicApiKey);
         /* wwFront:end */
@@ -330,11 +330,11 @@ export default {
         if (!this.publicInstance) throw new Error('Invalid Supabase Auth configuration.');
         const roles = this.settings.publicData.userRoleTable
             ? (
-                await this.publicInstance
-                    .from(this.settings.publicData.userRoleTable)
-                    .select(`role:${this.settings.publicData.userRoleTableRoleColumn || 'roleId'}(*)`)
-                    .eq(this.settings.publicData.userRoleTableUserColumn || 'userId', userId)
-            ).data.map(({ role }) => role)
+                  await this.publicInstance
+                      .from(this.settings.publicData.userRoleTable)
+                      .select(`role:${this.settings.publicData.userRoleTableRoleColumn || 'roleId'}(*)`)
+                      .eq(this.settings.publicData.userRoleTableUserColumn || 'userId', userId)
+              ).data.map(({ role }) => role)
             : [];
         return roles;
     },
@@ -448,11 +448,11 @@ const adminFunctions = {
         if (!this.privateInstance) throw new Error('Invalid Supabase Auth configuration.');
         const roles = this.settings.publicData.userRoleTable
             ? (
-                await this.privateInstance
-                    .from(this.settings.publicData.userRoleTable)
-                    .select(`role:${this.settings.publicData.userRoleTableRoleColumn || 'roleId'}(*)`)
-                    .eq(this.settings.publicData.userRoleTableUserColumn || 'userId', userId)
-            ).data.map(({ role }) => role)
+                  await this.privateInstance
+                      .from(this.settings.publicData.userRoleTable)
+                      .select(`role:${this.settings.publicData.userRoleTableRoleColumn || 'roleId'}(*)`)
+                      .eq(this.settings.publicData.userRoleTableUserColumn || 'userId', userId)
+              ).data.map(({ role }) => role)
             : [];
         return roles;
     },

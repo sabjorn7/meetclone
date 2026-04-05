@@ -2,6 +2,7 @@
 import app from '@/_front/main.js';
 
 // eslint-disable-next-line no-undef
+import element_14723a21_0178_4d92_a7e9_d1dfeaec29a7 from '@/components/elements/element-14723a21-0178-4d92-a7e9-d1dfeaec29a7/src/wwElement.vue';
 import element_1b1e2173_9b78_42cc_a8ee_a6167caea340 from '@/components/elements/element-1b1e2173-9b78-42cc-a8ee-a6167caea340/src/wwElement.vue';
 import element_1be951af_de71_43e6_ad1e_e9b36de15529 from '@/components/elements/element-1be951af-de71-43e6-ad1e-e9b36de15529/src/wwElement.vue';
 import element_31410d61_195d_441c_a2d9_9190ea6b4c19 from '@/components/elements/element-31410d61-195d-441c-a2d9-9190ea6b4c19/src/wwElement.vue';
@@ -21,6 +22,7 @@ import element_d7904e9d_fc9a_4d80_9e32_728e097879ad from '@/components/elements/
 import element_deb10a01_5eef_4aa1_9017_1b51c2ad6fd0 from '@/components/elements/element-deb10a01-5eef-4aa1-9017-1b51c2ad6fd0/src/wwElement.vue';
 
 // eslint-disable-next-line no-undef
+app.component('wwobject-14723a21-0178-4d92-a7e9-d1dfeaec29a7', element_14723a21_0178_4d92_a7e9_d1dfeaec29a7);
 app.component('wwobject-1b1e2173-9b78-42cc-a8ee-a6167caea340', element_1b1e2173_9b78_42cc_a8ee_a6167caea340);
 app.component('wwobject-1be951af-de71-43e6-ad1e-e9b36de15529', element_1be951af_de71_43e6_ad1e_e9b36de15529);
 app.component('wwobject-31410d61-195d-441c-a2d9-9190ea6b4c19', element_31410d61_195d_441c_a2d9_9190ea6b4c19);

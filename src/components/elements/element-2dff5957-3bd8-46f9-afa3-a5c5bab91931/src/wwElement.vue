@@ -95,7 +95,7 @@ export default {
     },
     methods: {
         handleManualInput(event) {
-            const value = parseFloat(event.target.value);
+            let value = parseFloat(event.target.value);
             if (isNaN(value)) value = 0;
             if (value === this.value) return;
             this.setValue(value);

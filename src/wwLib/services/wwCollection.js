@@ -81,11 +81,12 @@ export default {
         /* wwFront:end */
     },
     async fetchCollection(id, { limit, offset, parameters = {} } = {}, workflowContext) {
+ 
         const currentNavigationId = wwLib.globalVariables._navigationId;
         try {
             const currentCollectionInfo = wwLib.$store.getters['data/getCollections'][id];
             if (!currentCollectionInfo) return;
-            wwLib.$store.dispatch('data/setCollectionFetching', {
+             wwLib.$store.dispatch('data/setCollectionFetching', {
                 id,
                 isFetching: true,
             });
@@ -133,7 +134,7 @@ export default {
             }
 
             if (collection.error) {
-                executeWorkflows('on-collection-fetch-error', {
+                 executeWorkflows('on-collection-fetch-error', {
                     event: {
                         error: collection.error.message ? collection.error.message : collection.error,
                         collection: collection.config.data,
@@ -143,7 +144,7 @@ export default {
                 });
             }
             wwLib.$store.dispatch('data/setCollection', collection);
-            if (currentNavigationId === wwLib.globalVariables._navigationId) {
+             if (currentNavigationId === wwLib.globalVariables._navigationId) {
                 wwLib.$store.dispatch('data/setCollectionFetching', { id, isFetching: false });
             }
         } catch (err) {

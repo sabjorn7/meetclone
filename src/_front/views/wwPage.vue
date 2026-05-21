@@ -99,7 +99,7 @@ export default {
         background() {
             return getBackgroundStyle(this.designInfo?.background || {});
         },
-    },
+     },
     watch: {
         activeLinkPopup() {
             if (this.activeLinkPopup) {

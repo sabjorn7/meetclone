@@ -5,7 +5,7 @@
     ".env.production": "6f8c5beeaff6daff23ead69124f1539c21c4b409",
     ".env.staging": "75c12c79f625cd00791c15173fb98936dfdac716",
     "eslint.config.js": "10e4108c3fbdf3c4ba805f12c304226c8d03418c",
-    "package-lock.json": "2b102e5cb019155328ead09a513d6cfbf08bc4d3",
+    "package-lock.json": "8e933b177312b3f8f3771c1aca49105f7fe2fad1",
     "package.json": "50a5213e98512d87c3f2894c4c28cf3db4441603",
     "plugins-settings.json": "1b0f8a3e415259e181cdf22b150d10dc8ee15cce",
     "postbuild.js": "c9721541485066c11aecc9477a0f515d018b290f",
@@ -354,7 +354,7 @@
     "public/images/portrait.jpg": "00052baa9fca7130a0d82cedb30ec1bb3eaeb654",
     "public/images/Новый_проект-4.png": "5b7b1c0f34a766f396423f73b9ee1b9540c112eb",
     "public/images/Новый_проект-6.png": "e13010a5615cf932b46db359c67427fed1ba62db",
-    "public/manifest.json": "3e81af6f5507f96f415e41cd21818d5b18b13198",
+    "public/manifest.json": "fefec65208067a9b563dbfcfca4bbbdb58cdea7c",
     "public/robots.txt": "e2f43777f8992a0c1d64365657d2d416fdb9f219",
     "public/serviceworker.js": "acc5861b19b36eff137ba2b1d14c6ae06ae8ccc2",
     "public/sitemap.xml": "b1a6f37617ac98555d89fb0048843df4385cd7e1",
@@ -431,7 +431,7 @@
     "src/_front/integrations/weweb-auth/package.json": "f237cffa9a439570a286398af22db42dfc2baaf7",
     "src/_front/integrations/weweb-auth/weweb-auth.front.js": "2aa6335e0383085d0ef0a47055076a5e0383cdd3",
     "src/_front/main.js": "da0d09369c4a77de7456af48ee48f3dd2a168675",
-    "src/_front/router.js": "0faebe5d0ce1a47e8f622ebea6d2f4e442612371",
+    "src/_front/router.js": "868ce57c362df25829a330ce922ea360d6767a82",
     "src/_front/use/useComponentAdvancedInteractions.js": "db8e0f958e779b9386a66487f56ec6893d83790c",
     "src/_front/use/useComponentKeyframes.js": "2e4a87351ff0d5010ed6cb4b7fd8eeba1dabf520",
     "src/_front/use/useComponentStates.js": "2637b9d8476e9c2cfe290103695b6531a52bc0b8",
@@ -787,6 +787,6 @@
     "template.html": "ff33824a2f71220003595b96798816e5bd4b7314",
     "tsconfig.app.json": "0b84bc6e6d0d38b6fcd3e56b004b82a2ee269797",
     "tsconfig.node.json": "44d42fe8d79ae3722878356de89c2a7f6d84e867",
-    "vite.config.js": "791e4003416082b252b8e763e89ef0bfe311b19f"
+    "vite.config.js": "026d0f4345a2bce244eba3fb445aaf0dbc07cbe2"
   }
 }

@@ -1,1 +1,1 @@
-{"name":"meetgu-video-player","version":"1.0.1","scripts":{"build":"weweb build","serve":"weweb serve"},"devDependencies":{}}
+{"name":"meetgu-video-player","version":"1.0.1","scripts":{"build":"weweb build name=meetgu-video-player type=element","serve":"weweb serve name=meetgu-video-player type=element"},"devDependencies":{}}

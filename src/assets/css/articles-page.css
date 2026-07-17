@@ -1,0 +1,158 @@
+/*
+ * Hand-written visual refresh for the /articles page.
+ * Page id "7d160a8b-2036-48b5-993d-604eee6febe4" (see src/_front/router.js / wwg_designInfo)
+ * is stamped on the page root as the `ww-page-id` attribute by src/_front/views/wwPage.vue,
+ * so every rule below is scoped to that page only and never leaks into other routes.
+ *
+ * WeWeb renders each element's box-model + layout as inline styles computed from the
+ * generated design JSON (public/data/<page-uuid>.json). Those files are WeWeb-managed
+ * (regenerated on every export), so instead of hand-editing them we override the relevant
+ * `.ww-element-<uid>` instances here with `!important`, which is the supported way to
+ * restyle a WeWeb export without touching generated content. No data, links, images or
+ * article-loading logic are touched - only spacing, typography, radius/shadow and the
+ * repeat container's layout mode (flex list -> responsive grid).
+ */
+
+/* Main content wrapper: roomier page padding */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-cd0e297d-75d5-45fb-ba87-d513a77af133 {
+    padding: 40px 32px !important;
+}
+
+/* Page heading ("Все статьи") */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-e50a07a9-a717-405a-9d1d-661bfe5ec93e {
+    font-size: 32px !important;
+    letter-spacing: -0.01em !important;
+    margin-bottom: 8px !important;
+}
+
+/* The list wrapper is capped at 600px in the source design (legacy single-column list width).
+   Let it use the space actually available next to the filters sidebar so the grid below can
+   lay out more than one column. */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-8406831e-834e-4789-94ec-580e942be8cb {
+    max-width: 900px !important;
+}
+
+/* Card list -> responsive grid */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-f68d0173-5b05-43dd-9d78-968320b94b69 {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)) !important;
+    gap: 28px !important;
+    align-items: stretch !important;
+}
+
+/* Repeated grid-item wrapper: let the grid gap own the spacing, let the card fill the cell.
+   min-width: 0 defeats the grid item's default `min-width: auto`, which otherwise lets the
+   card's own content (e.g. the cover image's intrinsic size) force the track wider than the
+   grid container - the classic CSS grid "blowout" that only shows up once a row narrows down
+   to a single column (tablet/mobile). */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-07ce7324-50e1-41b9-9090-441d6d361887 {
+    padding: 0 !important;
+    height: 100% !important;
+    min-width: 0 !important;
+}
+
+/* Card
+   Overriding justify-content to flex-start (was space-between) so cards with shorter
+   content don't get stretched with large uneven gaps when a grid row is taller because of
+   a neighboring card - the meta row is pinned to the bottom via margin-top: auto instead. */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-383ab920-c8c5-4328-bebb-f64bbcf67a8f {
+    height: 100% !important;
+    padding: 20px !important;
+    row-gap: 16px !important;
+    column-gap: 16px !important;
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    justify-content: flex-start !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.07) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-383ab920-c8c5-4328-bebb-f64bbcf67a8f:hover {
+    transform: translateY(-4px) !important;
+    box-shadow: 0 4px 8px rgba(15, 23, 42, 0.08), 0 16px 32px rgba(15, 23, 42, 0.1) !important;
+}
+
+/* Author row */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-5f14c799-564b-48a8-8d75-91d80980fe79 {
+    column-gap: 12px !important;
+}
+
+/* Author name */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-ee505a4f-9746-41ea-bea8-0b39b6797f25 {
+    font-weight: 600 !important;
+}
+
+/* Publish date */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-454bf69c-b36d-47d9-8006-4f506bcf4ab1 {
+    letter-spacing: 0.01em !important;
+}
+
+/* Title / excerpt */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-4293e808-8f95-4e1d-9fce-b6bae8c4b178 p {
+    margin-top: 0 !important;
+    line-height: 1.55 !important;
+}
+
+/* Meta row (rating / comments): pin to the bottom of the card instead of getting
+   stretched apart when a taller neighbor makes the grid row taller than this card's content. */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-8d544cdf-1b2b-446a-9bf7-fa35da8cfd9b {
+    margin-top: auto !important;
+}
+
+/* Meta row (rating / comments) chips */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-51fc3e5a-73e8-43c7-af8c-a85a2dcdeba2 {
+    column-gap: 16px !important;
+}
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-48fd6510-0f63-486b-8a9c-d4e6542fcd12,
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-07d8f2b3-9bfa-4be6-bb11-9094c41d2270 {
+    column-gap: 6px !important;
+    padding: 6px 10px !important;
+    border-radius: 999px !important;
+    background: #f3f4f8 !important;
+}
+
+@media (max-width: 991px) {
+    [ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+        .ww-element-cd0e297d-75d5-45fb-ba87-d513a77af133 {
+        padding: 28px 20px !important;
+    }
+    [ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+        .ww-element-f68d0173-5b05-43dd-9d78-968320b94b69 {
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important;
+        gap: 20px !important;
+    }
+}
+
+@media (max-width: 767px) {
+    [ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+        .ww-element-cd0e297d-75d5-45fb-ba87-d513a77af133 {
+        padding: 20px 16px !important;
+    }
+    [ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+        .ww-element-e50a07a9-a717-405a-9d1d-661bfe5ec93e {
+        font-size: 24px !important;
+    }
+    [ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+        .ww-element-f68d0173-5b05-43dd-9d78-968320b94b69 {
+        grid-template-columns: 1fr !important;
+        gap: 16px !important;
+    }
+    [ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+        .ww-element-383ab920-c8c5-4328-bebb-f64bbcf67a8f {
+        padding: 16px !important;
+    }
+}

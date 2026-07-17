@@ -28,18 +28,21 @@
 }
 
 /* The list wrapper is capped at 600px in the source design (legacy single-column list width).
-   Let it use the space actually available next to the filters sidebar so the grid below can
-   lay out more than one column. */
+   Drop the cap so it uses the page's full content width (the filters row sits above it now,
+   not beside it, so there's no competing sidebar to leave room for). */
 [ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
     .ww-element-8406831e-834e-4789-94ec-580e942be8cb {
-    max-width: 900px !important;
+    max-width: none !important;
 }
 
-/* Card list -> responsive grid */
+/* Card list -> responsive grid. minmax(340px, 1fr) settles on 3 columns at the page's usual
+   desktop content width (~1376px, see cd0e297d's max-width/padding below) while staying
+   auto-fill responsive (grows to 4 on very wide screens, drops on its own before the
+   tablet/mobile media queries below take over explicitly). */
 [ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
     .ww-element-f68d0173-5b05-43dd-9d78-968320b94b69 {
     display: grid !important;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)) !important;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)) !important;
     gap: 28px !important;
     align-items: stretch !important;
 }
@@ -108,6 +111,51 @@
 [ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
     .ww-element-8d544cdf-1b2b-446a-9bf7-fa35da8cfd9b {
     margin-top: auto !important;
+}
+
+/* Cover image: soften the hard corners a little. overflow: hidden is required for the
+   border-radius to actually clip the <img> inside, since the radius lives on this wrapper. */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-9620e1c0-4f9c-46af-8827-4c0fdd7ae807 {
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}
+
+/* Filters (title search + category): move above the article list instead of beside it.
+   The row becomes a column with the filter block first via `order`, so DOM/source order
+   (and therefore tab order) is untouched - purely a visual reflow. */
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-c3de5945-50c6-4b35-8a61-9159f8f0d80a {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+}
+[ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+    .ww-element-9eae81ee-c34d-4c27-aff4-6023258539fe {
+    order: -1 !important;
+}
+
+/* Desktop only: stretch the search + category fields across the full width of the article
+   list (they otherwise stay at their fixed source widths, 300px + 200px, leaving a large
+   empty gap in the now-full-width filter row) and shave a bit off their height. The category
+   dropdown's visible box is a separate nested element (4882cddc, the "trigger" layout) from
+   its position:relative wrapper (efd1e9d1), so both need the override. */
+@media (min-width: 992px) {
+    [ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+        .ww-element-1c08025b-e77d-4e63-a502-c286226e50ab {
+        height: 40px !important;
+        flex: 2 1 0% !important;
+    }
+    [ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+        .ww-element-efd1e9d1-eee8-443f-9128-7396d8bd36d4 {
+        width: auto !important;
+        flex: 1 1 0% !important;
+    }
+    [ww-page-id='7d160a8b-2036-48b5-993d-604eee6febe4']
+        .ww-element-4882cddc-2d63-485b-a90a-e4c527a2afbd {
+        width: 100% !important;
+        height: 40px !important;
+    }
 }
 
 /* Meta row (rating / comments) chips */

@@ -1,4 +1,4 @@
-import { isEqual } from 'lodash';
+import { isEqual } from 'lodash-es';
 import { escape } from 'html-escaper';
 
 function isObject(obj) {

@@ -53,6 +53,7 @@ if ('serviceWorker' in navigator) {
 import wwElements from '@/_front/components/index.js';
 import { addMediaQueriesListener } from '../helpers/mediaQueriesListener.js';
 import globalServices from '@/_common/plugins/globalServices.js';
+import { initHeaderMenuOutsideClick } from '@/_front/helpers/headerMenuOutsideClick.js';
 
  
 import '@/assets/css';
@@ -106,6 +107,8 @@ const init = async function () {
     // We select ourself app element, because Vue does not know how to do it properly (Editor + Front Iframe)
     const el = document.getElementById('app');
     app.mount(el);
+
+    initHeaderMenuOutsideClick();
 
     /* wwFront:start */
     // Needed or reactivity is not working in deployed app

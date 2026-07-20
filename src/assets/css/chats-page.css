@@ -50,6 +50,31 @@
     box-shadow: 0 4px 8px rgba(15, 23, 42, 0.1), 0 10px 20px rgba(15, 23, 42, 0.1) !important;
 }
 
+/* "Создать группу" button: a plain Button element with no design-token class behind
+   it (unlike "Все пользователи", which inherits shape/padding from a shared WeWeb
+   style-class token this element doesn't have) - so it rendered as bare text with no
+   pill shape and a mismatched height. Match the sibling button's box model exactly
+   so the pair reads as one consistent row instead of one pill + one stray link. */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-bbe3b525-662d-48d4-a5c7-17c62f7b82d6 {
+    height: 40.5px !important;
+    padding: 12px 24px !important;
+    border-radius: 999px !important;
+    box-sizing: border-box !important;
+    transition: background-color 0.15s ease, transform 0.15s ease !important;
+}
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-bbe3b525-662d-48d4-a5c7-17c62f7b82d6:hover {
+    transform: translateY(-1px) !important;
+}
+
+/* Row holding both buttons: keep them vertically centered against each other now
+   that they're the same height */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-4f1c7ef2-cd7b-496e-a1b7-e80c36430d0d {
+    align-items: center !important;
+}
+
 /* Two-column layout: align columns to the top instead of stretching to equal height */
 [ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
     .ww-element-d9074ca9-e626-476a-b360-f9e9452ed98b {

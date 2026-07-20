@@ -98,7 +98,11 @@
 }
 
 /* Unread "New" marker: was plain red inline text next to the name, easy to miss/confuse
-   for a label. Turn it into an actual pill badge. */
+   for a label. Turn it into an actual pill badge. The element's own visibility is now
+   driven by its text content being empty vs "New" (a style-level display:none formula
+   referencing context.component.props doesn't reactively resolve for elements nested
+   inside this library component - confirmed by two failed deploys - so the underlying
+   JSON fix makes the text itself conditional instead, and :empty collapses the pill). */
 [ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
     .ww-element-a65f4a55-d43a-4370-93bb-2f4333557bda {
     display: inline-block !important;
@@ -109,6 +113,12 @@
     color: #ffffff !important;
     background: #fa444d !important;
     border-radius: 999px !important;
+}
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-a65f4a55-d43a-4370-93bb-2f4333557bda:empty {
+    display: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
 }
 
 /* Delete icon: a bright red trash can sitting next to every single row at all times reads

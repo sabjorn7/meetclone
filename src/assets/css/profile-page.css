@@ -86,6 +86,16 @@
     margin-top: 20px !important;
     line-height: 1.6 !important;
     color: #334155 !important;
+    text-align: center !important;
+}
+
+/* Club membership badge(s) (d9287b04, a repeater of pill links - conditionally rendered,
+   only shows for users with a club). Same align-self: flex-start leftover from the old row
+   layout as the name/role/email stack above - same fix, plus centering its own items. */
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-d9287b04-7c33-4c7e-a1da-7f98232914df {
+    align-self: center !important;
+    align-items: center !important;
 }
 /* Flat, not the same blue as the tabs pill below: the "Записаться" button is the one
    action on this page that should stand out, so it uses the banner's darker navy (solid,
@@ -193,6 +203,138 @@
 [ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
     .ww-element-6ebc49ac-fc88-4041-81ba-f24a3f2433f0 {
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.07) !important;
+}
+
+/* ---- "Статьи" tab: article cards, same reusable library component as /articles
+   (libraryComponentBaseId 05439174-..., confirmed by the shared element uids below being
+   identical to the ones articles-page.css targets) - it just isn't laid out as a grid here,
+   so it renders as an unstyled horizontally-scrolling row. Reuse the same grid treatment,
+   scoped to this page's id so it doesn't clash with articles-page.css's own rules. */
+
+/* Scroll-wrapper chain around the card grid (93bbc054/580a9913, both literally named
+   "Courses..." - leftover from being copy-pasted from the courses list when this page was
+   built, but functionally this branch is gated on Status/"Опубликовано", i.e. articles):
+   drop the horizontal-scroll/height-cap behavior so the grid can flow normally instead of
+   living in a tiny scrollable strip. */
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-93bbc054-4553-439b-9cf4-1e79c48ab381,
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-580a9913-99c7-49a9-bff7-eacc18a2ff62 {
+    overflow: visible !important;
+    max-height: none !important;
+    width: 100% !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-2a21d2a4-9ce0-4ed8-b54f-77606c55c5fd,
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-d0955b2c-db4e-43be-bc1f-4c506bd4ebc9 {
+    max-width: none !important;
+    width: 100% !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-6da356b6-fe33-471d-bf4f-0c312ef12487 {
+    width: 100% !important;
+}
+/* The actual blocker: this is the library component's own internal wrapper around the
+   grid (max-width: 600px baked into its default style - a legacy single-column list width,
+   same node articles-page.css already drops the cap on for /articles). Without this override
+   the grid container above never gets more than 600px to work with, so `auto-fill` only ever
+   fits a single 1fr track no matter how many articles exist. */
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-8406831e-834e-4789-94ec-580e942be8cb {
+    max-width: none !important;
+    width: 100% !important;
+}
+
+/* The grid itself - same minmax(340px, 1fr) auto-fill as articles-page.css, which settles
+   on 3 columns at this page's usual desktop content width. */
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-f68d0173-5b05-43dd-9d78-968320b94b69 {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)) !important;
+    gap: 24px !important;
+    align-items: stretch !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-07ce7324-50e1-41b9-9090-441d6d361887 {
+    padding: 0 !important;
+    height: 100% !important;
+    min-width: 0 !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-383ab920-c8c5-4328-bebb-f64bbcf67a8f {
+    height: 100% !important;
+    padding: 20px !important;
+    row-gap: 16px !important;
+    column-gap: 16px !important;
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    justify-content: flex-start !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.07) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-383ab920-c8c5-4328-bebb-f64bbcf67a8f:hover {
+    transform: translateY(-4px) !important;
+    box-shadow: 0 4px 8px rgba(15, 23, 42, 0.08), 0 16px 32px rgba(15, 23, 42, 0.1) !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-5f14c799-564b-48a8-8d75-91d80980fe79 {
+    column-gap: 12px !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-ee505a4f-9746-41ea-bea8-0b39b6797f25 {
+    font-weight: 600 !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-454bf69c-b36d-47d9-8006-4f506bcf4ab1 {
+    letter-spacing: 0.01em !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-4293e808-8f95-4e1d-9fce-b6bae8c4b178 p {
+    margin-top: 0 !important;
+    line-height: 1.55 !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-8d544cdf-1b2b-446a-9bf7-fa35da8cfd9b {
+    margin-top: auto !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-9620e1c0-4f9c-46af-8827-4c0fdd7ae807 {
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-51fc3e5a-73e8-43c7-af8c-a85a2dcdeba2 {
+    column-gap: 16px !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-48fd6510-0f63-486b-8a9c-d4e6542fcd12,
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-07d8f2b3-9bfa-4be6-bb11-9094c41d2270 {
+    column-gap: 6px !important;
+    padding: 6px 10px !important;
+    border-radius: 999px !important;
+    background: #f3f4f8 !important;
+}
+
+@media (max-width: 991px) {
+    [ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+        .ww-element-f68d0173-5b05-43dd-9d78-968320b94b69 {
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important;
+        gap: 20px !important;
+    }
+}
+@media (max-width: 767px) {
+    [ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+        .ww-element-f68d0173-5b05-43dd-9d78-968320b94b69 {
+        grid-template-columns: 1fr !important;
+        gap: 16px !important;
+    }
+    [ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+        .ww-element-383ab920-c8c5-4328-bebb-f64bbcf67a8f {
+        padding: 16px !important;
+    }
 }
 
 /* ---- Mobile: shorter banner / smaller avatar, everything else already responsive via wrap ---- */

@@ -1,0 +1,165 @@
+/*
+ * Hand-written visual refresh for the "Все пользователи" page (/users).
+ * Page id "a7e5fc0b-4735-4c02-b13d-d5473af39982" is stamped on the page root as the
+ * `ww-page-id` attribute by src/_front/views/wwPage.vue, so every rule below is scoped
+ * to that page only.
+ *
+ * Same approach as articles-page.css / profile-page.css: overrides the relevant
+ * `.ww-element-<uid>` instances with `!important` instead of hand-editing the generated
+ * design JSON. Purely visual - spacing, typography, card language - no data/search/filter
+ * logic touched.
+ */
+
+/* Decorative background image next to the panel: was sized to fill the gap left by the
+   panel's old max-width:90%; now that the panel uses the full row width there's no room
+   left for it and it just overflows as a stray sliver on the right. Not load-bearing -
+   drop it rather than fighting the flex math for a background flourish. */
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-799038d7-4e3b-416e-99e0-066bb772d10a {
+    display: none !important;
+}
+
+/* Page padding, roomier on desktop */
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-13b3091b-c3d9-473f-a761-a7a153b06ffa {
+    padding: 40px 32px !important;
+}
+
+/* Heading */
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-3b7a2d49-3953-479f-90de-a84de5e3ff68 {
+    font-size: 28px !important;
+    letter-spacing: -0.01em !important;
+    margin-bottom: 8px !important;
+}
+
+/* The white "Content" panel around search/filters/list: was a thin flat-gray-bordered
+   box capped at 90% width with its own maxHeight:100vh + overflow:auto (a nested
+   scroll region for the whole panel, including the search bar and pagination - the
+   same "internal scroll box" default seen and dropped on the profile page's articles
+   grid). Drop that cap so the page scrolls normally instead, use the site's card
+   shadow language instead of a flat border. */
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-2fd474a8-b2d5-4a03-9796-a66bbe6a1ce4 {
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 28px !important;
+    border: none !important;
+    border-radius: 20px !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.07) !important;
+}
+
+/* Search inputs: taller, matches the 44px input height used elsewhere on the site */
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-53389a70-8274-44c8-9b1b-6ae826165e84,
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-3928315d-25ca-44e8-9b2e-adda01269144 {
+    height: 44px !important;
+}
+
+/* Search icon: give it an actual button shape instead of a bare floating glyph */
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-59ffb6df-f872-4570-a892-6b9229752f88 {
+    width: 44px !important;
+    max-width: 44px !important;
+    min-width: 44px !important;
+    height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+    background: #5495f3 !important;
+    color: #ffffff !important;
+    transition: background 0.15s ease !important;
+}
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-59ffb6df-f872-4570-a892-6b9229752f88:hover {
+    background: #3f7ee0 !important;
+}
+
+/* Role filter chips: a bit more breathing room from the search row above them */
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-49b160ff-190b-48db-88bf-81af875c9d0d {
+    margin-top: 16px !important;
+}
+
+/* Pagination row */
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-54b3cfea-e510-416b-bef9-0ae0379c0fc2 {
+    align-items: center !important;
+    column-gap: 10px !important;
+    margin: 20px 0 !important;
+    font-size: 14px !important;
+    color: #64748b !important;
+}
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-6f664658-fcad-4689-ab32-2d7974cf796a {
+    color: #5495f3 !important;
+    font-weight: 600 !important;
+    margin-left: auto !important;
+}
+
+/* Empty state ("Никто не найден") */
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-0e3fe34f-30cb-4a78-9caa-645c721c129e {
+    padding: 32px 0 !important;
+    text-align: center !important;
+    color: #94a3b8 !important;
+}
+
+/* User card list: more room between cards */
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-6590bd40-257d-4e55-8af2-7df60cd7204e {
+    row-gap: 12px !important;
+}
+
+/* Individual user card: more padding, the same shadow language as the panel/other
+   site cards instead of the previous plain 1px drop-shadow, subtle lift on hover. */
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-5c52a1a4-d1f5-4a8f-bb59-092421a2cbfc {
+    padding: 14px 16px !important;
+    border-radius: 14px !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 2px 8px rgba(15, 23, 42, 0.06) !important;
+    transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-5c52a1a4-d1f5-4a8f-bb59-092421a2cbfc:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 8px rgba(15, 23, 42, 0.08), 0 10px 24px rgba(15, 23, 42, 0.1) !important;
+}
+
+/* Avatar: crisp edge so it doesn't blend into the card on light photos */
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-08e6ac77-2daa-45e9-93fe-f91cbca674fd {
+    border: 1px solid #eef0f4 !important;
+}
+
+/* Name / email hierarchy: was the same 16px/same weight/same color for both, so the
+   two lines read as equally important. Name gets weight, email gets de-emphasized -
+   the same "muted secondary line" treatment used on the profile page redesign. */
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-6a2e658e-073d-4fcd-a5e6-3d2f4bfa56e0 {
+    font-weight: 600 !important;
+}
+[ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+    .ww-element-03182962-c9de-4f26-b41e-270aabe80a0d {
+    font-size: 13px !important;
+    color: #94a3b8 !important;
+}
+
+@media (max-width: 767px) {
+    [ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+        .ww-element-13b3091b-c3d9-473f-a761-a7a153b06ffa {
+        padding: 20px 16px !important;
+    }
+    [ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+        .ww-element-2fd474a8-b2d5-4a03-9796-a66bbe6a1ce4 {
+        padding: 16px !important;
+        border-radius: 16px !important;
+    }
+    [ww-page-id='a7e5fc0b-4735-4c02-b13d-d5473af39982']
+        .ww-element-3b7a2d49-3953-479f-90de-a84de5e3ff68 {
+        font-size: 22px !important;
+    }
+}

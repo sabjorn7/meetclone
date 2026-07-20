@@ -1,0 +1,215 @@
+/*
+ * Hand-written visual refresh for the public profile page (/profile_page).
+ * Page id "6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d" is stamped on the page root as the
+ * `ww-page-id` attribute by src/_front/views/wwPage.vue, so every rule below is scoped
+ * to that page only.
+ *
+ * Same approach as articles-page.css: WeWeb renders each element's box-model as inline
+ * styles from public/data/6ff5d3f0-....json (WeWeb-managed, regenerated on export), so
+ * instead of hand-editing that JSON this overrides the relevant `.ww-element-<uid>`
+ * instances with `!important`. Nothing here changes what data is shown or how it's
+ * fetched - only layout/typography/spacing, plus a couple of `order` reflows (the social
+ * icons row is moved up next to the name via flex `order`, matching the DOM-order-safe
+ * trick already used in articles-page.css for its filters row).
+ */
+
+/* ---- Profile card: banner + centered, stacked header (avatar on top, name below) ---- */
+
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-7611c661-3b49-42a3-a7d4-7b2075ace1a0 {
+    position: relative !important;
+    overflow: hidden !important;
+    padding: 0 20px 28px 20px !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.07) !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-7611c661-3b49-42a3-a7d4-7b2075ace1a0::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 140px;
+    background: linear-gradient(135deg, #5495f3, #091747);
+}
+
+/* Header row: avatar + name/role/email, was a side-by-side row -> stacked and centered,
+   pushed down far enough that the avatar (128px) overlaps the bottom half of the banner. */
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-f68a23c2-750e-4c15-852a-12c21b2c2d3d {
+    position: relative !important;
+    z-index: 1 !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    row-gap: 16px !important;
+    padding: 76px 0 0 0 !important;
+    text-align: center !important;
+}
+
+/* Social icons row: 3rd child of the card, reflowed via `order` to sit right under the
+   name block instead of after the (possibly long) description; turned into a compact,
+   centered pill instead of a bare row of icons. */
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-f68a23c2-750e-4c15-852a-12c21b2c2d3d {
+    order: 1 !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-79c8937f-7838-400c-a107-b83668989fa0 {
+    order: 2 !important;
+    justify-content: center !important;
+    width: fit-content !important;
+    margin: 4px auto 0 auto !important;
+    padding: 8px 16px !important;
+    border-radius: 999px !important;
+    background: #f3f4f8 !important;
+}
+/* Each icon ships as an inline SVG with its own brand-colored background rect (VK blue,
+   YouTube red, WhatsApp green, Telegram blue, a neutral gray for the website globe) - flatten
+   them to one shared color so the row reads as one consistent element instead of a rainbow
+   of brand badges. The glyph on top of each rect is already white, so only the rect needs
+   overriding. */
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-abee6c50-6306-44ac-a165-d9746f0c050c svg rect,
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-9919704b-929b-4f78-bf17-93d417001002 svg rect,
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-34e9ac0b-7b7e-4614-ad3f-0db3c5b1e2a9 svg rect,
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-15b5fb62-0467-4af7-b8f4-50b0f3e6e955 svg rect,
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-01afe72b-42ed-45a4-8cca-00c03f683258 svg rect {
+    fill: #5495f3 !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-6ad506ca-1a71-494a-8b5a-0e8f1f41e36d {
+    order: 3 !important;
+    margin-top: 20px !important;
+    line-height: 1.6 !important;
+    color: #334155 !important;
+}
+/* Flat, not the same blue as the tabs pill below: the "Записаться" button is the one
+   action on this page that should stand out, so it uses the banner's darker navy (solid,
+   no gradient) plus a fully round pill shape and more size/weight, instead of blending in
+   as "just another small blue pill" next to the Курсы/Статьи toggle. */
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-7c16dd8d-f2f2-4ab5-8e52-17ab3766a789 {
+    order: 4 !important;
+    margin: 20px auto 0 auto !important;
+    padding: 14px 36px !important;
+    border-radius: 999px !important;
+    background: #091747 !important;
+    box-shadow: 0 6px 16px rgba(9, 23, 71, 0.3) !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-7c16dd8d-f2f2-4ab5-8e52-17ab3766a789 .ww-text-content {
+    color: #ffffff !important;
+    font-size: 15px !important;
+    letter-spacing: 0.01em !important;
+}
+
+/* Avatar: bigger, crisper white ring so it reads as a distinct element sitting on top
+   of the banner rather than blending into it. No box-shadow here on purpose: the photo
+   wrapper (214bad6f) has its own `overflow: hidden` sized exactly to the avatar (for
+   cropping uploaded photos to the circle), which clips any shadow on this element into a
+   visible flat edge instead of a soft glow - the white ring alone gives enough definition
+   against the banner without fighting that wrapper. */
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-7a9c4306-fc3c-40a2-87cf-3c0bf17af756 {
+    width: 128px !important;
+    height: 128px !important;
+    max-width: 128px !important;
+    border: 4px solid #ffffff !important;
+}
+
+/* Name / role / status stack: center it, and reorder name -> role badge -> email so the
+   role reads as a status line right under the name (was name -> email -> role). */
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-c0e8359f-5005-4480-ab5b-17f5cea2a609 {
+    /* The source JSON sets this element's own align-self to flex-start (meant for the old
+       row layout, where it kept the info block top-aligned next to the avatar). In the new
+       column layout align-self controls horizontal position instead, so it was pinning the
+       whole name/role/email block to the left edge regardless of align-items on the parent -
+       hence the explicit override here. */
+    align-self: center !important;
+    align-items: center !important;
+    row-gap: 4px !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-7d5a722e-021f-44e3-bd20-578c55d3f962 {
+    order: 1 !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.01em !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-033c2b70-78b2-4308-a890-0d590fca43f0 {
+    order: 2 !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-033c2b70-78b2-4308-a890-0d590fca43f0 p {
+    display: inline-block !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    color: #5495f3 !important;
+    background: rgba(84, 149, 243, 0.12) !important;
+    padding: 4px 12px !important;
+    border-radius: 999px !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-f5ef7b7d-1557-4c83-86af-7e0c3b7dc3a1 {
+    order: 3 !important;
+    font-size: 13px !important;
+    color: #94a3b8 !important;
+}
+
+/* ---- Tabs (Курсы / Статьи): unify the two pill buttons into one segmented control ---- */
+
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-d1484100-802c-445f-a611-c29c868fb507 {
+    width: fit-content !important;
+    margin: 4px auto !important;
+    padding: 6px !important;
+    column-gap: 4px !important;
+    border-radius: 999px !important;
+    background: #f3f4f8 !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-451deb9b-56eb-4018-a29d-0c3af93b0c35,
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-6c27aa66-19b5-418a-a1f3-29a029521232 {
+    width: auto !important;
+    padding: 8px 24px !important;
+}
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-451deb9b-56eb-4018-a29d-0c3af93b0c35 p,
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-6c27aa66-19b5-418a-a1f3-29a029521232 p {
+    font-size: 14px !important;
+}
+
+/* ---- Courses / articles cards: same shadow language as the profile card above ---- */
+
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-8c0c1277-de92-4f09-9e70-06595d5d078d,
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-6ebc49ac-fc88-4041-81ba-f24a3f2433f0 {
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.07) !important;
+}
+
+/* ---- Mobile: shorter banner / smaller avatar, everything else already responsive via wrap ---- */
+
+@media (max-width: 767px) {
+    [ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+        .ww-element-7611c661-3b49-42a3-a7d4-7b2075ace1a0::before {
+        height: 110px;
+    }
+    [ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+        .ww-element-f68a23c2-750e-4c15-852a-12c21b2c2d3d {
+        padding-top: 56px !important;
+    }
+    [ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+        .ww-element-7a9c4306-fc3c-40a2-87cf-3c0bf17af756 {
+        width: 96px !important;
+        height: 96px !important;
+        max-width: 96px !important;
+    }
+}

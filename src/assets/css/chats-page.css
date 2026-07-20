@@ -1,0 +1,233 @@
+/*
+ * Hand-written visual refresh for the chats page (/chats).
+ * Page id "371cded4-cfe8-4b30-bfc0-23b87e9f6d07" is stamped on the page root as the
+ * `ww-page-id` attribute by src/_front/views/wwPage.vue, so every rule below is scoped
+ * to that page only.
+ *
+ * Same approach as articles-page.css / profile-page.css / users-page.css: overrides the
+ * relevant `.ww-element-<uid>` instances with `!important` instead of hand-editing the
+ * generated design JSON. Purely visual - spacing, typography, card language - no chat/
+ * messaging logic touched.
+ *
+ * Note on scroll regions: this page has TWO independently-scrolling boxes by design (the
+ * chat-list sidebar and the message log) - a split-pane chat UI pattern, not the
+ * accidental "internal scroll box" bug fixed elsewhere. Both are left scrollable here,
+ * just restyled.
+ */
+
+/* Page padding, roomier on desktop */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-2cce8fd7-9b30-47fd-ae57-c849dfeb8a19 {
+    padding: 40px 32px !important;
+}
+
+/* Heading */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-af7db3be-cd20-49c9-b08b-9967baf79caa {
+    font-size: 28px !important;
+    letter-spacing: -0.01em !important;
+    margin-bottom: 6px !important;
+}
+
+/* Subtext */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-42e6279e-0c6e-4f4b-8c89-733d40a1020e {
+    color: #64748b !important;
+    margin-bottom: 20px !important;
+}
+
+/* "Все пользователи" button: rounded pill instead of a flat rectangle, subtle lift on hover */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-a5894316-d994-43f0-b7cc-4437d33c12d0 {
+    padding: 12px 24px !important;
+    border-radius: 999px !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.08) !important;
+    transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-a5894316-d994-43f0-b7cc-4437d33c12d0:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(15, 23, 42, 0.1), 0 10px 20px rgba(15, 23, 42, 0.1) !important;
+}
+
+/* Two-column layout: align columns to the top instead of stretching to equal height */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-d9074ca9-e626-476a-b360-f9e9452ed98b {
+    align-items: flex-start !important;
+}
+
+/* Sidebar: was a flat #F5F5F5-on-transparent panel with no separation from the page
+   background. Give it the site's card language (white, radius, shadow) - keeps its
+   existing overflow:auto/maxHeight:700px as-is, that's an intentional independently-
+   scrolling chat list, not the accidental scroll-box bug from other pages. */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-c607bc87-7dc7-478e-b174-ff4d6269b388 {
+    padding: 12px !important;
+    background: #ffffff !important;
+    border-radius: 16px !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 16px rgba(15, 23, 42, 0.06) !important;
+}
+
+/* Chat row: more breathing room, hover feedback */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-d1fa29e3-55a0-49b9-bec8-09576af39dde {
+    margin-bottom: 4px !important;
+    transition: background-color 0.15s ease !important;
+}
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-d1fa29e3-55a0-49b9-bec8-09576af39dde:hover {
+    background-color: #eef1f6 !important;
+}
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-a288ff7d-a54c-43d0-9a5b-d787e7dd66ee {
+    padding: 10px !important;
+    align-items: center !important;
+}
+
+/* Chat row avatar: crisp edge */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-4b9981ca-035e-4bb8-b57a-e09a4cf0a403 {
+    border: 1px solid #eef0f4 !important;
+}
+
+/* Chat row name */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-6a712c0b-dab8-4a7f-8f50-3be47e102a7e {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+}
+
+/* Unread "New" marker: was plain red inline text next to the name, easy to miss/confuse
+   for a label. Turn it into an actual pill badge. */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-a65f4a55-d43a-4370-93bb-2f4333557bda {
+    display: inline-block !important;
+    margin-top: 2px !important;
+    padding: 1px 8px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: #ffffff !important;
+    background: #fa444d !important;
+    border-radius: 999px !important;
+}
+
+/* Delete icon: a bright red trash can sitting next to every single row at all times reads
+   as an alarm, not a rarely-used action. Dim it by default, bring it back to full strength
+   on row hover so it's still discoverable and reachable. */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-30d8a5b9-389e-492e-a59b-6673007f119b {
+    opacity: 0.35 !important;
+    transition: opacity 0.15s ease !important;
+}
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-d1fa29e3-55a0-49b9-bec8-09576af39dde:hover
+    .ww-element-30d8a5b9-389e-492e-a59b-6673007f119b {
+    opacity: 1 !important;
+}
+
+/* Message panel: same card language as the sidebar */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-94e43fff-e4f4-48fb-9001-ceca7ab8c079 {
+    padding: 16px !important;
+    background: #ffffff !important;
+    border-radius: 16px !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 16px rgba(15, 23, 42, 0.06) !important;
+}
+
+/* Recipient name heading */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-cc4da739-05af-4eeb-8473-a2e299a98d41 {
+    font-size: 17px !important;
+    margin-bottom: 12px !important;
+}
+
+/* Message log box */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-dc6d7e7c-3690-48c6-9b63-434e41717c9d {
+    padding: 16px !important;
+    border-radius: 16px !important;
+}
+
+/* Message bubble: slightly rounder, a soft shadow to lift it off the log background */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-afdbdc54-b72d-4ca8-87ef-4e06d57d17f6 {
+    padding: 10px 14px !important;
+    border-radius: 14px !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08) !important;
+}
+
+/* Timestamp: was plain body-size text competing with the message itself */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-013e89a5-7975-49f5-8ef3-744af9143161 {
+    font-size: 11px !important;
+    color: #94a3b8 !important;
+    margin-top: 4px !important;
+}
+
+/* Avatar+name row above each message bubble */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-c7dc4db0-0c34-43c4-8932-3ac87f7bce75 {
+    align-items: center !important;
+    column-gap: 6px !important;
+    margin-bottom: 4px !important;
+}
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-ff11c120-0a37-4853-86a6-b876bbf194de {
+    border: 1px solid #eef0f4 !important;
+}
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-cef07e65-2a94-4b1f-88fc-81d9c0590f26 {
+    font-size: 12px !important;
+    color: #64748b !important;
+    font-weight: 500 !important;
+}
+
+/* Message input row: pill-shaped input to match the send button, visible focus ring */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-a2b23acb-5b8a-4ed4-ad80-9b68df512d12 {
+    margin-top: 12px !important;
+    column-gap: 10px !important;
+    align-items: center !important;
+}
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-4038e640-65bf-4370-8188-1b2e21cb671c {
+    height: 44px !important;
+    padding: 0 16px !important;
+    border-radius: 22px !important;
+    transition: border-color 0.15s ease !important;
+}
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-4038e640-65bf-4370-8188-1b2e21cb671c:focus-within {
+    border-color: #5495f3 !important;
+}
+
+/* Send button: pill to match the input's rounded shape */
+[ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+    .ww-element-a6af5c9a-f7df-42f9-a470-dafd7bcdd0e0 {
+    padding: 10px 20px !important;
+    border-radius: 22px !important;
+}
+
+@media (max-width: 767px) {
+    [ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+        .ww-element-2cce8fd7-9b30-47fd-ae57-c849dfeb8a19 {
+        padding: 20px 16px !important;
+    }
+    [ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+        .ww-element-af7db3be-cd20-49c9-b08b-9967baf79caa {
+        font-size: 22px !important;
+    }
+    [ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+        .ww-element-d9074ca9-e626-476a-b360-f9e9452ed98b {
+        flex-direction: column !important;
+    }
+    [ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+        .ww-element-c607bc87-7dc7-478e-b174-ff4d6269b388 {
+        width: 100% !important;
+        max-height: 320px !important;
+    }
+    [ww-page-id='371cded4-cfe8-4b30-bfc0-23b87e9f6d07']
+        .ww-element-0075137d-9f33-4d24-b06a-5d6b6d62c265 {
+        width: 100% !important;
+    }
+}

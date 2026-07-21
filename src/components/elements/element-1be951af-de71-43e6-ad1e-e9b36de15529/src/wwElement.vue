@@ -71,7 +71,13 @@ export default {
 
     const embedUrl = computed(() => {
       if (!videoUuid.value) return '';
-      return `${PEERTUBE_BASE}/videos/embed/${videoUuid.value}`;
+      const params = new URLSearchParams({
+        title: '0',
+        warningTitle: '0',
+        peertubeLink: '0',
+        p2p: '0',
+      });
+      return `${PEERTUBE_BASE}/videos/embed/${videoUuid.value}?${params.toString()}`;
     });
 
     const containerStyle = computed(() => ({

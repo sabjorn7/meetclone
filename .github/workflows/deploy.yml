@@ -21,6 +21,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Bump cache-buster version for this build
+        run: |
+          sed -i "s/window\.wwg_cacheVersion = [0-9]\+;/window.wwg_cacheVersion = ${{ github.run_number }};/" src/_front/router.js
+          sed -i "s/const version = [0-9]\+;/const version = ${{ github.run_number }};/" public/serviceworker.js
+          sed -i "s/\"cacheVersion\":\"[0-9]\+\"/\"cacheVersion\":\"${{ github.run_number }}\"/" public/data/*.json
+
       - name: Build
         run: npm run build
 

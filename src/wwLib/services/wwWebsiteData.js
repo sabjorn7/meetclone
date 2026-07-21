@@ -106,7 +106,19 @@ async function fetchData(pageId) {
         //data.json contains a different cacheVersion
         //due to a deploy before the navigation
         if (cacheVersion != window.wwg_cacheVersion) {
-            throw { reloadUrl: true };
+            const reloadedVersion = window.sessionStorage.getItem('ww-cache-reload-version');
+            if (reloadedVersion !== String(window.wwg_cacheVersion)) {
+                //Reload once to pick up the fresh bundle for this cacheVersion.
+                //Guarded by sessionStorage so a persistent mismatch can't loop forever.
+                window.sessionStorage.setItem('ww-cache-reload-version', String(window.wwg_cacheVersion));
+                window.location.reload();
+                throw { reloadUrl: true };
+            }
+            //Already reloaded once for this bundle version and the mismatch persists
+            //(e.g. stale data.json behind a cache) - continue instead of reloading again.
+            wwLib.wwLog.warn(
+                `wwWebsiteData: cacheVersion mismatch persisted after reload (data=${cacheVersion}, bundle=${window.wwg_cacheVersion})`
+            );
         }
 
         if (pageData.cmsDataSetPath) {
@@ -145,6 +157,7 @@ async function fetchData(pageId) {
             libraryComponents,
         });
     } catch (err) {
+        if (err.reloadUrl) throw err;
         throw { redirectUrl: err.response.data.redirectUrl };
     }
     /* wwFront:end */

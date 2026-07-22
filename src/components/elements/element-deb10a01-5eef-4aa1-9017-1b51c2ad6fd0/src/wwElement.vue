@@ -35,7 +35,7 @@
                         onCurrencyFocus();
                     }
                 "
-                @keyup.enter="onEnter"
+                @keyup.enter="onEnter($event)"
             />
         </div>
     </div>
@@ -48,7 +48,7 @@
         @input="handleManualInput"
         @focus="isReallyFocused = true"
         @blur="onBlur"
-        @keyup.enter="onEnter"
+        @keyup.enter="onEnter($event)"
     />
     <input
         v-else
@@ -60,7 +60,7 @@
         @blur="onBlur"
         @focus="isReallyFocused = true"
         @click="handleColorInputClick"
-        @keyup.enter="onEnter"
+        @keyup.enter="onEnter($event)"
     />
 </template>
 
@@ -506,7 +506,8 @@ export default {
             editing: isEditing.value,
         }));
 
-        function onEnter() {
+        function onEnter(event) {
+            if (event?.shiftKey) return;
             emit('trigger-event', { name: 'onEnterKey', event: { value: variableValue.value } });
         }
 

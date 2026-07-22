@@ -616,22 +616,30 @@ export default {
                 this.setTag(value);
             },
         },
+        headingLevels() {
+            const levels = this.content.headingLevels;
+            return Array.isArray(levels) && levels.length ? levels : [1, 2, 3, 4, 5, 6];
+        },
         textTypeOptions() {
             if (!this.richEditor) return [];
             return [
                 { label: 'Paragraph', value: 0, active: this.richEditor.isActive('paragraph') },
-                { label: 'Heading 1', value: 1, active: this.richEditor.isActive('heading', { level: 1 }) },
-                { label: 'Heading 2', value: 2, active: this.richEditor.isActive('heading', { level: 2 }) },
-                { label: 'Heading 3', value: 3, active: this.richEditor.isActive('heading', { level: 3 }) },
-                { label: 'Heading 4', value: 4, active: this.richEditor.isActive('heading', { level: 4 }) },
-                { label: 'Heading 5', value: 5, active: this.richEditor.isActive('heading', { level: 5 }) },
-                { label: 'Heading 6', value: 6, active: this.richEditor.isActive('heading', { level: 6 }) },
+                ...[1, 2, 3, 4, 5, 6]
+                    .filter(level => this.headingLevels.includes(level))
+                    .map(level => ({
+                        label: `Heading ${level}`,
+                        value: level,
+                        active: this.richEditor.isActive('heading', { level }),
+                    })),
             ];
         },
         menuStyles() {
             return {
                 '--menu-color': this.content.menuColor,
                 'flex-wrap': this.content.wrapMenu ? 'wrap' : 'nowrap',
+                ...(this.content.stickyMenu
+                    ? { position: 'sticky', top: '0', zIndex: 5, backgroundColor: '#FFFFFF' }
+                    : {}),
             };
         },
         richStyles() {
@@ -766,7 +774,7 @@ export default {
                     this.$emit('trigger-event', { name: 'blur', event: { editor, event } });
                 },
                 extensions: [
-                    StarterKit,
+                    StarterKit.configure({ heading: { levels: this.headingLevels } }),
                     Link.configure({
                         HTMLAttributes: {
                             rel: 'noopener noreferrer',

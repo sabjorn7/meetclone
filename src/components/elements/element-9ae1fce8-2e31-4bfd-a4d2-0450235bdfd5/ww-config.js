@@ -452,6 +452,16 @@ export default {
             bindable: true,
             hidden: content => content.customMenu,
         },
+        stickyMenu: {
+            section: 'settings',
+            label: {
+                en: 'Sticky menu',
+            },
+            type: 'OnOff',
+            defaultValue: false,
+            bindable: true,
+            hidden: content => content.customMenu,
+        },
         menuColor: {
             label: {
                 en: 'Menu color',
@@ -1170,6 +1180,21 @@ export default {
                 ],
             },
             defaultValue: true,
+        },
+        headingLevels: {
+            section: 'settings',
+            hidden: content => content.customMenu || !content.parameterTextType,
+            label: {
+                en: 'Heading levels',
+            },
+            type: 'Array',
+            options: {
+                item: {
+                    type: 'Number',
+                },
+            },
+            defaultValue: [1, 2, 3, 4, 5, 6],
+            bindable: true,
         },
         parameterBold: {
             section: 'settings',

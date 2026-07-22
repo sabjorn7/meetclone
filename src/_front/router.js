@@ -229,6 +229,9 @@ if (page404) {
 } else {
     routes.push({
         path: '/:pathMatch(.*)*',
+        // Vue Router 4 silently drops nameless wildcard routes when registering
+        // (they never show up in getRoutes()/resolve()) unless given a name.
+        name: 'catch-all-404',
         redirect: null,
         async beforeEnter(to) {
             // Legacy query-string links (?article=<uuid> / ?course=<uuid>) predate the

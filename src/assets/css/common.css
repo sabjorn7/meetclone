@@ -42,3 +42,9 @@ a {
     color: unset;
     text-decoration: unset;
 }
+
+@keyframes ww-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

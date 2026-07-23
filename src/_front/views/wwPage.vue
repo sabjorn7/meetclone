@@ -62,7 +62,17 @@ export default {
         );
         // TODO: not execute on first load
         useHead({
-            title: computed(() => wwLib.wwLang.getText(page.value.title) || wwLib.wwLang.getText(homePage.value.title)),
+            title: computed(() => {
+                const pageTitle = wwLib.wwLang.getText(page.value.title);
+                if (pageTitle) return pageTitle;
+                // Pages without their own configured title (e.g. article_page/course_info,
+                // whose real title is set dynamically per-record by an onload workflow, or
+                // baked in by a build-time SSG pre-render) used to fall back to the Home
+                // page's title here, clobbering whatever correct title was already in place.
+                // Leave the current title untouched instead of stomping it with an unrelated
+                // page's title.
+                return document.title || wwLib.wwLang.getText(homePage.value.title);
+            }),
             htmlAttrs: { lang: wwLib.wwLang.lang, amp: false },
         });
         /* wwFront:end */

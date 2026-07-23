@@ -25,7 +25,7 @@ export default {
             isLoaded: plugin.isLoaded || false,
         });
 
-        this.mountPlugin(plugin, {
+        return this.mountPlugin(plugin, {
             content: this._devPlugins[plugin.namespace]?.content || content,
             config: this._devPlugins[plugin.namespace]?.config || config,
             settings,
@@ -115,6 +115,7 @@ export default {
         });
 
         this._pluginPromises.push(isLoaded);
+        return isLoaded;
     },
     async initPlugins() {
         await this.waitPluginsLoaded();

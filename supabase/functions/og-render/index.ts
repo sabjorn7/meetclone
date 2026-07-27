@@ -7,7 +7,11 @@
 // meta, real users get the same SPA shell that then hydrates normally. On the
 // next deploy, postbuild bakes the slug static again and this stops being hit.
 //
-// Deploy public (no JWT):  supabase functions deploy og-render --no-verify-jwt
+// Self-hosted deploy: copy this folder + ../_shared into the edge-runtime's
+// volumes/functions/ and restart it (see README) — NOT `supabase functions
+// deploy` (that's the Cloud-only flow). JWT verification stays ON; nginx keeps
+// the endpoint reachable by forwarding the public anon key, so the runtime is
+// untouched.
 
 import {
     SITE_ORIGIN,

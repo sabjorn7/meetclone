@@ -11,6 +11,7 @@ import wwServerClient from '@/_common/helpers/code/serverClient.js';
 
 import App from '@/_front/App.vue';
 import router from '@/_front/router.js';
+import { initProfileChatButton } from '@/_front/profileChatButton.js';
 
 let store;
 let pinia;
@@ -109,6 +110,7 @@ const init = async function () {
     app.mount(el);
 
     initHeaderMenuOutsideClick();
+    initProfileChatButton(router);
 
     /* wwFront:start */
     // Needed or reactivity is not working in deployed app

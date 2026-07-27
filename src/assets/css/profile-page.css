@@ -117,6 +117,14 @@
     letter-spacing: 0.01em !important;
 }
 
+/* "Написать в чат" button (c2600d0f): sits right after "Записаться" in the same
+   centered column, so it needs an explicit order higher than the reflowed siblings
+   above (1-4) or it defaults to order 0 and jumps to the front of the card. */
+[ww-page-id='6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d']
+    .ww-element-c2600d0f-7919-43ec-8712-ce88eeac82df {
+    order: 5 !important;
+}
+
 /* Avatar: bigger, crisper white ring so it reads as a distinct element sitting on top
    of the banner rather than blending into it. No box-shadow here on purpose: the photo
    wrapper (214bad6f) has its own `overflow: hidden` sized exactly to the avatar (for

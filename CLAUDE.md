@@ -56,9 +56,8 @@ There is no `test` or `lint` script in `package.json` — invoke the binaries di
 
 ## Deployment
 
-Deploy is automated via **GitHub Actions on every push to `main`** — there is **no** WeWeb deploy, and commits are ordinary conventional commits (`fix:`/`feat:`/`ci:` …), **not** `vNNN` release bumps. Two workflows in `.github/workflows/` run in parallel, each doing `npm ci` → cache-buster bump → `npm run build` → rsync `dist/` to the server over SSH (`easingthemes/ssh-deploy`, `--delete`):
+Deploy is automated via **GitHub Actions on every push to `main`** — there is **no** WeWeb deploy, and commits are ordinary conventional commits (`fix:`/`feat:`/`ci:` …), **not** `vNNN` release bumps. A single workflow in `.github/workflows/` does `npm ci` → cache-buster bump → `npm run build` → rsync `dist/` to the server over SSH (`easingthemes/ssh-deploy`, `--delete`):
 
-- `deploy.yml` ("Deploy") → `/home/arseny/www/` → **test.meetgu.ru**
 - `deploy-app.yml` ("Deploy App") → `/home/arseny/www-app/` → **app.meetgu.ru**
 
 The cache-buster version is set by CI to `${{ github.run_number }}`, **not by hand and not by WeWeb**. The "Bump cache-buster version" step rewrites `window.wwg_cacheVersion` in `src/_front/router.js`, `const version` in `public/serviceworker.js`, and `"cacheVersion"` in `public/data/*.json` on each build — don't edit those version values manually, CI overwrites them.

@@ -7,7 +7,11 @@
 // meta, real users get the same SPA shell that then hydrates normally. On the
 // next deploy, postbuild bakes the slug static again and this stops being hit.
 //
-// Deploy public (no JWT):  supabase functions deploy og-render --no-verify-jwt
+// Self-hosted deploy: copy this folder + ../_shared into the edge-runtime's
+// volumes/functions/ and restart it (see README) — NOT `supabase functions
+// deploy` (that's the Cloud-only flow). JWT verification stays ON; nginx keeps
+// the endpoint reachable by forwarding the public anon key, so the runtime is
+// untouched.
 
 import {
     SITE_ORIGIN,
@@ -21,6 +25,22 @@ import {
 
 const TMPL_TTL_MS = 5 * 60 * 1000;
 const tmplCache = new Map<string, { html: string; at: number }>();
+
+// The public site host to fetch the template from / put in og:url. We read it
+// from a CUSTOM header our nginx sets (X-OG-Host) — NOT X-Forwarded-Host —
+// because Kong, the Supabase gateway in front of this edge-runtime, overwrites
+// X-Forwarded-* with its own host (sb.meetgu.ru). Trusting that made the
+// function fetch the template from Supabase and get a Kong 401. Kong passes
+// arbitrary custom headers through untouched. Allowlisted so an unexpected /
+// spoofed value can only ever fall back to the prod origin.
+const ALLOWED_ORIGIN_HOSTS = new Set(['app.meetgu.ru', 'test.meetgu.ru']);
+
+function resolveOrigin(req: Request): string {
+    for (const h of [req.headers.get('x-og-host'), req.headers.get('x-forwarded-host')]) {
+        if (h && ALLOWED_ORIGIN_HOSTS.has(h)) return `https://${h}`;
+    }
+    return SITE_ORIGIN;
+}
 
 // Fetch the placeholder SPA shell that postbuild persisted next to the entry
 // (dist/article_page/_seo.tmpl.html, dist/course_info/_seo.tmpl.html). Fetching
@@ -54,10 +74,8 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url);
     const type = url.searchParams.get('type') || '';
     const slug = url.searchParams.get('slug') || '';
-    // nginx forwards the public host so og:url / template origin are correct on
-    // both app.meetgu.ru and test.meetgu.ru.
-    const fwdHost = req.headers.get('x-forwarded-host');
-    const origin = fwdHost ? `https://${fwdHost}` : SITE_ORIGIN;
+    // Public host (Kong-proof — see resolveOrigin / ALLOWED_ORIGIN_HOSTS).
+    const origin = resolveOrigin(req);
 
     if (type !== 'article' && type !== 'course') {
         return htmlResponse('Bad request: type must be "article" or "course"', 400);

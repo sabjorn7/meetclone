@@ -110,7 +110,8 @@ location @og {
 
     proxy_ssl_server_name on;
     proxy_set_header Host sb.meetgu.ru;
-    proxy_set_header X-Forwarded-Host $host;      # so og:url / template origin match the real domain
+    proxy_set_header X-OG-Host $host;             # custom header (Kong-proof); function derives og:url / template origin from it.
+                                                  # NOT X-Forwarded-Host — Kong overwrites X-Forwarded-* with sb.meetgu.ru.
 
     # JWT stays enabled on the function; nginx supplies the public anon key.
     # Use the SAME JWT as SUPABASE_ANON_KEY in ../_shared/og.mjs.

@@ -13,6 +13,7 @@ import App from '@/_front/App.vue';
 import router from '@/_front/router.js';
 import { initProfileChatButton } from '@/_front/profileChatButton.js';
 import { initProfileFollowButton } from '@/_front/profileFollowButton.js';
+import { initMySubscriptions } from '@/_front/mySubscriptions.js';
 
 let store;
 let pinia;
@@ -113,6 +114,7 @@ const init = async function () {
     initHeaderMenuOutsideClick();
     initProfileChatButton(router);
     initProfileFollowButton(router);
+    initMySubscriptions(router);
 
     /* wwFront:start */
     // Needed or reactivity is not working in deployed app

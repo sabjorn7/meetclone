@@ -1,24 +1,35 @@
-// Hand-written follow ("Подписаться") button for profile_page, mounted the same way
-// as profileChatButton.js (see that file's header for why the wwObjects pipeline is
+// Hand-written action row for the public profile_page — a single tidy row of
+// [Подписаться] [Написать], mirroring the mobile app's profile actions. Mounted the
+// same way as profileChatButton.js (see its header for why the wwObjects pipeline is
 // bypassed): an ordinary Vue app rendered into a plain DOM node next to the profile
-// card, reading the same reactive sources WeWeb's formula evaluator reads and writing
-// through the shared supabase-js client (wwLib.wwPlugins.supabase.instance).
+// card. This REPLACES the separate profileChatButton.js mount (its init call is removed
+// from main.js) so the two buttons render together consistently instead of scattered.
 //
-// Backend: table public.subscriptions (subscriber uuid, target uuid) — user-to-user
-// follow, shared with the mobile app. RLS is off project-wide, so the authenticated
-// client can insert/delete directly. Only speakers / institutions are followable.
-import { createApp, h, computed, ref, watch, onMounted } from 'vue';
+// - "Подписаться" writes public.subscriptions via the shared supabase client
+//   (wwLib.wwPlugins.supabase.instance); shown only for speaker/institution profiles.
+// - "Написать" navigates to the chats page with the profile user (same action the old
+//   "Написать в чат" button performed).
+// RLS is off project-wide, so the authenticated client can insert/delete directly.
+import { createApp, h, computed, ref, watch } from 'vue';
 
 const PROFILE_PAGE_ID = '6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d';
+const CHATS_PAGE_ID = '371cded4-cfe8-4b30-bfc0-23b87e9f6d07';
 const CHUSER_COLLECTION_ID = 'fc08d985-55cb-41e6-968d-9ce8f788a4f2'; // viewed profile's users row
 const CURRENT_USER_COLLECTION_ID = 'ebe8a1ca-0b4e-494f-a496-5e281d06bd16'; // logged-in user
+const RESOLVED_PROFILE_USER_ID_VAR = '0a6bc2e7-9ab1-4980-8674-8cab02c89def';
 const AUTH_PLUGIN_ID = '1fa0dd68-5069-436c-9a7d-3b54c340f1fa';
 const CARD_ANCHOR_UID = '7611c661-3b49-42a3-a7d4-7b2075ace1a0';
+// A stray 12x12 decorative dot the design renders between the card and the sections —
+// hidden so the action row sits cleanly under the card (like the app).
+const STRAY_DOT_UID = 'd1484100-802c-445';
 const CONTAINER_ID = 'profile-follow-button-root';
+const STYLE_ID = 'mg-profile-actions-style';
 const MOUNT_TIMEOUT_MS = 15000;
 
 // Only these roles can be followed (mirrors the mobile app).
 const SUBSCRIBABLE_ROLES = ['Спикер', 'Учебное заведение'];
+
+const BLUE = '#5495F3';
 
 let mountedApp = null;
 let observer = null;
@@ -28,7 +39,27 @@ function supa() {
     return wwLib.wwPlugins?.supabase?.instance || null;
 }
 
-const FollowButton = {
+function pillStyle(filled, disabled) {
+    return {
+        flex: '1 1 0',
+        minWidth: '150px',
+        maxWidth: '260px',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '12px 20px',
+        borderRadius: '8px',
+        background: filled ? BLUE : '#FFFFFF',
+        border: `1px solid ${BLUE}`,
+        color: filled ? '#FFFFFF' : BLUE,
+        fontSize: '14px',
+        fontWeight: 600,
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.7 : 1,
+    };
+}
+
+const ProfileActions = {
     setup() {
         const following = ref(false);
         const followerCount = ref(null);
@@ -39,16 +70,19 @@ const FollowButton = {
         const targetId = computed(() => targetUser.value?.id || null);
         const meId = computed(() => collections()?.[CURRENT_USER_COLLECTION_ID]?.data?.[0]?.id || null);
 
+        // Chat is offered for any other user; follow only for speakers/institutions.
         const isVisible = computed(() => {
             if (!wwLib.wwPlugins?.[AUTH_PLUGIN_ID]?.isAuthenticated) return false;
             if (!targetId.value || !meId.value) return false;
-            if (targetId.value === meId.value) return false;
-            return SUBSCRIBABLE_ROLES.includes(targetUser.value?.role);
+            return targetId.value !== meId.value;
         });
+        const canFollow = computed(
+            () => isVisible.value && SUBSCRIBABLE_ROLES.includes(targetUser.value?.role),
+        );
 
         async function load() {
             const client = supa();
-            if (!client || !targetId.value || !meId.value) return;
+            if (!client || !canFollow.value || !targetId.value || !meId.value) return;
             try {
                 const [{ data: mine }, { count }] = await Promise.all([
                     client
@@ -65,12 +99,11 @@ const FollowButton = {
                 following.value = Array.isArray(mine) && mine.length > 0;
                 followerCount.value = count ?? 0;
             } catch (e) {
-                // non-fatal — button still works, just no initial state/count
                 console.warn('follow: load failed', e);
             }
         }
 
-        async function onClick() {
+        async function onToggleFollow() {
             const client = supa();
             if (busy.value || !client || !targetId.value || !meId.value) return;
             const next = !following.value;
@@ -109,57 +142,82 @@ const FollowButton = {
             }
         }
 
-        watch([targetId, meId], load, { immediate: true });
-        onMounted(load);
+        function onChat() {
+            const target =
+                wwLib.globalVariables?.customCodeVariables?.[RESOLVED_PROFILE_USER_ID_VAR] ||
+                targetId.value;
+            if (!target) return;
+            wwLib.wwApp.goTo(wwLib.wwPageHelper.getPagePath(CHATS_PAGE_ID), { user: target });
+        }
 
-        return { isVisible, following, followerCount, busy, onClick };
+        watch([targetId, meId], () => canFollow.value && load(), { immediate: true });
+
+        return { isVisible, canFollow, following, followerCount, busy, onToggleFollow, onChat };
     },
     render() {
         if (!this.isVisible) return null;
-        const children = [
+
+        const buttons = [];
+        if (this.canFollow) {
+            buttons.push(
+                h(
+                    'button',
+                    {
+                        type: 'button',
+                        disabled: this.busy,
+                        onClick: this.onToggleFollow,
+                        style: pillStyle(!this.following, this.busy),
+                    },
+                    this.following ? 'Вы подписаны' : 'Подписаться',
+                ),
+            );
+        }
+        buttons.push(
             h(
                 'button',
+                { type: 'button', onClick: this.onChat, style: pillStyle(false, false) },
+                'Написать',
+            ),
+        );
+
+        const children = [
+            h(
+                'div',
                 {
-                    type: 'button',
-                    disabled: this.busy,
-                    onClick: this.onClick,
                     style: {
                         display: 'flex',
+                        flexWrap: 'wrap',
                         justifyContent: 'center',
-                        alignItems: 'center',
-                        width: 'fit-content',
-                        margin: '0 auto',
-                        padding: '12px 24px',
-                        borderRadius: '8px',
-                        background: this.following ? '#FFFFFF' : '#5495F3',
-                        border: '1px solid #5495F3',
-                        color: this.following ? '#5495F3' : '#FFFFFF',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        cursor: this.busy ? 'default' : 'pointer',
-                        opacity: this.busy ? 0.7 : 1,
+                        gap: '12px',
+                        width: '100%',
                     },
                 },
-                this.following ? 'Вы подписаны' : 'Подписаться',
+                buttons,
             ),
         ];
-        if (this.followerCount != null) {
+        if (this.canFollow && this.followerCount != null) {
             children.push(
                 h(
                     'div',
-                    {
-                        style: {
-                            textAlign: 'center',
-                            marginTop: '6px',
-                            fontSize: '13px',
-                            color: '#8A94A6',
-                        },
-                    },
+                    { style: { textAlign: 'center', marginTop: '8px', fontSize: '13px', color: '#8A94A6' } },
                     `${this.followerCount} ${pluralSubscribers(this.followerCount)}`,
                 ),
             );
         }
-        return h('div', { style: { margin: '10px auto 0 auto', width: 'fit-content' } }, children);
+
+        return h(
+            'div',
+            {
+                style: {
+                    width: '100%',
+                    maxWidth: '560px',
+                    margin: '16px auto 0 auto',
+                    padding: '0 16px',
+                    boxSizing: 'border-box',
+                },
+            },
+            children,
+        );
     },
 };
 
@@ -170,6 +228,14 @@ function pluralSubscribers(n) {
     if (mod10 === 1 && mod100 !== 11) return 'подписчик';
     if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'подписчика';
     return 'подписчиков';
+}
+
+function injectStyleOnce() {
+    if (document.getElementById(STYLE_ID)) return;
+    const s = document.createElement('style');
+    s.id = STYLE_ID;
+    s.textContent = `[class*="ww-element-${STRAY_DOT_UID}"]{display:none !important;}`;
+    document.head.appendChild(s);
 }
 
 function clearWaiters() {
@@ -201,12 +267,13 @@ function tryMount() {
     container.id = CONTAINER_ID;
     anchor.parentNode.insertBefore(container, anchor.nextSibling);
 
-    mountedApp = createApp(FollowButton);
+    mountedApp = createApp(ProfileActions);
     mountedApp.mount(container);
     clearWaiters();
 }
 
 function waitAndMount() {
+    injectStyleOnce();
     tryMount();
     if (mountedApp) return;
     observer = new MutationObserver(tryMount);

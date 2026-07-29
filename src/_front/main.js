@@ -11,7 +11,6 @@ import wwServerClient from '@/_common/helpers/code/serverClient.js';
 
 import App from '@/_front/App.vue';
 import router from '@/_front/router.js';
-import { initProfileChatButton } from '@/_front/profileChatButton.js';
 import { initProfileFollowButton } from '@/_front/profileFollowButton.js';
 import { initMySubscriptions } from '@/_front/mySubscriptions.js';
 
@@ -112,7 +111,6 @@ const init = async function () {
     app.mount(el);
 
     initHeaderMenuOutsideClick();
-    initProfileChatButton(router);
     initProfileFollowButton(router);
     initMySubscriptions(router);
 

@@ -22,6 +22,9 @@ const CARD_ANCHOR_UID = '7611c661-3b49-42a3-a7d4-7b2075ace1a0';
 // A stray 12x12 decorative dot the design renders between the card and the sections —
 // hidden so the action row sits cleanly under the card (like the app).
 const STRAY_DOT_UID = 'd1484100-802c-445';
+// The native "Написать в чат" wwObject inside the card — hidden because our action row
+// now provides "Написать" (same navigate-to-chats behavior), avoiding a duplicate.
+const NATIVE_CHAT_UID = 'c2600d0f-7919-43ec';
 const CONTAINER_ID = 'profile-follow-button-root';
 const STYLE_ID = 'mg-profile-actions-style';
 const MOUNT_TIMEOUT_MS = 15000;
@@ -234,7 +237,9 @@ function injectStyleOnce() {
     if (document.getElementById(STYLE_ID)) return;
     const s = document.createElement('style');
     s.id = STYLE_ID;
-    s.textContent = `[class*="ww-element-${STRAY_DOT_UID}"]{display:none !important;}`;
+    s.textContent =
+        `[class*="ww-element-${STRAY_DOT_UID}"],` +
+        `[class*="ww-element-${NATIVE_CHAT_UID}"]{display:none !important;}`;
     document.head.appendChild(s);
 }
 

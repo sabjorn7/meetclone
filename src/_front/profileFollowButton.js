@@ -25,6 +25,9 @@ const STRAY_DOT_UID = 'd1484100-802c-445';
 // The native "Написать в чат" wwObject inside the card — hidden because our action row
 // now provides "Написать" (same navigate-to-chats behavior), avoiding a duplicate.
 const NATIVE_CHAT_UID = 'c2600d0f-7919-43ec';
+// The native "Записаться" (booking) button — restyled to the same blue pill as our row
+// (its theme rule paints it dark navy / fully-round; override needs high specificity).
+const BOOKING_BTN_SELECTOR = 'button.ww-element-7c16dd8d-f2f2-4ab5-8e52-17ab3766a789.ww-button';
 const CONTAINER_ID = 'profile-follow-button-root';
 const STYLE_ID = 'mg-profile-actions-style';
 const MOUNT_TIMEOUT_MS = 15000;
@@ -239,7 +242,9 @@ function injectStyleOnce() {
     s.id = STYLE_ID;
     s.textContent =
         `[class*="ww-element-${STRAY_DOT_UID}"],` +
-        `[class*="ww-element-${NATIVE_CHAT_UID}"]{display:none !important;}`;
+        `[class*="ww-element-${NATIVE_CHAT_UID}"]{display:none !important;}` +
+        `${BOOKING_BTN_SELECTOR}{background:${BLUE} !important;background-color:${BLUE} !important;border-radius:8px !important;}` +
+        `${BOOKING_BTN_SELECTOR} .ww-text-content{color:#FFFFFF !important;}`;
     document.head.appendChild(s);
 }
 

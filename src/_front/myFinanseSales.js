@@ -95,9 +95,19 @@ const SalesList = {
             wwLib.wwApp.goTo(wwLib.wwPageHelper.getPagePath(PROFILE_PAGE_ID), { user: id });
         }
 
-        onMounted(async () => {
-            await Promise.all([loadSummary(), loadPage(true)]);
-            loading.value = false;
+        onMounted(() => {
+            // currentUser may not be in the store yet when we mount — wait for it.
+            let tries = 0;
+            const tick = async () => {
+                if (meId()) {
+                    await Promise.all([loadSummary(), loadPage(true)]);
+                    loading.value = false;
+                    return;
+                }
+                if (tries++ < 60) setTimeout(tick, 250);
+                else loading.value = false;
+            };
+            tick();
         });
 
         return { rows, total, loading, loadingMore, hasMore, loadMore, openBuyer };

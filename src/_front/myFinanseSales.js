@@ -1,10 +1,10 @@
 // Hand-written "История продаж" list for the my_finanse page, mounted like
-// profileChatButton.js / mySubscriptions.js (an ordinary Vue app in a plain DOM node).
-// Replaces the original WeWeb sales repeater (which rendered ALL 634 rows at once — a
-// 41000px-tall list) with a paginated list sourced from the get_user_sales RPC, adding
-// the BUYER (name + email) with a click-through to the buyer's profile. The correct
-// grand total comes from get_user_sales_summary (server-side, all rows). RLS is off, so
-// the shared supabase client can call the RPCs directly.
+// profileChatButton.js / mySubscriptions.js. Replaces the original WeWeb sales repeater
+// (which rendered ALL of a big seller's rows at once) with a paginated list from the
+// get_user_sales RPC, adding the BUYER (name+email) + click-through to the buyer profile,
+// and the correct grand total from get_user_sales_summary. The original block is CSS-hidden
+// and its collection is limited to 1 row (in the page JSON) so WeWeb stops rendering it.
+// Responsive: a table on desktop, stacked cards on mobile.
 import { createApp, h, ref, onMounted } from 'vue';
 
 const MY_FINANSE_PAGE_ID = '8df505c3-6c02-4a63-9666-e17c4d845756';
@@ -12,13 +12,10 @@ const PROFILE_PAGE_ID = '6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d';
 const CURRENT_USER_COLLECTION_ID = 'ebe8a1ca-0b4e-494f-a496-5e281d06bd16';
 const AUTH_PLUGIN_ID = '1fa0dd68-5069-436c-9a7d-3b54c340f1fa';
 const ANCHOR_UID = 'cefa599a-1993-4f1c-a0ef-a67a4045ad5d'; // original MySales block (list+total+header)
-const FILTER_ROW_UID = '68f1453e-c0f8-4114-9166-cd9d1d9c8b37'; // original category/date filter row
 const CONTAINER_ID = 'my-finanse-sales-root';
 const STYLE_ID = 'my-finanse-sales-style';
 const PAGE_SIZE = 30;
 const MOUNT_TIMEOUT_MS = 15000;
-
-const BLUE = '#5495F3';
 
 let mountedApp = null;
 let observer = null;
@@ -61,7 +58,6 @@ const SalesList = {
                 console.warn('sales summary failed', e);
             }
         }
-
         async function loadPage(reset) {
             const client = supa();
             const me = meId();
@@ -82,21 +78,18 @@ const SalesList = {
                 console.warn('get_user_sales failed', e);
             }
         }
-
         async function loadMore() {
             if (loadingMore.value || !hasMore.value) return;
             loadingMore.value = true;
             await loadPage(false);
             loadingMore.value = false;
         }
-
         function openBuyer(id) {
             if (!id) return;
             wwLib.wwApp.goTo(wwLib.wwPageHelper.getPagePath(PROFILE_PAGE_ID), { user: id });
         }
 
         onMounted(() => {
-            // currentUser may not be in the store yet when we mount — wait for it.
             let tries = 0;
             const tick = async () => {
                 if (meId()) {
@@ -113,20 +106,15 @@ const SalesList = {
         return { rows, total, loading, loadingMore, hasMore, loadMore, openBuyer };
     },
     render() {
-        const th = (label, style) =>
-            h('div', { style: { fontWeight: 600, fontSize: '14px', color: '#1B1F27', ...style } }, label);
-        const td = (children, style) => h('div', { style: { fontSize: '15px', color: '#1B1F27', ...style } }, children);
-
-        const header = h(
-            'div',
-            { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 18px', background: '#F4F5F7', borderRadius: '10px' } },
-            [
-                th('Наименование товара', { flex: '2 1 0', minWidth: 0 }),
-                th('Покупатель', { flex: '2 1 0', minWidth: 0 }),
-                th('Сумма', { width: '90px', textAlign: 'center' }),
-                th('Дата', { width: '110px', textAlign: 'center' }),
-            ],
-        );
+        const children = [
+            h('div', { class: 'mfs-total' }, `Продано на сумму: ${fmtMoney(this.total)} руб.`),
+            h('div', { class: 'mfs-head' }, [
+                h('div', { class: 'mfs-c-name' }, 'Наименование товара'),
+                h('div', { class: 'mfs-c-buyer' }, 'Покупатель'),
+                h('div', { class: 'mfs-c-sum' }, 'Сумма'),
+                h('div', { class: 'mfs-c-date' }, 'Дата'),
+            ]),
+        ];
 
         const row = r => {
             const clickable = !!r.buyer_id;
@@ -134,97 +122,89 @@ const SalesList = {
                 'div',
                 {
                     key: r.id,
+                    class: ['mfs-row', clickable ? 'mfs-clickable' : ''],
                     onClick: clickable ? () => this.openBuyer(r.buyer_id) : undefined,
-                    style: {
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '10px 18px',
-                        borderRadius: '10px',
-                        cursor: clickable ? 'pointer' : 'default',
-                        borderBottom: '1px solid #ECEEF2',
-                    },
                 },
                 [
-                    td(
-                        [
-                            h('div', { style: { fontWeight: 500 } }, r.position_name || '—'),
-                            r.position_category
-                                ? h('div', { style: { fontSize: '13px', color: '#8A94A6' } }, r.position_category)
-                                : null,
-                        ],
-                        { flex: '2 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' },
-                    ),
-                    td(
+                    h('div', { class: 'mfs-c-name' }, [
+                        h('div', { class: 'mfs-name' }, r.position_name || '—'),
+                        r.position_category ? h('div', { class: 'mfs-sub' }, r.position_category) : null,
+                    ]),
+                    h('div', { class: 'mfs-c-buyer' },
                         r.buyer_name || r.buyer_email
                             ? [
-                                  h('div', { style: { color: clickable ? BLUE : '#1B1F27', fontWeight: 500 } }, r.buyer_name || 'Покупатель'),
-                                  r.buyer_email
-                                      ? h('div', { style: { fontSize: '13px', color: '#8A94A6' } }, r.buyer_email)
-                                      : null,
+                                  h('div', { class: clickable ? 'mfs-buyer-link' : 'mfs-buyer' }, r.buyer_name || 'Покупатель'),
+                                  r.buyer_email ? h('div', { class: 'mfs-sub' }, r.buyer_email) : null,
                               ]
-                            : h('span', { style: { color: '#B0B7C3' } }, '—'),
-                        { flex: '2 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' },
+                            : h('span', { class: 'mfs-dash' }, '—'),
                     ),
-                    td(`${fmtMoney(r.price)}₽`, { width: '90px', textAlign: 'center' }),
-                    td(fmtDate(r.created_at), { width: '110px', textAlign: 'center', color: '#8A94A6' }),
+                    h('div', { class: 'mfs-c-sum' }, [
+                        h('span', { class: 'mfs-mobile-label' }, 'Сумма: '),
+                        `${fmtMoney(r.price)}₽`,
+                    ]),
+                    h('div', { class: 'mfs-c-date' }, fmtDate(r.created_at)),
                 ],
             );
         };
 
-        const children = [
-            h(
-                'div',
-                { style: { textAlign: 'center', fontSize: '18px', fontWeight: 500, margin: '4px 0 16px' } },
-                `Продано на сумму: ${fmtMoney(this.total)} руб.`,
-            ),
-            header,
-        ];
-
         if (this.loading) {
-            children.push(h('div', { style: { textAlign: 'center', color: '#8A94A6', padding: '24px' } }, 'Загрузка…'));
+            children.push(h('div', { class: 'mfs-empty' }, 'Загрузка…'));
         } else if (this.rows.length === 0) {
-            children.push(h('div', { style: { textAlign: 'center', color: '#8A94A6', padding: '24px' } }, 'Продаж пока нет'));
+            children.push(h('div', { class: 'mfs-empty' }, 'Продаж пока нет'));
         } else {
             this.rows.forEach(r => children.push(row(r)));
             if (this.hasMore) {
                 children.push(
-                    h(
-                        'button',
-                        {
-                            type: 'button',
-                            disabled: this.loadingMore,
-                            onClick: this.loadMore,
-                            style: {
-                                display: 'block',
-                                margin: '16px auto 0',
-                                padding: '10px 24px',
-                                borderRadius: '8px',
-                                background: '#FFFFFF',
-                                border: `1px solid ${BLUE}`,
-                                color: BLUE,
-                                fontSize: '14px',
-                                fontWeight: 600,
-                                cursor: this.loadingMore ? 'default' : 'pointer',
-                            },
-                        },
-                        this.loadingMore ? 'Загрузка…' : 'Показать ещё',
-                    ),
+                    h('button', {
+                        type: 'button',
+                        class: 'mfs-more',
+                        disabled: this.loadingMore,
+                        onClick: this.loadMore,
+                    }, this.loadingMore ? 'Загрузка…' : 'Показать ещё'),
                 );
             }
         }
 
-        return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '5px', width: '100%' } }, children);
+        return h('div', { class: 'mfs' }, children);
     },
 };
+
+const CSS = `
+#${CONTAINER_ID}{width:100%;}
+.mfs{display:flex;flex-direction:column;gap:5px;width:100%;box-sizing:border-box;}
+.mfs *{box-sizing:border-box;}
+.mfs-total{text-align:center;font-size:18px;font-weight:500;margin:4px 0 16px;color:#1B1F27;}
+.mfs-head{display:flex;align-items:center;gap:12px;padding:10px 18px;background:#F4F5F7;border-radius:10px;font-weight:600;font-size:14px;color:#1B1F27;}
+.mfs-row{display:flex;align-items:center;gap:12px;padding:10px 18px;border-radius:10px;border-bottom:1px solid #ECEEF2;font-size:15px;color:#1B1F27;}
+.mfs-clickable{cursor:pointer;}
+.mfs-clickable:hover{background:#f7f9fc;}
+.mfs-c-name{flex:2 1 0;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.mfs-c-buyer{flex:2 1 0;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.mfs-c-sum{width:90px;text-align:center;flex:none;}
+.mfs-c-date{width:110px;text-align:center;flex:none;color:#8A94A6;}
+.mfs-name{font-weight:500;}
+.mfs-sub{font-size:13px;color:#8A94A6;overflow-wrap:anywhere;}
+.mfs-buyer{font-weight:500;}
+.mfs-buyer-link{font-weight:500;color:#5495F3;}
+.mfs-dash{color:#B0B7C3;}
+.mfs-empty{text-align:center;color:#8A94A6;padding:24px;}
+.mfs-more{display:block;margin:16px auto 0;padding:10px 24px;border-radius:8px;background:#fff;border:1px solid #5495F3;color:#5495F3;font-size:14px;font-weight:600;cursor:pointer;}
+.mfs-mobile-label{display:none;}
+@media (max-width:640px){
+  .mfs-head{display:none;}
+  .mfs-row{flex-direction:column;align-items:stretch;gap:4px;padding:12px 4px;}
+  .mfs-c-sum,.mfs-c-date{width:auto;text-align:left;flex:none;}
+  .mfs-mobile-label{display:inline;color:#8A94A6;}
+}
+/* Hide the original (now 1-row) WeWeb sales block — replaced by this component. */
+[class*="ww-element-${ANCHOR_UID}"]{display:none !important;}
+`;
 
 function injectStyleOnce() {
     if (document.getElementById(STYLE_ID)) return;
     const s = document.createElement('style');
     s.id = STYLE_ID;
-    // Hide the original all-rows sales block + its filter row (replaced by this component).
-    s.textContent =
-        `[class*="ww-element-${ANCHOR_UID}"],[class*="ww-element-${FILTER_ROW_UID}"]{display:none !important;}`;
+    s.textContent = CSS;
     document.head.appendChild(s);
 }
 
@@ -232,29 +212,23 @@ function clearWaiters() {
     if (observer) { observer.disconnect(); observer = null; }
     if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
 }
-
 function unmount() {
     clearWaiters();
     if (mountedApp) { mountedApp.unmount(); mountedApp = null; }
     document.getElementById(CONTAINER_ID)?.remove();
 }
-
 function tryMount() {
     if (mountedApp || document.getElementById(CONTAINER_ID)) return;
     if (!wwLib.wwPlugins?.[AUTH_PLUGIN_ID]?.isAuthenticated) return;
     const anchor = document.querySelector(`[class*="ww-element-${ANCHOR_UID}"]`);
     if (!anchor?.parentNode) return;
-
     const container = document.createElement('div');
     container.id = CONTAINER_ID;
-    container.style.width = '100%';
     anchor.parentNode.insertBefore(container, anchor.nextSibling);
-
     mountedApp = createApp(SalesList);
     mountedApp.mount(container);
     clearWaiters();
 }
-
 function waitAndMount() {
     injectStyleOnce();
     tryMount();
@@ -263,7 +237,6 @@ function waitAndMount() {
     observer.observe(document.body, { childList: true, subtree: true });
     timeoutId = setTimeout(clearWaiters, MOUNT_TIMEOUT_MS);
 }
-
 function isFinansePageRoute(route) {
     return !!route?.name && route.name.startsWith(`page-${MY_FINANSE_PAGE_ID}`);
 }

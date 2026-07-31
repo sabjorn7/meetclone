@@ -245,7 +245,8 @@ const CSS = `
 [class*="ww-element-${TAB_TEXT_UID}"]{font-weight:600 !important;font-size:15px !important;}
 /* "Вывод средств" tab — style only (the request form logic is untouched). */
 [class*="ww-element-${WD_BALANCE_UID}"]{font-size:18px !important;font-weight:500 !important;text-align:center !important;color:#1B1F27 !important;margin:4px 0 16px !important;}
-[class*="ww-element-${WD_HEADER_UID}"]{background:#F4F5F7 !important;border-radius:10px !important;padding:10px 18px !important;font-weight:600 !important;font-size:14px !important;color:#1B1F27 !important;}
+[class*="ww-element-${WD_HEADER_UID}"]{background:#F4F5F7 !important;border-radius:10px !important;padding:10px 18px !important;color:#1B1F27 !important;}
+[class*="ww-element-${WD_HEADER_UID}"] .ww-text-content{font-weight:600 !important;font-size:14px !important;color:#1B1F27 !important;}
 button[class*="ww-element-${WD_BUTTON_UID}"]{border-radius:8px !important;font-weight:600 !important;}
 [class*="ww-element-${WD_EMPTY_IMG_UID}"]{display:none !important;}
 [class*="ww-element-${WD_EMPTY_TXT_UID}"]{text-align:center !important;color:#8A94A6 !important;font-size:15px !important;padding:24px 0 !important;}

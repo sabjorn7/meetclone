@@ -24,6 +24,8 @@ const TAB_TEXT_UID = '1408cb30-5b54-469e-beb9-45480d14615b';
 const WD_BALANCE_UID = '98b414da-dd43-4423-8c8b-fbf9130aca97';
 const WD_BUTTON_UID = '21e9a5a1-07ff-43bf-bb3b-957f122b6b8a';
 const WD_HEADER_UID = '6e036746-8b3a-4483-a356-171717834ed4';
+const WD_EMPTY_IMG_UID = '03ae9fa0-64f7-45ee-8e12-a5a52ff2ffba'; // off-brand empty-state illustration
+const WD_EMPTY_TXT_UID = 'd26b58ba-8c18-44b3-9456-3d9d09a9803f'; // "Список пуст" text
 
 const SALES_ROOT_ID = 'my-finanse-sales-root';
 const ORDERS_ROOT_ID = 'my-finanse-orders-root';
@@ -245,6 +247,8 @@ const CSS = `
 [class*="ww-element-${WD_BALANCE_UID}"]{font-size:18px !important;font-weight:500 !important;text-align:center !important;color:#1B1F27 !important;margin:4px 0 16px !important;}
 [class*="ww-element-${WD_HEADER_UID}"]{background:#F4F5F7 !important;border-radius:10px !important;padding:10px 18px !important;font-weight:600 !important;font-size:14px !important;color:#1B1F27 !important;}
 button[class*="ww-element-${WD_BUTTON_UID}"]{border-radius:8px !important;font-weight:600 !important;}
+[class*="ww-element-${WD_EMPTY_IMG_UID}"]{display:none !important;}
+[class*="ww-element-${WD_EMPTY_TXT_UID}"]{text-align:center !important;color:#8A94A6 !important;font-size:15px !important;padding:24px 0 !important;}
 `;
 
 function injectStyleOnce() {
@@ -285,12 +289,25 @@ function mountOne(anchorUid, rootId, Comp) {
     app.mount(el);
     appByRoot[rootId] = app;
 }
+// Reformat the withdrawal balance (e.g. "…504808.26₽") to the same money style as the
+// other tabs. Guarded (only when it still has decimals) so re-writing the text can't loop.
+function reformatBalance() {
+    const el = document.querySelector(`[class*="ww-element-${WD_BALANCE_UID}"]`);
+    if (!el) return;
+    const t = el.textContent || '';
+    if (!/\d[.,]\d/.test(t)) return;
+    const m = t.match(/[\d]+[.,]?\d*/);
+    if (!m) return;
+    const num = Math.round(parseFloat(m[0].replace(',', '.')));
+    if (Number.isFinite(num)) el.textContent = `Доступно для вывода: ${num.toLocaleString('ru-RU')} ₽`;
+}
 // WeWeb re-creates a tab's DOM each time you switch to it, destroying our mounted root.
 // Keep observing and re-mount whenever an anchor reappears without our component.
 function tryMount() {
     if (!wwLib.wwPlugins?.[AUTH_PLUGIN_ID]?.isAuthenticated) return;
     mountOne(SALES_ANCHOR_UID, SALES_ROOT_ID, SalesList);
     mountOne(ORDERS_ANCHOR_UID, ORDERS_ROOT_ID, OrdersList);
+    reformatBalance();
 }
 function waitAndMount() {
     injectStyleOnce();

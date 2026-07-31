@@ -290,25 +290,12 @@ function mountOne(anchorUid, rootId, Comp) {
     app.mount(el);
     appByRoot[rootId] = app;
 }
-// Reformat the withdrawal balance (e.g. "…504808.26₽") to the same money style as the
-// other tabs. Guarded (only when it still has decimals) so re-writing the text can't loop.
-function reformatBalance() {
-    const el = document.querySelector(`[class*="ww-element-${WD_BALANCE_UID}"]`);
-    if (!el) return;
-    const t = el.textContent || '';
-    if (!/\d[.,]\d/.test(t)) return;
-    const m = t.match(/[\d]+[.,]?\d*/);
-    if (!m) return;
-    const num = Math.round(parseFloat(m[0].replace(',', '.')));
-    if (Number.isFinite(num)) el.textContent = `Доступно для вывода: ${num.toLocaleString('ru-RU')} ₽`;
-}
 // WeWeb re-creates a tab's DOM each time you switch to it, destroying our mounted root.
 // Keep observing and re-mount whenever an anchor reappears without our component.
 function tryMount() {
     if (!wwLib.wwPlugins?.[AUTH_PLUGIN_ID]?.isAuthenticated) return;
     mountOne(SALES_ANCHOR_UID, SALES_ROOT_ID, SalesList);
     mountOne(ORDERS_ANCHOR_UID, ORDERS_ROOT_ID, OrdersList);
-    reformatBalance();
 }
 function waitAndMount() {
     injectStyleOnce();

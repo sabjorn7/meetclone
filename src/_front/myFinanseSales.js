@@ -235,9 +235,10 @@ const CSS = `
   .mfs-mobile-label{display:inline;color:#8A94A6;}
   .mfs-input{flex:1 1 40%;}
 }
-/* Hide the original sales + orders lists (replaced by the components above). */
-[class*="ww-element-${SALES_ANCHOR_UID}"],[class*="ww-element-${SALES_FILTER_UID}"]{display:none !important;}
-[class*="ww-element-${ORDERS_BLOCK_UID}"] > :not(#${ORDERS_ROOT_ID}){display:none !important;}
+/* Hide originals via marker classes added in JS only AFTER our components mount,
+   so a mount race can never leave a tab blank. */
+.mfs-hidden{display:none !important;}
+.mfs-replaced-orders > :not(#${ORDERS_ROOT_ID}){display:none !important;}
 /* Tabs: unify typography with the lists. */
 [class*="ww-element-${TAB_TEXT_UID}"]{font-weight:600 !important;font-size:15px !important;}
 /* "Вывод средств" tab — style only (the request form logic is untouched). */
@@ -277,11 +278,22 @@ function mountOne(anchorUid, rootId, Comp) {
     apps.push(app);
     return true;
 }
+function hideEl(u, cls) {
+    const el = document.querySelector(`[class*="ww-element-${u}"]`);
+    if (el) el.classList.add(cls);
+}
 function tryMount() {
     if (!wwLib.wwPlugins?.[AUTH_PLUGIN_ID]?.isAuthenticated) return false;
-    const a = mountOne(SALES_ANCHOR_UID, SALES_ROOT_ID, SalesList);
-    const b = mountOne(ORDERS_ANCHOR_UID, ORDERS_ROOT_ID, OrdersList);
-    return a && b;
+    if (mountOne(SALES_ANCHOR_UID, SALES_ROOT_ID, SalesList)) {
+        hideEl(SALES_ANCHOR_UID, 'mfs-hidden');
+        hideEl(SALES_FILTER_UID, 'mfs-hidden');
+    }
+    if (mountOne(ORDERS_ANCHOR_UID, ORDERS_ROOT_ID, OrdersList)) {
+        hideEl(ORDERS_BLOCK_UID, 'mfs-replaced-orders');
+    }
+    const done = !!document.getElementById(SALES_ROOT_ID) && !!document.getElementById(ORDERS_ROOT_ID);
+    if (done) clearWaiters();
+    return done;
 }
 function waitAndMount() {
     injectStyleOnce();

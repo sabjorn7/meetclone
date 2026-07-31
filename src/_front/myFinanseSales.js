@@ -31,7 +31,7 @@ const STYLE_ID = 'my-finanse-sales-style';
 const PAGE_SIZE = 30;
 const MOUNT_TIMEOUT_MS = 15000;
 
-const apps = [];
+const appByRoot = {}; // rootId -> mounted Vue app
 let observer = null;
 let timeoutId = null;
 
@@ -235,10 +235,10 @@ const CSS = `
   .mfs-mobile-label{display:inline;color:#8A94A6;}
   .mfs-input{flex:1 1 40%;}
 }
-/* Hide originals via marker classes added in JS only AFTER our components mount,
-   so a mount race can never leave a tab blank. */
-.mfs-hidden{display:none !important;}
-.mfs-replaced-orders > :not(#${ORDERS_ROOT_ID}){display:none !important;}
+/* Hide the original sales + orders blocks (replaced by our components). Uid-based CSS so
+   it survives WeWeb re-creating the tab DOM (which wipes any class we'd add ourselves). */
+[class*="ww-element-${SALES_ANCHOR_UID}"],[class*="ww-element-${SALES_FILTER_UID}"]{display:none !important;}
+[class*="ww-element-${ORDERS_BLOCK_UID}"] > :not(#${ORDERS_ROOT_ID}){display:none !important;}
 /* Tabs: unify typography with the lists. */
 [class*="ww-element-${TAB_TEXT_UID}"]{font-weight:600 !important;font-size:15px !important;}
 /* "Вывод средств" tab — style only (the request form logic is untouched). */
@@ -259,48 +259,44 @@ function clearWaiters() {
     if (observer) { observer.disconnect(); observer = null; }
     if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
 }
+function unmountApp(rootId) {
+    if (appByRoot[rootId]) {
+        try { appByRoot[rootId].unmount(); } catch (e) { /* ignore */ }
+        delete appByRoot[rootId];
+    }
+}
 function unmountAll() {
     clearWaiters();
-    while (apps.length) apps.pop().unmount();
+    unmountApp(SALES_ROOT_ID);
+    unmountApp(ORDERS_ROOT_ID);
     document.getElementById(SALES_ROOT_ID)?.remove();
     document.getElementById(ORDERS_ROOT_ID)?.remove();
 }
 function mountOne(anchorUid, rootId, Comp) {
-    if (document.getElementById(rootId)) return true;
+    if (document.getElementById(rootId)) return; // already mounted and present
+    unmountApp(rootId); // the tab was re-created — drop the stale (detached) app first
     const anchor = document.querySelector(`[class*="ww-element-${anchorUid}"]`);
-    if (!anchor?.parentNode) return false;
+    if (!anchor?.parentNode) return;
     const el = document.createElement('div');
     el.id = rootId;
     el.style.width = '100%';
     anchor.parentNode.insertBefore(el, anchor.nextSibling);
     const app = createApp(Comp);
     app.mount(el);
-    apps.push(app);
-    return true;
+    appByRoot[rootId] = app;
 }
-function hideEl(u, cls) {
-    const el = document.querySelector(`[class*="ww-element-${u}"]`);
-    if (el) el.classList.add(cls);
-}
+// WeWeb re-creates a tab's DOM each time you switch to it, destroying our mounted root.
+// Keep observing and re-mount whenever an anchor reappears without our component.
 function tryMount() {
-    if (!wwLib.wwPlugins?.[AUTH_PLUGIN_ID]?.isAuthenticated) return false;
-    if (mountOne(SALES_ANCHOR_UID, SALES_ROOT_ID, SalesList)) {
-        hideEl(SALES_ANCHOR_UID, 'mfs-hidden');
-        hideEl(SALES_FILTER_UID, 'mfs-hidden');
-    }
-    if (mountOne(ORDERS_ANCHOR_UID, ORDERS_ROOT_ID, OrdersList)) {
-        hideEl(ORDERS_BLOCK_UID, 'mfs-replaced-orders');
-    }
-    const done = !!document.getElementById(SALES_ROOT_ID) && !!document.getElementById(ORDERS_ROOT_ID);
-    if (done) clearWaiters();
-    return done;
+    if (!wwLib.wwPlugins?.[AUTH_PLUGIN_ID]?.isAuthenticated) return;
+    mountOne(SALES_ANCHOR_UID, SALES_ROOT_ID, SalesList);
+    mountOne(ORDERS_ANCHOR_UID, ORDERS_ROOT_ID, OrdersList);
 }
 function waitAndMount() {
     injectStyleOnce();
-    if (tryMount()) return;
+    tryMount();
     observer = new MutationObserver(tryMount);
     observer.observe(document.body, { childList: true, subtree: true });
-    timeoutId = setTimeout(clearWaiters, MOUNT_TIMEOUT_MS);
 }
 function isFinansePageRoute(route) {
     return !!route?.name && route.name.startsWith(`page-${MY_FINANSE_PAGE_ID}`);

@@ -1,8 +1,8 @@
 // Visual-only cleanup for the courses_manage (course editing) page. Mounted like the
 // other src/_front helpers (init from main.js). No functional logic is changed — it only
-// restyles and forces the lessons list open.
-//   - removes the redundant "Все видео курса" button and the "Показать/Скрыть" toggle
-//     (lessons are forced open so they're always visible);
+// restyles.
+//   - removes the redundant "Все видео курса" button (the native "Показать/Скрыть"
+//     lessons toggle is left intact — auto-clicking it broke the list render);
 //   - one consistent button system by ROLE (primary blue / secondary neutral outline /
 //     danger red), applied by button text so it also covers the lesson-editor buttons that
 //     appear only while a lesson is being edited (a live observer re-applies on changes);

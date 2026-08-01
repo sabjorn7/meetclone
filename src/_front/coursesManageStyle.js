@@ -26,7 +26,6 @@ const STYLE_ID = 'courses-manage-style';
 
 const CSS = `
 [class*="ww-element-${VIDEO_BTN}"]{display:none !important;}
-[class*="ww-element-${TOGGLE}"]{display:none !important;}
 [class*="ww-element-${FORM_CARD}"] .ww-button{
   border-radius:8px !important;min-height:42px !important;padding:8px 20px !important;box-shadow:none !important;
 }
@@ -54,7 +53,6 @@ function roleOf(t) {
 }
 
 let observer = null;
-let expandTried = false;
 
 // Colour every form button by role (by text, so it also covers the dynamically-shown
 // lesson-editor buttons). Setting inline styles doesn't trigger childList mutations, so
@@ -81,14 +79,6 @@ function paint() {
             anchor.parentNode.insertBefore(h, anchor);
         }
     }
-    // Force the lessons list open once (so it's always visible), then the toggle stays hidden.
-    if (!expandTried) {
-        const tog = document.querySelector(`[class*="ww-element-${TOGGLE}"]`);
-        if (tog && (tog.innerText || '').trim() === 'Показать') {
-            tog.click();
-            expandTried = true;
-        }
-    }
 }
 
 function inject() {
@@ -107,7 +97,6 @@ function inject() {
 function teardown() {
     if (observer) { observer.disconnect(); observer = null; }
     document.getElementById(STYLE_ID)?.remove();
-    expandTried = false;
 }
 function isRoute(route) {
     return !!route?.name && route.name.startsWith(`page-${PAGE_ID}`);

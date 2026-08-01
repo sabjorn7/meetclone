@@ -26,6 +26,8 @@ const CSS = `
   border-radius:8px !important;min-height:42px !important;padding:8px 20px !important;box-shadow:none !important;
 }
 [class*="ww-element-${FORM_CARD}"] .ww-button .ww-text-content{font-size:14px !important;font-weight:600 !important;}
+[class*="ww-element-${FORM_CARD}"] .ww-file-upload__dropzone{background:#ffffff !important;border:1px solid #D7DEE8 !important;border-radius:8px !important;box-shadow:none !important;}
+[class*="ww-element-${FORM_CARD}"] .ww-file-upload__dropzone .ww-text-content{color:#5B6472 !important;font-size:14px !important;font-weight:600 !important;}
 ${BLUE_DIVIDERS.map(u => `[class*="ww-element-${u}"]`).join(',')}{border-bottom-color:#E5E7EB !important;}
 `;
 

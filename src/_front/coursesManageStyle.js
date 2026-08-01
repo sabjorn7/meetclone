@@ -11,16 +11,12 @@ const PAGE_ID = '16089944-2b20-4dd4-a9a1-f5142bd80c4e';
 const FORM_CARD = 'f847ae7b-c405-41ab-a197-d12b1b081271';
 const VIDEO_BTN = '420fdec0-c44c-41a1-b17c-c9e5047c5450'; // "Все видео курса"
 const TOGGLE = 'f181ad5f-2e81-4e0d-a280-41abb261757c';    // "Показать"/"Скрыть" lessons toggle
-// All the form's row dividers — hidden; a single divider is drawn by the injected
+// The full-width section dividers only (NOT the half-width field-box borders — hiding
+// those cut off the inputs' bottoms). A single divider is drawn by the injected
 // "Редактирование уроков курса" heading between the settings and the lessons.
 const HIDE_DIVIDERS = [
     'd2fbc641-daf7-43f5-8fce-61a9e6401291',
-    '05afe2c4-51dc-497e-acee-3400ece828a6',
-    'de6ff336-7746-4097-b1e6-7a7aa884e7d7',
-    '2f8dcbe9-8122-498b-a366-69af048aa3f7',
-    '3c74dff1-8afe-4e86-a380-08445641b251',
     'd78b05e3-79a1-47cf-9185-2fe4fd23831b',
-    'e1886002-8a2c-4def-94cd-564ec8e43420',
     '40b7e00c-2ee6-437e-a098-b4feeb434354',
 ];
 const LESSON_DIVIDER = 'b8fb59c4-8744-4df3-b1ae-f971fd297730'; // inside the lesson editor — kept, greyed

@@ -22,11 +22,18 @@
 
                 <!-- Player / gate -->
                 <div class="sp-player-wrap">
-                    <!-- Paid & no access (real purchase arrives in Phase 3) -->
+                    <!-- Paid & no access: buy, or access-period-ended -->
                     <div v-if="!hasAccess" class="sp-player sp-player-msg">
-                        <div>
-                            <div class="sp-msg-title">Платный эфир</div>
-                            <div class="sp-muted">Покупка появится в ближайшее время.</div>
+                        <div v-if="canBuy">
+                            <div class="sp-msg-title">Платный эфир — {{ priceLabel(detail) }}</div>
+                            <div class="sp-muted">Доступ к эфиру и записи на {{ detail.access_months }} мес. с даты эфира.</div>
+                            <button class="sp-btn sp-btn-primary sp-buy-btn" :disabled="buying" @click="buyStream">
+                                {{ buying ? 'Переход к оплате…' : 'Купить за ' + priceLabel(detail) }}
+                            </button>
+                        </div>
+                        <div v-else>
+                            <div class="sp-msg-title">Доступ к записи завершён</div>
+                            <div class="sp-muted">Период доступа к этому эфиру закончился.</div>
                         </div>
                     </div>
                     <!-- Waiting: own placeholder + light poll -->
@@ -47,6 +54,7 @@
                     </div>
                 </div>
 
+                <p v-if="error" class="sp-error">{{ error }}</p>
                 <p v-if="detail.description" class="sp-detail-desc">{{ detail.description }}</p>
             </template>
         </template>
@@ -71,9 +79,31 @@
                             <span>Описание</span>
                             <textarea v-model.trim="form.description" rows="3" maxlength="2000" placeholder="Коротко о чём эфир"></textarea>
                         </label>
-                        <p class="sp-note">На этом этапе эфиры бесплатные. Платные добавим следующим шагом.</p>
+                        <div class="sp-field">
+                            <span>Доступ</span>
+                            <div class="sp-radio-row">
+                                <label class="sp-radio"><input type="radio" value="free" v-model="form.kind" /> Бесплатно</label>
+                                <label class="sp-radio"><input type="radio" value="paid" v-model="form.kind" /> Платно</label>
+                            </div>
+                        </div>
+                        <div v-if="form.kind === 'paid'" class="sp-paid-fields">
+                            <label class="sp-field">
+                                <span>Цена, ₽</span>
+                                <input v-model.number="form.price" type="number" min="1" step="1" placeholder="Например: 990" />
+                            </label>
+                            <label class="sp-field">
+                                <span>Доступ к записи</span>
+                                <select v-model.number="form.months">
+                                    <option :value="1">1 месяц</option>
+                                    <option :value="3">3 месяца</option>
+                                    <option :value="6">6 месяцев</option>
+                                    <option :value="12">12 месяцев</option>
+                                </select>
+                            </label>
+                            <p class="sp-note">Доступ отсчитывается от даты эфира.</p>
+                        </div>
                         <div class="sp-form-actions">
-                            <button type="submit" class="sp-btn sp-btn-primary" :disabled="creating || !form.title">
+                            <button type="submit" class="sp-btn sp-btn-primary" :disabled="creating || !canSubmit">
                                 {{ creating ? 'Создаём эфир…' : 'Создать эфир' }}
                             </button>
                             <button type="button" class="sp-btn sp-btn-secondary" :disabled="creating" @click="cancelForm">Отменить</button>
@@ -159,6 +189,10 @@ import {
     getCurrentUser,
     canStream,
     createStream,
+    createBackingCourse,
+    purchaseStream,
+    hasBoughtStream,
+    accessExpiry,
     listMyStreams,
     listAllStreams,
     getStreamById,
@@ -180,12 +214,20 @@ const busyId = ref(null);
 const error = ref('');
 const creds = ref(null);
 const maskKey = ref(false);
-const form = ref({ title: '', description: '' });
+const form = ref({ title: '', description: '', kind: 'free', price: null, months: 3 });
+
+const canSubmit = computed(() => {
+    if (!form.value.title) return false;
+    if (form.value.kind === 'paid') return Number(form.value.price) > 0;
+    return true;
+});
 
 // detail state
 const detail = ref(null);
 const detailInfo = ref(null);
 const detailLoading = ref(false);
+const bought = ref(false);
+const buying = ref(false);
 let pollTimer = null;
 
 const isStreamer = computed(() => canStream(me.value));
@@ -256,7 +298,14 @@ function loadThumbs() {
 
 // ---------- detail ----------
 const isAuthor = computed(() => !!me.value && !!detail.value && me.value.id === detail.value.author);
-const hasAccess = computed(() => !!detail.value && (Number(detail.value.price) === 0 || isAuthor.value));
+const isPaid = computed(() => !!detail.value && Number(detail.value.price) > 0 && !!detail.value.backing_course_id);
+// Access window measured from the air date (accessExpiry); open if no expiry or not yet passed.
+const accessWindowOpen = computed(() => {
+    const exp = detail.value ? accessExpiry(detail.value) : null;
+    return !exp || Date.now() <= exp.getTime();
+});
+const hasAccess = computed(() => !!detail.value && (!isPaid.value || isAuthor.value || (bought.value && accessWindowOpen.value)));
+const canBuy = computed(() => isPaid.value && !isAuthor.value && !bought.value && accessWindowOpen.value);
 
 // Hybrid state: PeerTube video.state is authoritative for "waiting"; the author's cached
 // streams.status carries the live/ended intent.
@@ -280,6 +329,8 @@ async function loadDetail(id) {
     detailLoading.value = true;
     detail.value = null;
     detailInfo.value = null;
+    bought.value = false;
+    error.value = '';
     stopPoll();
     try {
         if (!me.value) me.value = await getCurrentUser(supa());
@@ -287,12 +338,30 @@ async function loadDetail(id) {
         if (detail.value?.peertube_video_id) {
             detailInfo.value = await getVideoInfo(detail.value.peertube_video_id);
         }
+        // Has the current user already purchased this paid stream?
+        if (detail.value && Number(detail.value.price) > 0 && detail.value.backing_course_id && me.value) {
+            bought.value = await hasBoughtStream(supa(), detail.value, me.value.id);
+        }
         // While waiting, poll for the live to start (PeerTube state 4 → 1 / playlist appears).
         if (displayState.value === 'scheduled' && detail.value?.peertube_video_id) startPoll();
     } catch (e) {
         error.value = e.message || String(e);
     } finally {
         detailLoading.value = false;
+    }
+}
+
+async function buyStream() {
+    if (buying.value || !detail.value) return;
+    buying.value = true;
+    error.value = '';
+    try {
+        if (!me.value) throw new Error('Войдите, чтобы купить эфир.');
+        const payLink = await purchaseStream(supa(), { buyer: me.value.id, stream: detail.value });
+        window.location.href = payLink; // redirect to Prodamus (clone of the course change-page step)
+    } catch (e) {
+        error.value = e.message || String(e);
+        buying.value = false;
     }
 }
 
@@ -330,21 +399,30 @@ watch(
 // ---------- create / author actions ----------
 function cancelForm() {
     showForm.value = false;
-    form.value = { title: '', description: '' };
+    form.value = { title: '', description: '', kind: 'free', price: null, months: 3 };
     error.value = '';
 }
 async function createBroadcast() {
-    if (!form.value.title || creating.value) return;
+    if (!canSubmit.value || creating.value) return;
     creating.value = true;
     error.value = '';
     try {
+        const paid = form.value.kind === 'paid';
+        const price = paid ? Number(form.value.price) : 0;
+        const months = paid ? Number(form.value.months) : null;
         const live = await createLive(supa(), { name: form.value.title, description: form.value.description, saveReplay: true });
+        // Paid → create the hidden backing course first, then link it to the stream.
+        const backingId = paid
+            ? await createBackingCourse(supa(), { owner: me.value.id, title: form.value.title, price, months })
+            : null;
         const row = await createStream(supa(), {
             author: me.value.id,
             title: form.value.title,
             description: form.value.description,
-            price: 0,
+            price,
             peertube_video_id: live.video.uuid,
+            access_months: months,
+            backing_course_id: backingId,
         });
         const withAuthor = { ...row, authorUser: me.value };
         myStreams.value.unshift(withAuthor);
@@ -493,6 +571,36 @@ onBeforeUnmount(stopPoll);
 .sp-form-actions {
     display: flex;
     gap: 10px;
+}
+.sp-radio-row {
+    display: flex;
+    gap: 18px;
+    font-weight: 400;
+}
+.sp-radio {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #374151;
+}
+.sp-paid-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.sp-field select {
+    font: inherit;
+    font-weight: 400;
+    padding: 10px 12px;
+    border: 1px solid #d7dee8;
+    border-radius: 8px;
+    color: #1b1f27;
+    background: #fff;
+}
+.sp-buy-btn {
+    margin-top: 14px;
 }
 
 /* buttons */

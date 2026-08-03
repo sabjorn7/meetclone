@@ -26,14 +26,131 @@ export function canStream(user) {
 }
 
 /** Insert a stream metadata row. `peertube_video_id` = the live video uuid. price 0 = free. */
-export async function createStream(supabase, { author, title, description = '', price = 0, peertube_video_id }) {
+export async function createStream(supabase, { author, title, description = '', price = 0, peertube_video_id, access_months = null, backing_course_id = null }) {
     const { data, error } = await supabase
         .from('streams')
-        .insert({ author, title, description, price, peertube_video_id })
+        .insert({ author, title, description, price, peertube_video_id, access_months, backing_course_id })
         .select()
         .limit(1);
     if (error) throw new Error(`Не удалось сохранить эфир: ${error.message}`);
     return data?.[0];
+}
+
+// ============================ PAID STREAMS (Phase 3) ============================
+// Variant 1 — a paid stream is backed by a hidden `course` row; the UNTOUCHED BuyCourse
+// pipeline grants access via user_course on it. The functions below that create the backing
+// course and initiate the purchase are the ONLY money-adjacent code — reviewed before deploy.
+
+/**
+ * MONEY-ADJACENT: create the hidden backing `course` for a paid stream. Kept out of the catalog
+ * (ModStatus != 'Опубликовано', slug stays null). `owner` credits sales/balance to the author;
+ * `Price` drives the charge and the seller-revenue calc; `DurationLong` = months (informational
+ * here — our gate computes expiry from the air date, see accessExpiry()).
+ */
+export async function createBackingCourse(supabase, { owner, title, price, months }) {
+    const { data, error } = await supabase
+        .from('course')
+        .insert({
+            owner,
+            Title: title,
+            Price: price,
+            Free: false,
+            DurationLong: months,
+            Category: 'Трансляции',
+            ModStatus: 'Черновик', // NOT 'Опубликовано' → excluded from the catalog
+        })
+        .select('id')
+        .limit(1);
+    if (error) throw new Error(`Не удалось создать курс-подложку: ${error.message}`);
+    return data?.[0]?.id;
+}
+
+/**
+ * MONEY: initiate a paid-stream purchase — a verbatim port of the site's course purchase
+ * client flow (shop cart row → order → Prodamus link → order update → return link to redirect).
+ * The actual settlement (mark paid, grant user_course, sales, balance) is handled entirely by
+ * the UNTOUCHED n8n `BuyCourse` workflow via the Prodamus callback. Returns the payment URL.
+ */
+export async function purchaseStream(supabase, { buyer, stream }) {
+    if (!stream.backing_course_id) throw new Error('У эфира нет курса-подложки.');
+
+    // 1) cart row in `shop` (clone of course action 90ddb3ae; +quantity:1, read by the Prodamus builder)
+    const { count } = await supabase
+        .from('shop')
+        .select('id', { count: 'exact', head: true })
+        .eq('owner', buyer)
+        .eq('status', 'cart');
+    const { data: shopRows, error: shopErr } = await supabase
+        .from('shop')
+        .insert({
+            owner: buyer,
+            price: stream.price,
+            status: 'cart',
+            prolong: 12,
+            position: (count || 0) + 1,
+            quantity: 1,
+            course_id: stream.backing_course_id,
+            course_name: stream.title,
+        })
+        .select('id')
+        .limit(1);
+    if (shopErr) throw new Error(`Корзина: ${shopErr.message}`);
+    const shopId = shopRows?.[0]?.id;
+
+    // 2) order (clone of 21527f28) — ISOLATED to just this stream (only its shop row)
+    const { data: orderRows, error: orderErr } = await supabase
+        .from('order')
+        .insert({ summ: stream.price, owner: buyer, course_positions: [shopId] })
+        .select('id')
+        .limit(1);
+    if (orderErr) throw new Error(`Заказ: ${orderErr.message}`);
+    const orderId = orderRows?.[0]?.id;
+
+    // 3) build + fetch the Prodamus payment link (clone of d70ac6c3). do=link returns the link.
+    const base = 'https://meetguru.payform.ru/?do=link&sys=meetguru';
+    const urlSuccess = `https://app.meetgu.ru/streams?stream=${stream.id}`;
+    const products =
+        `products[0][price]=${encodeURIComponent(stream.price)}` +
+        `&products[0][quantity]=1` +
+        `&products[0][name]=${encodeURIComponent(stream.title)}`;
+    const buildUrl = `${base}&order_id=${encodeURIComponent(orderId)}&${products}&urlSuccess=${encodeURIComponent(urlSuccess)}`;
+    const res = await fetch(buildUrl);
+    if (!res.ok) throw new Error(`Prodamus (${res.status})`);
+    const payLink = (await res.text()).trim();
+    if (!/^https?:\/\//.test(payLink)) throw new Error('Prodamus вернул не ссылку.');
+
+    // 4) store num + pageUrl on the order (clone of 1edef42a)
+    await supabase.from('order').update({ num: orderId, pageUrl: payLink }).eq('id', orderId);
+
+    // 5) caller redirects the browser to payLink (clone of change-page a434302a)
+    return payLink;
+}
+
+// ---------- access gate (NOT money) ----------
+
+/** Air date a paid stream's access window is measured from. */
+export function streamAirDate(stream) {
+    return new Date(stream.scheduled_at || stream.created_at);
+}
+
+/** When paid access ends: air date + access_months. null for free / no duration. */
+export function accessExpiry(stream) {
+    if (!stream.access_months) return null;
+    const e = streamAirDate(stream);
+    e.setMonth(e.getMonth() + Number(stream.access_months));
+    return e;
+}
+
+/** Whether the user has purchased this stream (a user_course row on the backing course exists). */
+export async function hasBoughtStream(supabase, stream, userId) {
+    if (!stream.backing_course_id || !userId) return false;
+    const { data } = await supabase
+        .from('user_course')
+        .select('id')
+        .eq('course', stream.backing_course_id)
+        .eq('user', userId)
+        .limit(1);
+    return !!data?.length;
 }
 
 /** All streams by a given author, newest first (for the author's own list). */

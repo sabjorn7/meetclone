@@ -169,9 +169,19 @@
                                 </div>
                             </div>
                             <div class="sp-item-actions">
-                                <button v-if="s.status !== 'live'" class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="goLive(s)">Я в эфире</button>
-                                <button v-else class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="endLive(s)">Завершить</button>
-                                <button class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="showCreds(s)">Данные OBS</button>
+                                <template v-if="confirmDeleteId === s.id">
+                                    <span class="sp-confirm-text">Удалить эфир?</span>
+                                    <button class="sp-btn sp-btn-mini sp-btn-danger" :disabled="busyId === s.id" @click="removeStream(s)">
+                                        {{ busyId === s.id ? 'Удаляем…' : 'Да, удалить' }}
+                                    </button>
+                                    <button class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="confirmDeleteId = null">Отмена</button>
+                                </template>
+                                <template v-else>
+                                    <button v-if="s.status !== 'live'" class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="goLive(s)">Я в эфире</button>
+                                    <button v-else class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="endLive(s)">Завершить</button>
+                                    <button class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="showCreds(s)">Данные OBS</button>
+                                    <button v-if="isFreeStream(s)" class="sp-btn sp-btn-mini sp-btn-danger" :disabled="busyId === s.id" @click="confirmDeleteId = s.id">Удалить</button>
+                                </template>
                             </div>
                         </li>
                     </ul>
@@ -197,6 +207,7 @@ import {
     listAllStreams,
     getStreamById,
     setStreamStatus,
+    deleteStream,
 } from '@/_front/streams/streamsApi.js';
 
 const route = useRoute();
@@ -211,6 +222,7 @@ const myStreams = ref([]);
 const showForm = ref(false);
 const creating = ref(false);
 const busyId = ref(null);
+const confirmDeleteId = ref(null);
 const error = ref('');
 const creds = ref(null);
 const maskKey = ref(false);
@@ -472,6 +484,25 @@ async function endLive(s) {
     }
 }
 
+// Delete is available for FREE streams only for now (paid ones may have buyers).
+function isFreeStream(s) {
+    return Number(s.price) === 0 && !s.backing_course_id;
+}
+async function removeStream(s) {
+    busyId.value = s.id;
+    error.value = '';
+    try {
+        await deleteStream(supa(), s);
+        myStreams.value = myStreams.value.filter(x => x.id !== s.id);
+        listItems.value = listItems.value.filter(x => x.id !== s.id);
+        confirmDeleteId.value = null;
+    } catch (e) {
+        error.value = e.message || String(e);
+    } finally {
+        busyId.value = null;
+    }
+}
+
 onMounted(async () => {
     await load();
     if (activeStreamId.value) loadDetail(activeStreamId.value);
@@ -633,6 +664,18 @@ onBeforeUnmount(stopPoll);
     background: #fff;
     color: #5b6472;
     border-color: #d7dee8;
+}
+.sp-btn-danger {
+    color: #e5484d;
+    border-color: #f3c4c6;
+}
+.sp-btn-danger:hover {
+    background: #fdecec;
+}
+.sp-confirm-text {
+    font-size: 13px;
+    color: #5b6472;
+    align-self: center;
 }
 .sp-close {
     background: none;

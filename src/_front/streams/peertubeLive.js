@@ -92,6 +92,17 @@ export async function getPeertubeToken(supabase) {
     return tok.access_token;
 }
 
+/** Delete a live video from PeerTube (author deleting their own stream). Needs the system token. */
+export async function deleteLive(supabase, videoId) {
+    if (!videoId) return;
+    const token = await getPeertubeToken(supabase);
+    const res = await fetch(`${PEERTUBE}/api/v1/videos/${encodeURIComponent(videoId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok && res.status !== 404) throw new Error(`Не удалось удалить видео в PeerTube (${res.status}).`);
+}
+
 /** Fetch RTMP url + stream key for a live video (author-only info; needs the system token). */
 export async function getLiveCredentials(supabase, videoId) {
     const token = await getPeertubeToken(supabase);

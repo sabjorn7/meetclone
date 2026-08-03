@@ -170,6 +170,29 @@ export async function setStreamStatus(supabase, streamId, status) {
     if (error) throw new Error(`Не удалось обновить статус: ${error.message}`);
 }
 
+import { deleteLive } from '@/_front/streams/peertubeLive.js';
+
+/**
+ * Delete a FREE stream (author-only): removes its PeerTube live video, then the streams row.
+ * Paid streams are refused here for now — a paid stream is backed by a course that may have
+ * buyers, so its deletion is deferred (see the feature notes).
+ */
+export async function deleteStream(supabase, stream) {
+    if (Number(stream.price) > 0 || stream.backing_course_id) {
+        throw new Error('Удаление платных эфиров пока недоступно.');
+    }
+    // Best-effort: remove the PeerTube video, but still delete the row even if that fails.
+    if (stream.peertube_video_id) {
+        try {
+            await deleteLive(supabase, stream.peertube_video_id);
+        } catch (e) {
+            console.warn('[streams] PeerTube video delete failed:', e.message);
+        }
+    }
+    const { error } = await supabase.from('streams').delete().eq('id', stream.id);
+    if (error) throw new Error(`Не удалось удалить эфир: ${error.message}`);
+}
+
 // Public list ordering: live first, then scheduled, then ended; newest first within a group.
 const STATUS_ORDER = { live: 0, scheduled: 1, ended: 2 };
 

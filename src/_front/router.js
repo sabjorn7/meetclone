@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
 import wwPage from './views/wwPage.vue';
+import StreamsPage from './views/StreamsPage.vue';
 
 import {
     initializeData,
@@ -209,6 +210,16 @@ for (const page of window.wwg_designInfo.pages) {
         registerRoute(page, lang);
     }
 }
+
+// Hand-added standalone route (NOT a WeWeb page): the "Трансляции" live-streams page.
+// Uses its own component (no wwPage / fetchPage / wwg_designInfo entry). Registered after the
+// WeWeb pages and before the catch-all 404 so it wins. A physical dist/streams/index.html is
+// produced via a matching entry in vite.config.js (no SPA fallback → direct hits would 404).
+routes.push({
+    path: '/streams',
+    name: 'streams',
+    component: StreamsPage,
+});
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');
 if (page404) {

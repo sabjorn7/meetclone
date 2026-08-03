@@ -346,8 +346,9 @@ async function createBroadcast() {
             price: 0,
             peertube_video_id: live.video.uuid,
         });
-        myStreams.value.unshift(row);
-        listItems.value.unshift(row);
+        const withAuthor = { ...row, authorUser: me.value };
+        myStreams.value.unshift(withAuthor);
+        listItems.value.unshift(withAuthor);
         creds.value = { title: row.title, rtmpUrl: live.rtmpUrl, streamKey: live.streamKey };
         maskKey.value = false;
         cancelForm();

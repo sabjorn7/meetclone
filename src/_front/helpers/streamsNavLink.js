@@ -25,7 +25,15 @@ function inject() {
     const link = document.createElement('p');
     link.id = MARKER_ID;
     const sample = document.querySelector(`[data-ww-uid="${CLONE_LABEL_UID}"]`);
-    if (sample) link.className = sample.className; // match the menu's text style
+    if (sample) {
+        link.className = sample.className; // layout classes (flex object, text content)
+        // WeWeb sets typography via the element's data-ww-uid, not the class, so copy the
+        // sample's COMPUTED text styles inline to match font size / weight / colour exactly.
+        const cs = getComputedStyle(sample);
+        for (const prop of ['fontSize', 'fontWeight', 'color', 'lineHeight', 'fontFamily', 'letterSpacing', 'textTransform']) {
+            link.style[prop] = cs[prop];
+        }
+    }
     link.textContent = 'Трансляции';
     link.style.cursor = 'pointer';
     link.addEventListener('click', e => {

@@ -19,6 +19,10 @@
                 </div>
                 <h2 class="sp-detail-title">{{ detail.title }}</h2>
                 <div class="sp-detail-author">{{ authorName(detail) }}</div>
+                <div class="sp-detail-sub">
+                    <span v-if="displayState === 'scheduled' && detail.scheduled_at" class="sp-detail-when">🕐 Начало: {{ formatDateTime(detail.scheduled_at) }}</span>
+                    <button class="sp-btn sp-btn-secondary sp-share-btn" @click="shareStream">🔗 {{ shareMsg || 'Поделиться' }}</button>
+                </div>
 
                 <!-- Player / gate -->
                 <div class="sp-player-wrap">
@@ -40,6 +44,7 @@
                     <div v-else-if="displayState === 'scheduled'" class="sp-player sp-player-msg">
                         <div>
                             <div class="sp-msg-title">Эфир ещё не начался</div>
+                            <div v-if="detail.scheduled_at" class="sp-msg-when">Начало: {{ formatDateTime(detail.scheduled_at) }}</div>
                             <div class="sp-muted">Страница обновится автоматически, когда трансляция начнётся.</div>
                         </div>
                     </div>
@@ -78,6 +83,10 @@
                         <label class="sp-field">
                             <span>Описание</span>
                             <textarea v-model.trim="form.description" rows="3" maxlength="2000" placeholder="Коротко о чём эфир"></textarea>
+                        </label>
+                        <label class="sp-field">
+                            <span>Дата и время эфира <span class="sp-optional">(необязательно)</span></span>
+                            <input v-model="form.scheduledAt" type="datetime-local" />
                         </label>
                         <div class="sp-field">
                             <span>Доступ</span>
@@ -146,6 +155,7 @@
                             </div>
                             <div class="sp-tile-body">
                                 <div class="sp-tile-title">{{ s.title }}</div>
+                                <div v-if="s.status === 'scheduled' && s.scheduled_at" class="sp-tile-when">🕐 {{ formatDateTime(s.scheduled_at) }}</div>
                                 <div class="sp-tile-meta">
                                     <span>{{ authorName(s) }}</span>
                                     <span>{{ priceLabel(s) }}</span>
@@ -226,7 +236,8 @@ const confirmDeleteId = ref(null);
 const error = ref('');
 const creds = ref(null);
 const maskKey = ref(false);
-const form = ref({ title: '', description: '', kind: 'free', price: null, months: 3 });
+const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3 });
+const shareMsg = ref('');
 
 const canSubmit = computed(() => {
     if (!form.value.title) return false;
@@ -260,6 +271,29 @@ function priceLabel(s) {
 }
 function authorName(s) {
     return s.authorUser?.Name || 'Автор';
+}
+function formatDateTime(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+}
+async function shareStream() {
+    if (!detail.value) return;
+    const url = `${window.location.origin}/streams?stream=${detail.value.id}`;
+    if (navigator.share) {
+        try {
+            await navigator.share({ title: detail.value.title, url });
+            return;
+        } catch (_) {
+            return; // user cancelled the native share sheet
+        }
+    }
+    try {
+        await navigator.clipboard.writeText(url);
+        shareMsg.value = 'Ссылка скопирована';
+    } catch (_) {
+        shareMsg.value = url;
+    }
+    setTimeout(() => (shareMsg.value = ''), 2500);
 }
 
 // ---------- navigation ----------
@@ -411,7 +445,7 @@ watch(
 // ---------- create / author actions ----------
 function cancelForm() {
     showForm.value = false;
-    form.value = { title: '', description: '', kind: 'free', price: null, months: 3 };
+    form.value = { title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3 };
     error.value = '';
 }
 async function createBroadcast() {
@@ -422,6 +456,7 @@ async function createBroadcast() {
         const paid = form.value.kind === 'paid';
         const price = paid ? Number(form.value.price) : 0;
         const months = paid ? Number(form.value.months) : null;
+        const scheduled_at = form.value.scheduledAt ? new Date(form.value.scheduledAt).toISOString() : null;
         const live = await createLive(supa(), { name: form.value.title, description: form.value.description, saveReplay: true });
         // Paid → create the hidden backing course first, then link it to the stream.
         const backingId = paid
@@ -435,6 +470,7 @@ async function createBroadcast() {
             peertube_video_id: live.video.uuid,
             access_months: months,
             backing_course_id: backingId,
+            scheduled_at,
         });
         const withAuthor = { ...row, authorUser: me.value };
         myStreams.value.unshift(withAuthor);
@@ -860,7 +896,39 @@ onBeforeUnmount(stopPoll);
 .sp-detail-author {
     color: #6b7280;
     font-size: 14px;
+    margin-bottom: 10px;
+}
+.sp-detail-sub {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
     margin-bottom: 16px;
+}
+.sp-detail-when {
+    font-size: 14px;
+    color: #374151;
+    font-weight: 600;
+}
+.sp-share-btn {
+    padding: 7px 14px;
+    font-size: 13px;
+}
+.sp-optional {
+    font-weight: 400;
+    color: #9ca3af;
+}
+.sp-tile-when {
+    margin-top: 4px;
+    font-size: 13px;
+    color: #374151;
+    font-weight: 600;
+}
+.sp-msg-when {
+    font-size: 15px;
+    font-weight: 600;
+    color: #cfe0fb;
+    margin-bottom: 6px;
 }
 .sp-detail-desc {
     margin-top: 16px;

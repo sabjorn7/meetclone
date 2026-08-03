@@ -25,11 +25,12 @@ export function canStream(user) {
     return !!user && STREAMER_ROLES.includes(user.role);
 }
 
-/** Insert a stream metadata row. `peertube_video_id` = the live video uuid. price 0 = free. */
-export async function createStream(supabase, { author, title, description = '', price = 0, peertube_video_id, access_months = null, backing_course_id = null }) {
+/** Insert a stream metadata row. `peertube_video_id` = the live video uuid. price 0 = free.
+ *  `scheduled_at` = planned start (ISO) or null. */
+export async function createStream(supabase, { author, title, description = '', price = 0, peertube_video_id, access_months = null, backing_course_id = null, scheduled_at = null }) {
     const { data, error } = await supabase
         .from('streams')
-        .insert({ author, title, description, price, peertube_video_id, access_months, backing_course_id })
+        .insert({ author, title, description, price, peertube_video_id, access_months, backing_course_id, scheduled_at })
         .select()
         .limit(1);
     if (error) throw new Error(`Не удалось сохранить эфир: ${error.message}`);

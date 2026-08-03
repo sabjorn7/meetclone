@@ -52,3 +52,38 @@ export async function setStreamStatus(supabase, streamId, status) {
     const { error } = await supabase.from('streams').update({ status }).eq('id', streamId);
     if (error) throw new Error(`Не удалось обновить статус: ${error.message}`);
 }
+
+// Public list ordering: live first, then scheduled, then ended; newest first within a group.
+const STATUS_ORDER = { live: 0, scheduled: 1, ended: 2 };
+
+/** Attach each stream's author user row (Name/Photo/role) via one batched lookup. */
+async function attachAuthors(supabase, rows) {
+    const ids = [...new Set(rows.map(r => r.author).filter(Boolean))];
+    let byId = {};
+    if (ids.length) {
+        const { data: users } = await supabase.from('users').select('*').in('id', ids);
+        byId = Object.fromEntries((users || []).map(u => [u.id, u]));
+    }
+    return rows.map(r => ({ ...r, authorUser: byId[r.author] || null }));
+}
+
+/** All streams for the public list, with authors, ordered live → scheduled → ended. */
+export async function listAllStreams(supabase) {
+    const { data, error } = await supabase.from('streams').select('*');
+    if (error) throw new Error(`Не удалось загрузить эфиры: ${error.message}`);
+    const rows = await attachAuthors(supabase, data || []);
+    return rows.sort(
+        (a, b) =>
+            (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) ||
+            new Date(b.created_at) - new Date(a.created_at)
+    );
+}
+
+/** A single stream (with author) for the detail view. */
+export async function getStreamById(supabase, id) {
+    const { data, error } = await supabase.from('streams').select('*').eq('id', id).limit(1);
+    if (error) throw new Error(`Не удалось загрузить эфир: ${error.message}`);
+    if (!data?.length) return null;
+    const [row] = await attachAuthors(supabase, data);
+    return row;
+}

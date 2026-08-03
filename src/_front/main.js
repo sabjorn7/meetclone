@@ -15,6 +15,7 @@ import { initProfileFollowButton } from '@/_front/profileFollowButton.js';
 import { initMySubscriptions } from '@/_front/mySubscriptions.js';
 import { initMyFinanseSales } from '@/_front/myFinanseSales.js';
 import { initCoursesManageStyle } from '@/_front/coursesManageStyle.js';
+import { initStreamsNavLink } from '@/_front/helpers/streamsNavLink.js';
 
 let store;
 let pinia;
@@ -117,6 +118,7 @@ const init = async function () {
     initMySubscriptions(router);
     initMyFinanseSales(router);
     initCoursesManageStyle(router);
+    initStreamsNavLink(router);
 
     /* wwFront:start */
     // Needed or reactivity is not working in deployed app

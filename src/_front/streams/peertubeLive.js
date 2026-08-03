@@ -139,7 +139,42 @@ export async function createLive(supabase, { name, description = '', saveReplay 
     return { video, ...creds };
 }
 
-// Video-state ids from PeerTube (for the viewer/status, used in Phase 2):
+// Video-state ids from PeerTube (for the viewer/status):
 //   1 = published (live is on-air, or replay is ready), 4 = waiting for live, 5 = live ended.
 export const VIDEO_STATE = { PUBLISHED: 1, WAITING_FOR_LIVE: 4, LIVE_ENDED: 5 };
 export const PEERTUBE_ORIGIN = PEERTUBE;
+
+/**
+ * Public video info (no auth — unlisted videos return 200): live state, thumbnail, whether a
+ * streaming playlist exists (i.e. the live is actually on-air or a replay is ready).
+ * Returns null on any failure so callers can fall back to the cached `streams.status`.
+ */
+export async function getVideoInfo(videoId) {
+    if (!videoId) return null;
+    try {
+        const res = await fetch(`${PEERTUBE}/api/v1/videos/${encodeURIComponent(videoId)}`);
+        if (!res.ok) return null;
+        const v = await res.json();
+        return {
+            stateId: v.state?.id ?? null,
+            isLive: !!v.isLive,
+            previewPath: v.previewPath || null,
+            thumbnailPath: v.thumbnailPath || null,
+            hasPlaylist: Array.isArray(v.streamingPlaylists) && v.streamingPlaylists.length > 0,
+            name: v.name,
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
+/** PeerTube iframe embed URL (same params as the site's course-video embeds). */
+export function embedUrl(videoId, { autoplay = false } = {}) {
+    const q = `title=0&warningTitle=0&peertubeLink=0&p2p=0${autoplay ? '&autoplay=1' : ''}`;
+    return `${PEERTUBE}/videos/embed/${encodeURIComponent(videoId)}?${q}`;
+}
+
+/** Prefix a PeerTube-relative asset path (previewPath/thumbnailPath) with the instance origin. */
+export function assetUrl(path) {
+    return path ? `${PEERTUBE}${path}` : null;
+}

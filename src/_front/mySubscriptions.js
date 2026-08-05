@@ -32,8 +32,8 @@ const MySubscriptions = {
         const following = ref([]);
         const followers = ref([]);
         const loading = ref(true);
-        // Collapsible sections (expanded by default; a big list is capped with a scroll).
-        const open = ref({ following: true, followers: true });
+        // Collapsible sections (collapsed by default; a big list is capped with a scroll when open).
+        const open = ref({ following: false, followers: false });
         function toggle(key) {
             open.value = { ...open.value, [key]: !open.value[key] };
         }

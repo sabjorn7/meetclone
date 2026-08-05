@@ -32,6 +32,11 @@ const MySubscriptions = {
         const following = ref([]);
         const followers = ref([]);
         const loading = ref(true);
+        // Collapsible sections (expanded by default; a big list is capped with a scroll).
+        const open = ref({ following: true, followers: true });
+        function toggle(key) {
+            open.value = { ...open.value, [key]: !open.value[key] };
+        }
 
         const collections = () => wwLib.$store.getters['data/getCollections'];
         const meId = computed(() => collections()?.[CURRENT_USER_COLLECTION_ID]?.data?.[0]?.id || null);
@@ -80,7 +85,7 @@ const MySubscriptions = {
 
         watch(meId, load, { immediate: true });
 
-        return { following, followers, loading, isVisible, openUser };
+        return { following, followers, loading, isVisible, openUser, open, toggle };
     },
     render() {
         if (!this.isVisible) return null;
@@ -154,13 +159,57 @@ const MySubscriptions = {
                 ],
             );
 
-        const section = (title, items, emptyText) =>
-            h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, [
-                h('div', { style: { fontSize: '18px', fontWeight: 700, color: '#1B1F27' } }, title),
-                items.length
-                    ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, items.map(card))
-                    : h('div', { style: { fontSize: '14px', color: '#8A94A6' } }, emptyText),
+        const section = (title, items, emptyText, key) => {
+            const isOpen = this.open[key];
+            return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, [
+                // Clickable header — title + count + show/hide toggle.
+                h(
+                    'div',
+                    {
+                        onClick: () => this.toggle(key),
+                        style: {
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                        },
+                    },
+                    [
+                        h('span', { style: { fontSize: '18px', fontWeight: 700, color: '#1B1F27' } }, title),
+                        h(
+                            'span',
+                            { style: { fontSize: '15px', fontWeight: 600, color: '#8A94A6' } },
+                            `(${items.length})`,
+                        ),
+                        h(
+                            'span',
+                            { style: { marginLeft: 'auto', fontSize: '13px', fontWeight: 600, color: '#5495F3' } },
+                            isOpen ? 'Скрыть ▲' : 'Показать ▼',
+                        ),
+                    ],
+                ),
+                // Body — 2-column grid, capped height so large lists scroll instead of overflowing.
+                isOpen
+                    ? items.length
+                        ? h(
+                              'div',
+                              {
+                                  style: {
+                                      display: 'grid',
+                                      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                                      gap: '8px',
+                                      maxHeight: '380px',
+                                      overflowY: 'auto',
+                                      paddingRight: '4px',
+                                  },
+                              },
+                              items.map(card),
+                          )
+                        : h('div', { style: { fontSize: '14px', color: '#8A94A6' } }, emptyText)
+                    : null,
             ]);
+        };
 
         return h(
             'div',
@@ -180,8 +229,8 @@ const MySubscriptions = {
             this.loading
                 ? [h('div', { style: { fontSize: '14px', color: '#8A94A6' } }, 'Загрузка…')]
                 : [
-                      section('Мои подписки', this.following, 'Вы пока ни на кого не подписаны'),
-                      section('Мои подписчики', this.followers, 'У вас пока нет подписчиков'),
+                      section('Мои подписки', this.following, 'Вы пока ни на кого не подписаны', 'following'),
+                      section('Мои подписчики', this.followers, 'У вас пока нет подписчиков', 'followers'),
                   ],
         );
     },

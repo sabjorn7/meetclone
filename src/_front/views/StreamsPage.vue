@@ -61,6 +61,45 @@
 
                 <p v-if="error" class="sp-error">{{ error }}</p>
                 <p v-if="detail.description" class="sp-detail-desc">{{ detail.description }}</p>
+
+                <!-- Viewer chat — same access gate as the stream itself -->
+                <section v-if="hasAccess" class="sp-chat">
+                    <h3 class="sp-chat-title">Чат эфира</h3>
+                    <div ref="feedEl" class="sp-chat-feed">
+                        <div v-if="chatLoading" class="sp-muted">Загрузка чата…</div>
+                        <div v-else-if="!messages.length" class="sp-muted">Сообщений пока нет. Будьте первым!</div>
+                        <div
+                            v-for="m in messages"
+                            :key="m.id"
+                            class="sp-chat-row"
+                            :class="{ 'sp-chat-mine': me && m.owner === me.id }"
+                        >
+                            <img v-if="m.authorUser?.Photo" :src="m.authorUser.Photo" class="sp-chat-ava" />
+                            <div v-else class="sp-chat-ava sp-chat-ava-empty">{{ (m.authorUser?.Name || '?').slice(0, 1) }}</div>
+                            <div class="sp-chat-bubble">
+                                <div class="sp-chat-meta">
+                                    <span class="sp-chat-name">{{ m.authorUser?.Name || 'Пользователь' }}</span>
+                                    <span class="sp-chat-time">{{ msgTime(m.created_at) }}</span>
+                                    <button v-if="canDeleteMsg(m)" class="sp-chat-del" @click="removeMessage(m)">удалить</button>
+                                </div>
+                                <div class="sp-chat-text">{{ m.text }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="me" class="sp-chat-composer">
+                        <textarea
+                            v-model="chatText"
+                            class="sp-chat-input"
+                            rows="1"
+                            placeholder="Написать в чат…"
+                            @keydown.enter.exact.prevent="sendChat"
+                        ></textarea>
+                        <button class="sp-btn sp-btn-primary" :disabled="!chatText.trim() || sending" @click="sendChat">
+                            {{ sending ? '…' : 'Отправить' }}
+                        </button>
+                    </div>
+                    <div v-else class="sp-muted sp-chat-login">Войдите, чтобы писать в чат.</div>
+                </section>
             </template>
         </template>
 
@@ -202,7 +241,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { createLive, getLiveCredentials, getVideoInfo, embedUrl, assetUrl, VIDEO_STATE } from '@/_front/streams/peertubeLive.js';
 import {
@@ -218,6 +257,9 @@ import {
     getStreamById,
     setStreamStatus,
     deleteStream,
+    listStreamMessages,
+    sendStreamMessage,
+    deleteStreamMessage,
 } from '@/_front/streams/streamsApi.js';
 
 const route = useRoute();
@@ -252,6 +294,14 @@ const detailLoading = ref(false);
 const bought = ref(false);
 const buying = ref(false);
 let pollTimer = null;
+
+// viewer-chat state
+const messages = ref([]);
+const chatText = ref('');
+const chatLoading = ref(false);
+const sending = ref(false);
+const feedEl = ref(null);
+let chatTimer = null;
 
 const isStreamer = computed(() => canStream(me.value));
 const activeStreamId = computed(() => route.query.stream || null);
@@ -378,6 +428,7 @@ async function loadDetail(id) {
     bought.value = false;
     error.value = '';
     stopPoll();
+    stopChatPoll();
     try {
         if (!me.value) me.value = await getCurrentUser(supa());
         detail.value = await getStreamById(supa(), id);
@@ -390,6 +441,13 @@ async function loadDetail(id) {
         }
         // While waiting, poll for the live to start (PeerTube state 4 → 1 / playlist appears).
         if (displayState.value === 'scheduled' && detail.value?.peertube_video_id) startPoll();
+        // Viewer chat — same access gate as the stream; poll for new messages while open.
+        if (hasAccess.value) {
+            chatLoading.value = true;
+            await loadChat(id, { scroll: true });
+            chatLoading.value = false;
+            startChatPoll(id);
+        }
     } catch (e) {
         error.value = e.message || String(e);
     } finally {
@@ -429,6 +487,63 @@ function stopPoll() {
     }
 }
 
+// ---------- viewer chat ----------
+function msgTime(iso) {
+    return iso ? new Date(iso).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
+}
+function canDeleteMsg(m) {
+    return !!me.value && (m.owner === me.value.id || (!!detail.value && detail.value.author === me.value.id));
+}
+function scrollFeed() {
+    nextTick(() => {
+        const el = feedEl.value;
+        if (el) el.scrollTop = el.scrollHeight;
+    });
+}
+async function loadChat(id, { scroll = false } = {}) {
+    try {
+        const prevLen = messages.value.length;
+        messages.value = await listStreamMessages(supa(), id);
+        if (scroll || messages.value.length !== prevLen) scrollFeed();
+    } catch (_) {
+        // keep the current messages on a transient refresh failure
+    }
+}
+async function sendChat() {
+    const text = chatText.value.trim();
+    if (!text || sending.value || !detail.value || !me.value) return;
+    sending.value = true;
+    try {
+        await sendStreamMessage(supa(), { stream: detail.value.id, owner: me.value.id, text });
+        chatText.value = '';
+        await loadChat(detail.value.id, { scroll: true });
+    } catch (e) {
+        error.value = e.message || String(e);
+    } finally {
+        sending.value = false;
+    }
+}
+async function removeMessage(m) {
+    try {
+        await deleteStreamMessage(supa(), m.id);
+        messages.value = messages.value.filter(x => x.id !== m.id);
+    } catch (e) {
+        error.value = e.message || String(e);
+    }
+}
+function startChatPoll(id) {
+    stopChatPoll();
+    chatTimer = setInterval(() => loadChat(id), 7000);
+}
+function stopChatPoll() {
+    if (chatTimer) {
+        clearInterval(chatTimer);
+        chatTimer = null;
+    }
+    messages.value = [];
+    chatText.value = '';
+}
+
 // React to ?stream= changes (list ↔ detail without a full reload).
 watch(
     activeStreamId,
@@ -437,6 +552,7 @@ watch(
         else {
             detail.value = null;
             stopPoll();
+            stopChatPoll();
         }
     },
     { immediate: false }
@@ -543,7 +659,10 @@ onMounted(async () => {
     await load();
     if (activeStreamId.value) loadDetail(activeStreamId.value);
 });
-onBeforeUnmount(stopPoll);
+onBeforeUnmount(() => {
+    stopPoll();
+    stopChatPoll();
+});
 </script>
 
 <style scoped>
@@ -971,5 +1090,120 @@ onBeforeUnmount(stopPoll);
     font-weight: 600;
     margin-bottom: 6px;
     color: #fff;
+}
+
+/* viewer chat */
+.sp-chat {
+    margin-top: 24px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #fff;
+    padding: 16px;
+}
+.sp-chat-title {
+    margin: 0 0 12px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #1b1f27;
+}
+.sp-chat-feed {
+    max-height: 360px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-right: 4px;
+}
+.sp-chat-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+.sp-chat-ava {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex: 0 0 auto;
+}
+.sp-chat-ava-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #eef2f7;
+    color: #5b6472;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.sp-chat-bubble {
+    background: #f5f7fa;
+    border-radius: 10px;
+    padding: 8px 12px;
+    max-width: 78%;
+}
+.sp-chat-mine {
+    flex-direction: row-reverse;
+}
+.sp-chat-mine .sp-chat-bubble {
+    background: #eaf2fe;
+}
+.sp-chat-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+.sp-chat-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: #374151;
+}
+.sp-chat-time {
+    font-size: 11px;
+    color: #9ca3af;
+}
+.sp-chat-del {
+    font: inherit;
+    font-size: 11px;
+    color: #b6c0cf;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+}
+.sp-chat-del:hover {
+    color: #e5484d;
+}
+.sp-chat-text {
+    font-size: 14px;
+    color: #1b1f27;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.sp-chat-composer {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    align-items: flex-end;
+}
+.sp-chat-input {
+    flex: 1;
+    font: inherit;
+    font-size: 14px;
+    resize: none;
+    min-height: 40px;
+    max-height: 120px;
+    border: 1px solid #d7dee8;
+    border-radius: 8px;
+    padding: 9px 12px;
+    color: #1b1f27;
+}
+.sp-chat-input:focus {
+    outline: none;
+    border-color: #5495f3;
+}
+.sp-chat-login {
+    margin-top: 12px;
+    text-align: center;
 }
 </style>

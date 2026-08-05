@@ -228,3 +228,51 @@ export async function getStreamById(supabase, id) {
     const [row] = await attachAuthors(supabase, data);
     return row;
 }
+
+// ============================ VIEWER CHAT (stream_chat) ============================
+// Mirrors club_chat. Access (read + write) is gated in the UI by the same `hasAccess`
+// used for the stream itself (free → everyone; paid → author or buyer). RLS is off, so
+// the gate is client-side, consistent with the rest of the project.
+
+/** Attach each message's author (Name/Photo) via one batched users lookup. */
+async function attachMessageAuthors(supabase, rows) {
+    const ids = [...new Set(rows.map(r => r.owner).filter(Boolean))];
+    let byId = {};
+    if (ids.length) {
+        const { data: users } = await supabase.from('users').select('id,Name,Photo').in('id', ids);
+        byId = Object.fromEntries((users || []).map(u => [u.id, u]));
+    }
+    return rows.map(r => ({ ...r, authorUser: byId[r.owner] || null }));
+}
+
+/** Messages of a stream's chat (oldest first), with authors attached. */
+export async function listStreamMessages(supabase, streamId, { limit = 200 } = {}) {
+    const { data, error } = await supabase
+        .from('stream_chat')
+        .select('*')
+        .eq('stream', streamId)
+        .neq('deleted', true)
+        .order('created_at', { ascending: true })
+        .limit(limit);
+    if (error) throw new Error(`Не удалось загрузить чат: ${error.message}`);
+    return attachMessageAuthors(supabase, data || []);
+}
+
+/** Post a message to a stream's chat. `img` is an optional array of image URLs (UI: phase 2). */
+export async function sendStreamMessage(supabase, { stream, owner, text, img = [] }) {
+    const clean = (text || '').trim();
+    if (!clean && !(img && img.length)) throw new Error('Пустое сообщение.');
+    const { data, error } = await supabase
+        .from('stream_chat')
+        .insert({ stream, owner, text: clean, img })
+        .select('*')
+        .limit(1);
+    if (error) throw new Error(`Не удалось отправить сообщение: ${error.message}`);
+    return data?.[0];
+}
+
+/** Soft-delete a message (author of the message or of the stream — enforced by the UI). */
+export async function deleteStreamMessage(supabase, id) {
+    const { error } = await supabase.from('stream_chat').update({ deleted: true }).eq('id', id);
+    if (error) throw new Error(`Не удалось удалить сообщение: ${error.message}`);
+}

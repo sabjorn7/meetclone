@@ -22,7 +22,7 @@ n8n (`BuyCourse`, live) — two changes, validated on an isolated copy with a tw
 Client — `course/{slug}` buy button click gates on ACTIVE (alive → my_courses; expired-owned → pay flow); `shop`-insert sets `price = DurationPrice` on renewal (else `Price`) and `is_renewal = true` (audit flag on `shop`, migration `pending_shop_is_renewal.sql`); the `my_courses` "Продлить" pill now navigates to `course/{slug}` where the pay flow runs.
 
 **OPEN follow-ups:**
-- **`DurationPrice = 0`/null → free renewal.** The renewal charges whatever `DurationPrice` is; ~2 of 52 limited paid courses have `DurationPrice = 0`, so those renew for 0 ₽. Add a guard (block/curate renewal when `DurationPrice` is 0/null) or ensure sellers set it.
+- ~~**`DurationPrice = 0`/null → free renewal.**~~ **RESOLVED (2026-08-08):** when `DurationPrice <= 0`/null, the "Продлить" pill (my_courses) and the course/{slug} pay branch route to `/contacts` (support) instead of starting a 0 ₽ Prodamus order. Renewals with a real price and first purchases are unchanged. (No per-course message injected on /contacts — generic support page; add later if wanted.)
 - ~~**`DurationLong = 0` ("без лимита") courses with a real expired `user_course` window**~~ **RESOLVED (2026-08-08):** the gate now treats the current `course.DurationLong == 0` as unlimited, so owners keep access regardless of an old expired window. This un-locked 145 accesses / 96 users across 18 courses that had been switched from time-limited to unlimited after purchase.
 - **`shop.prolong` is dead** (hardcoded `12`, ignored by n8n — window comes from `course.DurationLong`); safe to remove later.
 

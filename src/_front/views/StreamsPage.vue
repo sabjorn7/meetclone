@@ -48,7 +48,14 @@
                             <div class="sp-muted">Страница обновится автоматически, когда трансляция начнётся.</div>
                         </div>
                     </div>
-                    <!-- Live / ended (replay): PeerTube iframe -->
+                    <!-- Ended, replay still transcoding: processing placeholder + light poll -->
+                    <div v-else-if="replayProcessing" class="sp-player sp-player-msg">
+                        <div>
+                            <div class="sp-msg-title">Запись обрабатывается</div>
+                            <div class="sp-muted">Эфир завершён. Запись появится здесь автоматически через несколько минут.</div>
+                        </div>
+                    </div>
+                    <!-- Live / ended (replay ready): PeerTube iframe -->
                     <div v-else class="sp-player">
                         <iframe
                             :src="playerSrc"
@@ -415,6 +422,13 @@ const displayState = computed(() => {
     return 'scheduled';
 });
 const displayLabel = computed(() => statusLabel(displayState.value));
+// A replay (or live) is actually watchable once PeerTube has a streaming playlist / PUBLISHED video.
+const playable = computed(
+    () => !!detailInfo.value && (detailInfo.value.hasPlaylist || detailInfo.value.stateId === VIDEO_STATE.PUBLISHED)
+);
+// Ended, but the replay is still transcoding (takes a few minutes after the live ends). We show a
+// "processing" placeholder instead of PeerTube's "live ended" embed, and keep polling until ready.
+const replayProcessing = computed(() => displayState.value === 'ended' && !playable.value);
 const playerSrc = computed(() =>
     detail.value?.peertube_video_id
         ? embedUrl(detail.value.peertube_video_id, { autoplay: displayState.value === 'live' })
@@ -439,8 +453,9 @@ async function loadDetail(id) {
         if (detail.value && Number(detail.value.price) > 0 && detail.value.backing_course_id && me.value) {
             bought.value = await hasBoughtStream(supa(), detail.value, me.value.id);
         }
-        // While waiting, poll for the live to start (PeerTube state 4 → 1 / playlist appears).
-        if (displayState.value === 'scheduled' && detail.value?.peertube_video_id) startPoll();
+        // Poll while waiting for the live to start (state 4 → 1) OR for a just-ended live's replay
+        // to finish transcoding (ended but not yet playable).
+        if ((displayState.value === 'scheduled' || replayProcessing.value) && detail.value?.peertube_video_id) startPoll();
         // Viewer chat — same access gate as the stream; poll for new messages while open.
         if (hasAccess.value) {
             chatLoading.value = true;
@@ -471,13 +486,17 @@ async function buyStream() {
 
 function startPoll() {
     stopPoll();
+    let attempts = 0;
+    const maxAttempts = Math.ceil((15 * 60000) / 20000); // ~15 min backstop (replay transcoding)
     pollTimer = setInterval(async () => {
         if (!detail.value?.peertube_video_id) return stopPoll();
         detailInfo.value = await getVideoInfo(detail.value.peertube_video_id);
         // re-fetch the author's cached status too (they may have pressed "я в эфире")
         const fresh = await getStreamById(supa(), detail.value.id);
         if (fresh) detail.value = fresh;
-        if (displayState.value !== 'scheduled') stopPoll();
+        attempts += 1;
+        // Stop once the live has resolved AND we're not waiting on a replay, or after the backstop.
+        if ((displayState.value !== 'scheduled' && !replayProcessing.value) || attempts >= maxAttempts) stopPoll();
     }, 20000);
 }
 function stopPoll() {
@@ -557,6 +576,12 @@ watch(
     },
     { immediate: false }
 );
+
+// If a live ends while the viewer is watching, start polling so the replay appears automatically
+// once it finishes transcoding (the load-time start only covers already-ended streams).
+watch(replayProcessing, processing => {
+    if (processing && !pollTimer && detail.value?.peertube_video_id) startPoll();
+});
 
 // ---------- create / author actions ----------
 function cancelForm() {

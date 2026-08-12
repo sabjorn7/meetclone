@@ -2,6 +2,9 @@ import { createRouter, createWebHistory } from 'vue-router';
 
 import wwPage from './views/wwPage.vue';
 import StreamsPage from './views/StreamsPage.vue';
+import PoliticaPage from './views/legal/PoliticaPage.vue';
+import OfertaPage from './views/legal/OfertaPage.vue';
+import SoglasiePage from './views/legal/SoglasiePage.vue';
 
 import {
     initializeData,
@@ -204,7 +207,22 @@ const registerRoute = (page, lang, forcedPath) => {
     });
 };
 
+// Hand-written legal pages override their WeWeb equivalents (full text + tables + tabs; see
+// views/legal/). Registered BEFORE the WeWeb loop so they win route matching, and the matching
+// WeWeb page is skipped so there's no duplicate path.
+const LEGAL_OVERRIDES = [
+    { path: '/politica', name: 'legal-politica', component: PoliticaPage, wwPath: 'politica' },
+    { path: '/oferta', name: 'legal-oferta', component: OfertaPage, wwPath: 'oferta' },
+    // /soglasie is brand-new (no WeWeb page at that path), so no wwPath to skip.
+    { path: '/soglasie', name: 'legal-soglasie', component: SoglasiePage },
+];
+const LEGAL_WW_PATHS = new Set(LEGAL_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
+for (const o of LEGAL_OVERRIDES) {
+    routes.push({ path: o.path, name: o.name, component: o.component });
+}
+
 for (const page of window.wwg_designInfo.pages) {
+    if (LEGAL_WW_PATHS.has(page.paths?.default)) continue; // overridden by a hand-written legal page
     for (const lang of window.wwg_designInfo.langs) {
         if (!page.langs.includes(lang.lang)) continue;
         registerRoute(page, lang);

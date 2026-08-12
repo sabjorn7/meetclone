@@ -26,6 +26,23 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Hand-added standalone page (NOT WeWeb-generated): the /soglasie legal page (see
+// src/_front/views/legal). Needs a physical dist/soglasie/index.html for direct hits/refresh.
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['soglasie-en'] = {
+            ..._tpl,
+            outputDir: './soglasie',
+            title: 'Согласие на обработку персональных данных — МитГуру',
+            meta: [
+                { name: 'title', content: 'Согласие на обработку персональных данных — МитГуру' },
+                { name: 'description', content: 'Согласие на обработку персональных данных на платформе МитГуру.' },
+            ],
+        };
+    }
+}
+
 // Read the main HTML template
 const template = fs.readFileSync(path.resolve(__dirname, 'template.html'), 'utf-8');
 const compiledTemplate = handlebars.compile(template);

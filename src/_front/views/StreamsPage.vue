@@ -214,6 +214,7 @@
                 <!-- Author's own streams -->
                 <section v-if="isStreamer" class="sp-card">
                     <h2>Мои эфиры</h2>
+                    <p v-if="notice" class="sp-notice">{{ notice }}</p>
                     <div v-if="!myStreams.length" class="sp-muted">Пока нет созданных эфиров.</div>
                     <ul v-else class="sp-list">
                         <li v-for="s in myStreams" :key="s.id" class="sp-item">
@@ -221,12 +222,13 @@
                                 <div class="sp-item-title">{{ s.title }}</div>
                                 <div class="sp-item-meta">
                                     <span class="sp-badge" :class="'sp-badge-' + s.status">{{ statusLabel(s.status) }}</span>
+                                    <span v-if="s.hidden" class="sp-badge sp-badge-hidden">Скрыт</span>
                                     <span>{{ priceLabel(s) }}</span>
                                 </div>
                             </div>
                             <div class="sp-item-actions">
                                 <template v-if="confirmDeleteId === s.id">
-                                    <span class="sp-confirm-text">Удалить эфир?</span>
+                                    <span class="sp-confirm-text">Удалить эфир? Если есть купившие — он будет скрыт (они сохранят доступ), иначе удалён полностью.</span>
                                     <button class="sp-btn sp-btn-mini sp-btn-danger" :disabled="busyId === s.id" @click="removeStream(s)">
                                         {{ busyId === s.id ? 'Удаляем…' : 'Да, удалить' }}
                                     </button>
@@ -236,7 +238,7 @@
                                     <button v-if="s.status !== 'live'" class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="goLive(s)">Я в эфире</button>
                                     <button v-else class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="endLive(s)">Завершить</button>
                                     <button class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="showCreds(s)">Данные OBS</button>
-                                    <button v-if="isFreeStream(s)" class="sp-btn sp-btn-mini sp-btn-danger" :disabled="busyId === s.id" @click="confirmDeleteId = s.id">Удалить</button>
+                                    <button v-if="!s.hidden" class="sp-btn sp-btn-mini sp-btn-danger" :disabled="busyId === s.id" @click="confirmDeleteId = s.id">Удалить</button>
                                 </template>
                             </div>
                         </li>
@@ -282,6 +284,7 @@ const showForm = ref(false);
 const creating = ref(false);
 const busyId = ref(null);
 const confirmDeleteId = ref(null);
+const notice = ref('');
 const error = ref('');
 const creds = ref(null);
 const maskKey = ref(false);
@@ -668,11 +671,20 @@ function isFreeStream(s) {
 async function removeStream(s) {
     busyId.value = s.id;
     error.value = '';
+    notice.value = '';
     try {
-        await deleteStream(supa(), s);
-        myStreams.value = myStreams.value.filter(x => x.id !== s.id);
-        listItems.value = listItems.value.filter(x => x.id !== s.id);
+        const action = await deleteStream(supa(), s);
         confirmDeleteId.value = null;
+        // Gone from the public list either way.
+        listItems.value = listItems.value.filter(x => x.id !== s.id);
+        if (action === 'hidden') {
+            // Kept (has buyers) — reflect the hidden state in the author's own list.
+            const it = myStreams.value.find(x => x.id === s.id);
+            if (it) it.hidden = true;
+            notice.value = 'Эфир скрыт: у него есть купившие — они сохранят доступ к записи.';
+        } else {
+            myStreams.value = myStreams.value.filter(x => x.id !== s.id);
+        }
     } catch (e) {
         error.value = e.message || String(e);
     } finally {
@@ -1019,6 +1031,18 @@ onBeforeUnmount(() => {
 .sp-badge-ended {
     background: #eef2f7;
     color: #8a93a2;
+}
+.sp-badge-hidden {
+    background: #fff4e5;
+    color: #b06a00;
+}
+.sp-notice {
+    background: #eef6ff;
+    color: #235a97;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    margin: 0 0 8px;
 }
 
 /* detail */

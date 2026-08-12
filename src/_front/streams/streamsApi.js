@@ -174,24 +174,25 @@ export async function setStreamStatus(supabase, streamId, status) {
 import { deleteLive } from '@/_front/streams/peertubeLive.js';
 
 /**
- * Delete a FREE stream (author-only): removes its PeerTube live video, then the streams row.
- * Paid streams are refused here for now — a paid stream is backed by a course that may have
- * buyers, so its deletion is deferred (see the feature notes).
+ * Delete a stream (author-only). Delegates to the `delete_stream` RPC, which enforces the guard
+ * server-side (caller must be the author via auth.uid()):
+ *   - no purchases  → full hard delete (chat, dangling carts, draft backing course, streams row)
+ *   - has purchases → soft-delete (hidden=true); buyers keep access, money/replay untouched.
+ * On a hard delete we also remove the PeerTube video (best-effort — that needs the API, not the DB).
+ * Returns the action taken: 'deleted' | 'hidden'.
  */
 export async function deleteStream(supabase, stream) {
-    if (Number(stream.price) > 0 || stream.backing_course_id) {
-        throw new Error('Удаление платных эфиров пока недоступно.');
-    }
-    // Best-effort: remove the PeerTube video, but still delete the row even if that fails.
-    if (stream.peertube_video_id) {
+    const { data, error } = await supabase.rpc('delete_stream', { p_stream_id: stream.id });
+    if (error) throw new Error(`Не удалось удалить эфир: ${error.message}`);
+    const action = data?.action;
+    if (action === 'deleted' && data?.peertube_video_id) {
         try {
-            await deleteLive(supabase, stream.peertube_video_id);
+            await deleteLive(supabase, data.peertube_video_id);
         } catch (e) {
             console.warn('[streams] PeerTube video delete failed:', e.message);
         }
     }
-    const { error } = await supabase.from('streams').delete().eq('id', stream.id);
-    if (error) throw new Error(`Не удалось удалить эфир: ${error.message}`);
+    return action; // 'deleted' | 'hidden'
 }
 
 // Public list ordering: live first, then scheduled, then ended; newest first within a group.
@@ -208,9 +209,10 @@ async function attachAuthors(supabase, rows) {
     return rows.map(r => ({ ...r, authorUser: byId[r.author] || null }));
 }
 
-/** All streams for the public list, with authors, ordered live → scheduled → ended. */
+/** All streams for the public list, with authors, ordered live → scheduled → ended.
+ *  Soft-deleted (hidden) streams are excluded from the public browse list. */
 export async function listAllStreams(supabase) {
-    const { data, error } = await supabase.from('streams').select('*');
+    const { data, error } = await supabase.from('streams').select('*').eq('hidden', false);
     if (error) throw new Error(`Не удалось загрузить эфиры: ${error.message}`);
     const rows = await attachAuthors(supabase, data || []);
     return rows.sort(

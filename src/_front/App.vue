@@ -11,7 +11,6 @@ import { reactive, computed, provide, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppHeader from '@/_front/chrome/AppHeader.vue';
 import AppFooter from '@/_front/chrome/AppFooter.vue';
-import { getSupabase } from '@/_front/chrome/headerAccount.js';
 
 // Marketing/public routes that get the new MeetGuru chrome (AppHeader/AppFooter). Add or remove
 // paths here — membership is an exact route.path match. Phase 2 starts with /about_meet only.
@@ -43,14 +42,23 @@ export default {
         // the public catalog instead of an empty "Здравствуйте, undefined" dashboard. Lives here
         // (not in a router guard) because router.js is a large generated file that the Rolldown
         // build chokes on when edited; App.vue is the safe place to hook route changes.
-        async function redirectGuestFromHome(path) {
-            if (normPath(path) !== '/') return;
+        //
+        // Session detection reads localStorage directly instead of sb.auth.getSession(): the latter
+        // is async, depends on the plugin being initialized, AND acquires a Web Locks lock that can
+        // hang on this page. supabase-js persists the session as JSON; a session-shaped value in
+        // storage (has both access_token + refresh_token) means "logged in". Synchronous, no hang.
+        function hasSupabaseSession() {
             try {
-                const sb = getSupabase();
-                if (!sb) return;
-                const { data } = await sb.auth.getSession();
-                if (!data?.session?.user) router.replace('/all_course');
-            } catch (e) { /* on any auth error, stay put */ }
+                for (let i = 0; i < localStorage.length; i++) {
+                    const v = localStorage.getItem(localStorage.key(i));
+                    if (v && v.includes('access_token') && v.includes('refresh_token')) return true;
+                }
+            } catch (e) { return true; } // storage blocked -> fail open, never strand a real user
+            return false;
+        }
+        function redirectGuestFromHome(path) {
+            if (normPath(path) !== '/') return;
+            if (!hasSupabaseSession()) router.replace('/all_course');
         }
         watch(() => route.path, redirectGuestFromHome, { immediate: true });
 

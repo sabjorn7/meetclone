@@ -64,8 +64,8 @@
                     </div>
                 </div>
                 <div v-else class="mgh__auth">
-                    <a class="mgh__login" href="/login" @click.prevent="go('/login')">Войти</a>
-                    <button class="mgh__btn mgh__btn--sm" type="button" @click="go('/registration')">Регистрация</button>
+                    <a class="mgh__login" href="/login" @click.prevent="hardGo('/login')">Войти</a>
+                    <button class="mgh__btn mgh__btn--sm" type="button" @click="hardGo('/registration')">Регистрация</button>
                 </div>
 
                 <button class="mgh__burger" type="button" :aria-expanded="menuOpen ? 'true' : 'false'" aria-label="Меню" @click="menuOpen = !menuOpen">
@@ -82,8 +82,8 @@
                     <a v-for="i in burgerItems" :key="i.path" :href="i.path" @click.prevent="go(i.path)">{{ i.label }}</a>
                 </template>
                 <template v-else>
-                    <a href="/login" @click.prevent="go('/login')">Войти</a>
-                    <a href="/registration" @click.prevent="go('/registration')">Регистрация</a>
+                    <a href="/login" @click.prevent="hardGo('/login')">Войти</a>
+                    <a href="/registration" @click.prevent="hardGo('/registration')">Регистрация</a>
                 </template>
             </nav>
             <button v-if="ctaLabel" class="mgh__btn mgh__btn--block" type="button" @click="$emit('cta')">{{ ctaLabel }}</button>
@@ -152,6 +152,10 @@ const sb = getSupabase();
 
 function toggle(which) { open.value = open.value === which ? null : which; }
 function go(path) { open.value = null; menuOpen.value = false; router.push(path); }
+// Auth transitions (login / register / logout) need a FULL page load: WeWeb keeps its own auth
+// state and its per-page bindings that a client-side router.push leaves stale (the app still
+// looks logged-in/out until a manual refresh). A hard navigation re-initializes everything.
+function hardGo(path) { open.value = null; menuOpen.value = false; window.location.assign(path); }
 
 async function refreshUser() {
     user.value = await loadUser(sb);
@@ -172,9 +176,12 @@ async function doCheckout() {
     catch (e) { err.value = e?.message || 'Ошибка оформления'; busy.value = false; }
 }
 async function doSignOut() {
-    await signOutUser(sb);
-    user.value = null; cart.value = []; open.value = null; menuOpen.value = false;
-    router.push('/login');
+    open.value = null; menuOpen.value = false;
+    try { await signOutUser(sb); } catch (e) { /* best-effort: still hard-navigate below */ }
+    user.value = null; cart.value = [];
+    // Full reload to the public catalog: clears WeWeb's cached auth everywhere (a plain
+    // router.push leaves the app looking logged-in until a manual refresh).
+    window.location.assign('/all_course');
 }
 
 // close dropdowns + burger menu on outside click / Escape

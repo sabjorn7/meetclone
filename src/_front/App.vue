@@ -14,7 +14,7 @@ import AppFooter from '@/_front/chrome/AppFooter.vue';
 
 // Marketing/public routes that get the new MeetGuru chrome (AppHeader/AppFooter). Add or remove
 // paths here — membership is an exact route.path match. Phase 2 starts with /about_meet only.
-const NEW_CHROME_ROUTES = ['/about_meet'];
+const NEW_CHROME_ROUTES = ['/about_meet', '/all_course'];
 
 export default {
     components: { AppHeader, AppFooter },

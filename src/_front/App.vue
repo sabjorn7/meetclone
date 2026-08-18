@@ -28,7 +28,9 @@ export default {
         provide('wwFrontState', wwFrontState);
 
         const route = useRoute();
-        const useNewChrome = computed(() => NEW_CHROME_ROUTES.includes(route.path));
+        // Normalize the trailing slash: direct hits on the live site (nginx) canonicalize
+        // "/about_meet" -> "/about_meet/", which an exact match would miss.
+        const useNewChrome = computed(() => NEW_CHROME_ROUTES.includes(route.path.replace(/\/+$/, '') || '/'));
         // Toggle the gate class so the (non-scoped) CSS below hides the WeWeb chrome only here.
         watch(useNewChrome, (on) => {
             document.documentElement.classList.toggle('mg-newchrome', on);

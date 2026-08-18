@@ -79,14 +79,8 @@
         <div class="mgh__menu" :class="{ 'is-open': menuOpen }">
             <nav class="mgh__menu-nav" aria-label="Меню сайта">
                 <a v-for="i in menuItems.slice(0, 3)" :key="i.path" :href="i.path" @click.prevent="go(i.path)">{{ i.label }}</a>
-                <template v-if="user">
-                    <a href="/profile" @click.prevent="go('/profile')">Профиль</a>
-                    <a href="/my_courses" @click.prevent="go('/my_courses')">Мои курсы</a>
-                    <a href="/my_finanse" @click.prevent="go('/my_finanse')">Финансы</a>
-                    <a href="/chats" @click.prevent="go('/chats')">Чаты</a>
-                    <a href="#" @click.prevent="doSignOut">Выйти</a>
-                </template>
-                <template v-else>
+                <!-- account lives in the avatar dropdown; only the logged-out auth links belong here -->
+                <template v-if="!user">
                     <a href="/login" @click.prevent="go('/login')">Войти</a>
                     <a href="/registration" @click.prevent="go('/registration')">Регистрация</a>
                 </template>
@@ -275,7 +269,7 @@ function ensureFont() {
 .mgh__err { margin: 8px 0 0; color: #c2410c; font-size: 13px; }
 
 /* burger */
-.mgh__burger { position: relative; width: 40px; height: 40px; border: none; background: none; cursor: pointer; }
+.mgh__burger { display: none; position: relative; width: 40px; height: 40px; border: none; background: none; cursor: pointer; } /* desktop: nav is inline, account is in the avatar — no burger */
 .mgh__burger span, .mgh__burger span::before, .mgh__burger span::after { content: ''; position: absolute; left: 9px; width: 22px; height: 2px; border-radius: 2px; background: var(--ink); transition: transform 0.28s var(--ease-out), background 0.1s; }
 .mgh__burger span { top: 19px; }
 .mgh__burger span::before { top: -7px; }
@@ -297,6 +291,7 @@ function ensureFont() {
 @media (max-width: 900px) {
     .mgh__in { padding-inline: 22px; grid-template-columns: auto 1fr auto; }
     .mgh__links { display: none; }
+    .mgh__burger { display: block; }
     .mgh__menu-nav { padding-inline: 22px; }
     .mgh__menu .mgh__btn--block { margin-inline: 22px; width: calc(100% - 44px); }
     .mgh__auth .mgh__btn--sm { display: none; } /* keep just "Войти" + burger on mobile */

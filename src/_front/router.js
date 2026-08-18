@@ -6,7 +6,6 @@ import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
 import FaqPage from './views/FaqPage.vue';
-import PromoDemoPage from './views/PromoDemoPage.vue';
 
 import {
     initializeData,
@@ -242,15 +241,6 @@ routes.push({
     component: StreamsPage,
 });
 
-// Hand-added standalone route (NOT a WeWeb page): the /promo-demo seminar landing (design
-// experiment; see src/_front/views/PromoDemoPage.vue). A physical dist/promo-demo/index.html is
-// produced via a matching entry in vite.config.js so direct hits / refresh don't 404.
-routes.push({
-    path: '/promo-demo',
-    name: 'promo-demo',
-    component: PromoDemoPage,
-});
-
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');
 if (page404) {
     for (const lang of window.wwg_designInfo.langs) {
@@ -344,18 +334,5 @@ router.afterEach((to, from, failure) => {
     initializeData(to);
 });
 /* wwFront:end */
-
-// The home route "/" is the logged-in dashboard ("моя страница"). Guests are sent to the
-// public catalog instead of seeing an empty "Здравствуйте, undefined" dashboard.
-router.beforeEach(async (to) => {
-    const p = (to.path || '').replace(/\/+$/, '') || '/';
-    if (p !== '/') return;
-    try {
-        const sb = window.wwLib?.wwPlugins?.supabase?.instance;
-        if (!sb) return;
-        const { data } = await sb.auth.getSession();
-        if (!data?.session?.user) return '/all_course';
-    } catch (e) { /* on any auth error, let navigation proceed */ }
-});
 
 export default router;

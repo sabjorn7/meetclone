@@ -8,9 +8,10 @@
 
 <script>
 import { reactive, computed, provide, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import AppHeader from '@/_front/chrome/AppHeader.vue';
 import AppFooter from '@/_front/chrome/AppFooter.vue';
+import { getSupabase } from '@/_front/chrome/headerAccount.js';
 
 // Marketing/public routes that get the new MeetGuru chrome (AppHeader/AppFooter). Add or remove
 // paths here — membership is an exact route.path match. Phase 2 starts with /about_meet only.
@@ -28,13 +29,30 @@ export default {
         provide('wwFrontState', wwFrontState);
 
         const route = useRoute();
+        const router = useRouter();
         // Normalize the trailing slash: direct hits on the live site (nginx) canonicalize
         // "/about_meet" -> "/about_meet/", which an exact match would miss.
-        const useNewChrome = computed(() => NEW_CHROME_ROUTES.includes(route.path.replace(/\/+$/, '') || '/'));
+        const normPath = (p) => (p || '').replace(/\/+$/, '') || '/';
+        const useNewChrome = computed(() => NEW_CHROME_ROUTES.includes(normPath(route.path)));
         // Toggle the gate class so the (non-scoped) CSS below hides the WeWeb chrome only here.
         watch(useNewChrome, (on) => {
             document.documentElement.classList.toggle('mg-newchrome', on);
         }, { immediate: true });
+
+        // The home route "/" is the logged-in dashboard ("моя страница"). Guests get redirected to
+        // the public catalog instead of an empty "Здравствуйте, undefined" dashboard. Lives here
+        // (not in a router guard) because router.js is a large generated file that the Rolldown
+        // build chokes on when edited; App.vue is the safe place to hook route changes.
+        async function redirectGuestFromHome(path) {
+            if (normPath(path) !== '/') return;
+            try {
+                const sb = getSupabase();
+                if (!sb) return;
+                const { data } = await sb.auth.getSession();
+                if (!data?.session?.user) router.replace('/all_course');
+            } catch (e) { /* on any auth error, stay put */ }
+        }
+        watch(() => route.path, redirectGuestFromHome, { immediate: true });
 
         return { useNewChrome };
     },

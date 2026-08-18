@@ -105,7 +105,7 @@ const props = defineProps({
         type: Array,
         default: () => ([
             { label: 'Курсы', path: '/all_course' },
-            { label: 'Клуб', path: '/club' },
+            { label: 'Клуб', path: '/clubs' },
             { label: 'Трансляции', path: '/streams' },
             { label: 'Вопросы и ответы', path: '/faq' },
             { label: 'Контакты', path: '/contacts' },

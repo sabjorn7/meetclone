@@ -17,12 +17,31 @@ export function getSupabase() {
     return window.wwLib?.wwPlugins?.supabase?.instance || null;
 }
 
+// Read the persisted Supabase session straight from localStorage instead of sb.auth.getSession().
+// getSession() acquires a Web Locks lock that contends with the app's OWN auth init and can stall
+// page data loading (e.g. the course list never fetches for guests). This is a plain, synchronous,
+// lock-free read. Returns the session object (with .user / .access_token) or null.
+export function readStoredSession() {
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const raw = localStorage.getItem(localStorage.key(i));
+            if (!raw || !raw.includes('access_token') || !raw.includes('refresh_token')) continue;
+            const parsed = JSON.parse(raw);
+            // supabase-js v2 stores the session object directly; older shapes nest it.
+            const sess = parsed?.access_token ? parsed : (parsed?.currentSession || parsed?.session || null);
+            if (sess?.access_token) return sess;
+        }
+    } catch (e) { /* malformed / blocked storage -> treat as no session */ }
+    return null;
+}
+
 // Resolve the logged-in user's `users` row (users.id == auth uid for this project; fall back to email).
+// Guests (no stored session) return null WITHOUT any Supabase call, so the header never touches auth
+// on public pages.
 export async function loadUser(sb) {
     if (!sb) return null;
-    const { data: s } = await sb.auth.getSession();
-    const authUser = s?.session?.user;
-    if (!authUser) return null;
+    const authUser = readStoredSession()?.user;
+    if (!authUser?.id) return null;
     let { data } = await sb.from('users').select(USER_COLS).eq('id', authUser.id).limit(1);
     if (!data?.length && authUser.email) {
         ({ data } = await sb.from('users').select(USER_COLS).eq('email', authUser.email).limit(1));

@@ -192,8 +192,8 @@ function onDocClick(e) {
 function onKey(e) { if (e.key === 'Escape') { open.value = null; menuOpen.value = false; } }
 
 // scroll threshold (boolean toggle, passive) for the optional CTA
-let onScroll, cartChannel, authSub;
-onMounted(() => {
+let onScroll, cartChannel;
+onMounted(async () => {
     ensureFont();
     onScroll = () => { stuck.value = window.scrollY > props.stuckAfter; };
     onScroll();
@@ -201,10 +201,13 @@ onMounted(() => {
     document.addEventListener('click', onDocClick);
     document.addEventListener('keydown', onKey);
 
-    refreshUser();
-    // live cart: `shop` is realtime-enabled — reload on any change to this user's rows.
-    if (sb) {
-        authSub = sb.auth.onAuthStateChange(() => refreshUser());
+    await refreshUser();
+    // Only logged-in users have a cart / need realtime. Guests do ZERO Supabase work here, so the
+    // header never contends the Web Locks auth lock that the app's own session init — and therefore
+    // page data loading (e.g. the course list) — depends on. Login/logout are full navigations
+    // (see hardGo / doSignOut), so the header always re-initializes with fresh auth state; no
+    // onAuthStateChange listener is needed.
+    if (sb && user.value?.id) {
         cartChannel = sb.channel('mgh-cart')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'shop' }, () => reloadCart())
             .subscribe();
@@ -214,7 +217,6 @@ onBeforeUnmount(() => {
     if (onScroll) window.removeEventListener('scroll', onScroll);
     document.removeEventListener('click', onDocClick);
     document.removeEventListener('keydown', onKey);
-    try { authSub?.data?.subscription?.unsubscribe?.(); } catch (e) { /* noop */ }
     try { if (cartChannel && sb) sb.removeChannel(cartChannel); } catch (e) { /* noop */ }
 });
 

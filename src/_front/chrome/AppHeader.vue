@@ -137,7 +137,7 @@ const isCreator = computed(() => ['Спикер', 'Учебное заведен
 const burgerItems = computed(() => {
     const items = [
         { label: 'Все статьи', path: '/articles' },
-        { label: 'Мои курсы', path: '/my_courses' },
+        { label: 'Мои курсы', path: '/' },
         { label: 'Чаты', path: '/chats' },
         { label: 'Все пользователи', path: '/users' },
     ];

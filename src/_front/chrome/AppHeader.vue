@@ -11,7 +11,7 @@
     cta — CTA button clicked (parent handles the action).
 -->
 <template>
-    <header class="mgh" :class="{ 'is-stuck': stuck }">
+    <header class="mgh" :class="{ 'is-stuck': stuck, 'is-guest': !user }">
         <div class="mgh__in">
             <a class="mgh__logo" href="/" @click.prevent="go('/')">meetguru<span>.</span></a>
 
@@ -58,9 +58,7 @@
                     <div v-if="open === 'acct'" class="mgh__dd mgh__dd--acct">
                         <div class="mgh__acct-head">{{ user.Name || user.email }}</div>
                         <a href="/profile" @click.prevent="go('/profile')">Профиль</a>
-                        <a href="/my_courses" @click.prevent="go('/my_courses')">Мои курсы</a>
                         <a href="/my_finanse" @click.prevent="go('/my_finanse')">Финансы<span v-if="user.Ammount != null" class="mgh__bal">{{ money(user.Ammount) }} ₽</span></a>
-                        <a href="/chats" @click.prevent="go('/chats')">Чаты</a>
                         <hr />
                         <button class="mgh__logout" type="button" @click="doSignOut">Выйти</button>
                     </div>
@@ -78,9 +76,12 @@
 
         <div class="mgh__menu" :class="{ 'is-open': menuOpen }">
             <nav class="mgh__menu-nav" aria-label="Меню сайта">
-                <a v-for="i in menuItems.slice(0, 3)" :key="i.path" :href="i.path" @click.prevent="go(i.path)">{{ i.label }}</a>
-                <!-- account lives in the avatar dropdown; only the logged-out auth links belong here -->
-                <template v-if="!user">
+                <!-- primary nav is inline on desktop, so it only shows in the burger on mobile -->
+                <a v-for="i in menuItems.slice(0, 3)" :key="i.path" class="mgh__menu-top" :href="i.path" @click.prevent="go(i.path)">{{ i.label }}</a>
+                <template v-if="user">
+                    <a v-for="i in burgerItems" :key="i.path" :href="i.path" @click.prevent="go(i.path)">{{ i.label }}</a>
+                </template>
+                <template v-else>
                     <a href="/login" @click.prevent="go('/login')">Войти</a>
                     <a href="/registration" @click.prevent="go('/registration')">Регистрация</a>
                 </template>
@@ -129,6 +130,23 @@ const err = ref('');
 const total = computed(() => cartTotal(cart.value));
 const initialsStr = computed(() => initials(user.value));
 function money(n) { return Number(n || 0).toLocaleString('ru-RU'); }
+
+// Content creators (see course/article management). Все пользователи (/users) is a public
+// community directory, so it stays in the "everyone" list below.
+const isCreator = computed(() => ['Спикер', 'Учебное заведение', 'admin'].includes(user.value?.role));
+const burgerItems = computed(() => {
+    const items = [
+        { label: 'Все статьи', path: '/articles' },
+        { label: 'Мои курсы', path: '/my_courses' },
+        { label: 'Чаты', path: '/chats' },
+        { label: 'Все пользователи', path: '/users' },
+    ];
+    if (isCreator.value) {
+        items.push({ label: 'Управление курсами', path: '/courses_manage' });
+        items.push({ label: 'Управление статьями', path: '/articles_manage' });
+    }
+    return items;
+});
 
 const sb = getSupabase();
 
@@ -269,7 +287,9 @@ function ensureFont() {
 .mgh__err { margin: 8px 0 0; color: #c2410c; font-size: 13px; }
 
 /* burger */
-.mgh__burger { display: none; position: relative; width: 40px; height: 40px; border: none; background: none; cursor: pointer; } /* desktop: nav is inline, account is in the avatar — no burger */
+.mgh__burger { position: relative; width: 40px; height: 40px; border: none; background: none; cursor: pointer; }
+.mgh.is-guest .mgh__burger { display: none; } /* guest desktop: nav + auth are already inline */
+.mgh__menu-top { display: none; } /* primary nav is inline on desktop; shown in the burger only on mobile */
 .mgh__burger span, .mgh__burger span::before, .mgh__burger span::after { content: ''; position: absolute; left: 9px; width: 22px; height: 2px; border-radius: 2px; background: var(--ink); transition: transform 0.28s var(--ease-out), background 0.1s; }
 .mgh__burger span { top: 19px; }
 .mgh__burger span::before { top: -7px; }
@@ -291,7 +311,8 @@ function ensureFont() {
 @media (max-width: 900px) {
     .mgh__in { padding-inline: 22px; grid-template-columns: auto 1fr auto; }
     .mgh__links { display: none; }
-    .mgh__burger { display: block; }
+    .mgh.is-guest .mgh__burger { display: block; } /* guest mobile: burger holds nav + auth */
+    .mgh__menu-top { display: block; }
     .mgh__menu-nav { padding-inline: 22px; }
     .mgh__menu .mgh__btn--block { margin-inline: 22px; width: calc(100% - 44px); }
     .mgh__auth .mgh__btn--sm { display: none; } /* keep just "Войти" + burger on mobile */

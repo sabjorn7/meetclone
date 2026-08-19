@@ -1,15 +1,10 @@
 <!--
   Shared renderer for the hand-written legal pages (/politica, /oferta, /soglasie).
-  Standalone (no WeWeb chrome), like StreamsPage. Content is pre-converted HTML (pandoc →
-  cleaned) passed in as `docs`; multiple docs render as tabs (used by /oferta).
+  Content-only: the shared AppHeader/AppFooter are rendered globally by App.vue. Content is
+  pre-converted HTML (pandoc → cleaned) passed in as `docs`; multiple docs render as tabs (/oferta).
 -->
 <template>
     <div class="lp">
-        <header class="lp-header">
-            <a class="lp-brand" href="/">МитГуру</a>
-            <a class="lp-back" href="/" @click.prevent="goBack">← Назад</a>
-        </header>
-
         <main class="lp-main">
             <h1 class="lp-title">{{ title }}</h1>
 
@@ -40,7 +35,6 @@
 
 <script setup>
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
 
 defineProps({
     title: { type: String, required: true },
@@ -49,40 +43,15 @@ defineProps({
 });
 
 const active = ref(0);
-const router = useRouter();
-function goBack() {
-    if (window.history.length > 1) router.back();
-    else router.push('/');
-}
 </script>
 
 <style scoped>
 .lp {
-    min-height: 100vh;
+    min-height: calc(100vh - 62px); /* #app already reserves 62px for the fixed AppHeader */
     background: #f6f7f9;
     color: #1f2733;
     font-family: 'Raleway', system-ui, -apple-system, sans-serif;
 }
-.lp-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 16px 20px;
-}
-.lp-brand {
-    font-weight: 800;
-    font-size: 18px;
-    color: #2e6fd6;
-    text-decoration: none;
-}
-.lp-back {
-    color: #5b6472;
-    text-decoration: none;
-    font-size: 14px;
-}
-.lp-back:hover { color: #2e6fd6; }
 .lp-main {
     max-width: 900px;
     margin: 0 auto;

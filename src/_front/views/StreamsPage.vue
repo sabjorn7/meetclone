@@ -1,9 +1,7 @@
 <template>
     <div class="streams-page">
-        <header class="sp-header">
-            <a class="sp-back" href="/" @click.prevent="goHome">← На главную</a>
-            <h1 class="sp-title">Трансляции</h1>
-        </header>
+        <div class="sp-inner">
+        <h1 class="sp-title">Трансляции</h1>
 
         <!-- ============================ DETAIL VIEW ============================ -->
         <template v-if="activeStreamId">
@@ -246,6 +244,7 @@
                 </section>
             </template>
         </template>
+        </div>
     </div>
 </template>
 
@@ -704,17 +703,14 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .streams-page {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 24px 16px 64px;
+    /* #app already reserves 62px for the fixed AppHeader (rendered globally by App.vue) */
     font-family: inherit;
     color: #1b1f27;
 }
-.sp-header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 20px;
+.sp-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
 }
 .sp-back {
     color: #5b6472;

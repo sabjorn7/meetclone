@@ -1,23 +1,19 @@
 <!--
-  Hand-written /faq override (replaces the WeWeb FAQ page). Standalone, no WeWeb chrome —
-  same visual language as the legal pages (views/legal/LegalPage.vue). Bilingual RU/EN with a
-  switch; content is a plain data object, accordion via native <details> (accessible, no deps).
+  Hand-written /faq override (replaces the WeWeb FAQ page). Content-only: the shared
+  AppHeader/AppFooter are rendered globally by App.vue. Same visual language as the legal pages
+  (views/legal/LegalPage.vue). Bilingual RU/EN with a switch; content is a plain data object,
+  accordion via native <details> (accessible, no deps).
 -->
 <template>
     <div class="fq">
-        <header class="fq-header">
-            <a class="fq-brand" href="/">МитГуру</a>
-            <div class="fq-head-right">
+        <main class="fq-main">
+            <div class="fq-titlerow">
+                <h1 class="fq-title">{{ t.title }}</h1>
                 <div class="fq-lang" role="group" aria-label="Language">
                     <button :class="{ active: lang === 'ru' }" @click="lang = 'ru'">РУС</button>
                     <button :class="{ active: lang === 'en' }" @click="lang = 'en'">ENG</button>
                 </div>
-                <a class="fq-back" href="/" @click.prevent="goBack">{{ t.back }}</a>
             </div>
-        </header>
-
-        <main class="fq-main">
-            <h1 class="fq-title">{{ t.title }}</h1>
             <p class="fq-lead">{{ t.lead }}</p>
 
             <section v-for="(sec, si) in t.sections" :key="si" class="fq-section">
@@ -52,13 +48,6 @@
 
 <script setup>
 import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
-
-const router = useRouter();
-function goBack() {
-    if (window.history.length > 1) router.back();
-    else router.push('/');
-}
 
 // Prefer the browser language on first load; default to Russian.
 const lang = ref(typeof navigator !== 'undefined' && /^en/i.test(navigator.language || '') ? 'en' : 'ru');
@@ -341,30 +330,17 @@ const t = computed(() => CONTENT[lang.value]);
 
 <style scoped>
 .fq {
-    min-height: 100vh;
+    min-height: calc(100vh - 62px); /* #app already reserves 62px for the fixed AppHeader */
     background: #f6f7f9;
     color: #1f2733;
     font-family: 'Raleway', system-ui, -apple-system, sans-serif;
 }
-.fq-header {
+.fq-titlerow {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 16px 20px;
-}
-.fq-brand {
-    font-weight: 800;
-    font-size: 18px;
-    color: #2e6fd6;
-    text-decoration: none;
-}
-.fq-head-right {
-    display: flex;
-    align-items: center;
     gap: 16px;
+    flex-wrap: wrap;
 }
 .fq-lang {
     display: inline-flex;

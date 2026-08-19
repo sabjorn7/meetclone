@@ -19,10 +19,9 @@
                         <h1 class="pd-hero__title" data-reveal>{{ user.Name }}</h1>
                         <p v-if="hook" class="pd-hero__hook" data-reveal>{{ hook }}</p>
                         <div class="pd-hero__cta" data-reveal>
-                            <a v-if="primaryCtaUrl" class="pd-btn pd-btn--lg" :href="primaryCtaUrl" target="_blank" rel="noopener noreferrer">
+                            <a v-if="user.booking_url" class="pd-btn pd-btn--lg" :href="user.booking_url" target="_blank" rel="noopener noreferrer">
                                 Записаться
                             </a>
-                            <button v-else class="pd-btn pd-btn--lg" type="button" @click="scrollTo('courses')">Смотреть курсы</button>
                             <a class="pd-ghost" href="#courses" @click.prevent="scrollTo('courses')">
                                 Смотреть курсы
                                 <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
@@ -222,11 +221,6 @@ const aboutLabel = computed(() => (isSchool.value ? 'О школе' : hasAuthore
 const coursesLabel = computed(() => (isSchool.value ? 'Курсы школы' : 'Курсы автора'));
 // The taken-courses section reads as a portfolio for a specialist, or "education" for a speaker who also teaches.
 const completedLabel = computed(() => (hasAuthored.value ? 'Образование' : 'Пройденные курсы'));
-// Primary "Записаться" target: a real booking link if set, else the best available contact channel.
-const primaryCtaUrl = computed(() => {
-    const u = user.value || {};
-    return u.booking_url || u.telegram_url || u.whatsapp_url || (u.email ? `mailto:${u.email}` : '');
-});
 
 function courseWord(n) {
     const a = Math.abs(n) % 100, b = a % 10;

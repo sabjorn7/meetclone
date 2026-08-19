@@ -20,7 +20,7 @@
                         <p v-if="hook" class="pd-hero__hook" data-reveal>{{ hook }}</p>
                         <div class="pd-hero__cta" data-reveal>
                             <a v-if="user.booking_url" class="pd-btn pd-btn--lg" :href="user.booking_url" target="_blank" rel="noopener noreferrer">
-                                Записаться на приём
+                                Записаться
                             </a>
                             <button v-else class="pd-btn pd-btn--lg" type="button" @click="scrollTo('courses')">Смотреть курсы</button>
                             <a class="pd-ghost" href="#courses" @click.prevent="scrollTo('courses')">
@@ -37,9 +37,9 @@
                         <div class="pd-hero__art-panel">
                             <img v-if="user.Photo" class="pd-hero__avatar" :src="user.Photo" :alt="user.Name" @error="user.Photo = ''" />
                             <span v-else class="pd-hero__avafallback">{{ initials }}</span>
-                            <span v-if="nCourses" class="pd-hero__chip">
+                            <span v-if="nPublished" class="pd-hero__chip">
                                 <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 5h11a2 2 0 0 1 2 2v12l-4-2-4 2V7a2 2 0 0 0-2-2H4z"/></svg>
-                                {{ nCourses }} {{ courseWord(nCourses) }}
+                                {{ nPublished }} {{ courseWord(nPublished) }}
                             </span>
                         </div>
                     </aside>
@@ -47,7 +47,7 @@
             </header>
 
             <!-- ── STATS ────────────────────────────────────────────── -->
-            <section v-if="nCourses" class="pd-stats" ref="statsEl" aria-label="Показатели">
+            <section v-if="nPublished" class="pd-stats" ref="statsEl" aria-label="Показатели">
                 <div class="pd-wrap pd-stats__row">
                     <div class="pd-stat" data-reveal>
                         <span class="pd-stat__n">{{ statCourses }}</span>
@@ -135,6 +135,7 @@ const bioParagraphs = computed(() =>
     (user.value?.Description || '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
 );
 const nCourses = computed(() => user.value?.courses?.length || 0);
+const nPublished = computed(() => courses.value.length); // real, published-only count (shown in UI)
 const nArticles = computed(() => user.value?.articles?.length || 0);
 const nCategories = computed(() => new Set(courses.value.map((c) => c.Category).filter(Boolean)).size);
 const initials = computed(() => {
@@ -160,7 +161,7 @@ const SOCIAL_ICONS = {
     telegram: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4.5 3.5 11.2c-.9.4-.9 1.6 0 1.9l4.2 1.4 1.6 4.9c.3.8 1.2 1 1.8.4l2.3-2.2 4.2 3.1c.7.5 1.7.1 1.9-.7L22.5 6c.2-1-.7-1.8-1.5-1.5zM9.6 14l7.7-4.8-6.3 5.9-.2 3.1-1.2-4.2z"/></svg>',
     youtube: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 8.2a3 3 0 0 0-2.1-2.1C18 5.6 12 5.6 12 5.6s-6 0-7.9.5A3 3 0 0 0 2 8.2 31 31 0 0 0 1.7 12 31 31 0 0 0 2 15.8a3 3 0 0 0 2.1 2.1c1.9.5 7.9.5 7.9.5s6 0 7.9-.5a3 3 0 0 0 2.1-2.1c.3-1.2.3-3.8.3-3.8s0-2.6-.3-3.8zM10 15V9l5.2 3-5.2 3z"/></svg>',
     whatsapp: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-7.7 13.6L3 21l4.5-1.2A9 9 0 1 0 12 3zm5.2 12.7c-.2.6-1.2 1.1-1.7 1.2-.5.1-1 .1-1.6-.1-.4-.1-.9-.3-1.5-.6-2.6-1.1-4.3-3.8-4.4-4-.1-.2-1-1.4-1-2.6 0-1.2.6-1.8.9-2 .2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.7 1.7c.1.2.1.4 0 .5l-.3.5-.3.3c-.1.1-.3.3-.1.6.1.3.7 1.1 1.5 1.8 1 .9 1.8 1.1 2 1.2.3.1.4.1.6-.1l.7-.8c.2-.2.3-.2.6-.1l1.6.8c.3.1.5.2.5.4 0 .1 0 .5-.2 1z"/></svg>',
-    website: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.7 3.8 9S14.5 18.5 12 21c-2.5-2.5-3.8-5.7-3.8-9S9.5 5.5 12 3z"/></svg>',
+    website: '<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.7 3.8 9S14.5 18.5 12 21c-2.5-2.5-3.8-5.7-3.8-9S9.5 5.5 12 3z" fill="none"/></svg>',
 };
 const socials = computed(() => {
     const u = user.value || {};
@@ -231,7 +232,7 @@ function setupStats() {
         statsIo = new IntersectionObserver((es) => {
             if (es[0].isIntersecting && !counted) {
                 counted = true;
-                countUp(statCourses, nCourses.value, 1300);
+                countUp(statCourses, nPublished.value, 1300);
                 countUp(statArticles, nArticles.value, 1000);
                 countUp(statCats, nCategories.value, 900);
                 statsIo.disconnect();
@@ -239,7 +240,7 @@ function setupStats() {
         }, { threshold: 0.4 });
         statsIo.observe(statsEl.value);
     } else {
-        statCourses.value = String(nCourses.value);
+        statCourses.value = String(nPublished.value);
         statArticles.value = String(nArticles.value);
         statCats.value = String(nCategories.value);
     }
@@ -314,8 +315,8 @@ function ensureFonts() {
 
 .pd-hero__art { display: flex; justify-content: center; }
 .pd-hero__art-panel { position: relative; width: 100%; max-width: 420px; aspect-ratio: 1; border-radius: var(--r-lg); background: radial-gradient(120% 120% at 62% 18%, var(--blue-tint), #ffffff 76%); border: 1px solid var(--line); display: grid; place-items: center; padding: 26px; box-shadow: var(--shadow); overflow: hidden; }
-.pd-hero__avatar { width: 78%; height: 78%; object-fit: cover; border-radius: 50%; box-shadow: 0 16px 34px -16px rgba(9, 23, 71, 0.4); }
-.pd-hero__avafallback { display: grid; place-items: center; width: 62%; height: 62%; border-radius: 50%; background: #fff; color: var(--blue-ink); font-weight: 700; font-size: 4rem; box-shadow: 0 16px 34px -16px rgba(9, 23, 71, 0.3); }
+.pd-hero__avatar { width: 100%; height: 100%; object-fit: contain; }
+.pd-hero__avafallback { display: grid; place-items: center; width: 100%; height: 100%; border-radius: var(--r-md); background: #fff; color: var(--blue-ink); font-weight: 700; font-size: 4rem; box-shadow: var(--shadow-sm); }
 .pd-hero__chip { position: absolute; left: 18px; bottom: 18px; display: inline-flex; align-items: center; gap: 7px; padding: 8px 15px; border-radius: var(--r-pill); background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-sm); font-weight: 700; font-size: 14px; color: var(--ink); }
 .pd-hero__chip .pd-ic { width: 18px; height: 18px; color: var(--orange-ink); }
 

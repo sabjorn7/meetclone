@@ -43,6 +43,42 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Hand-added standalone page (NOT WeWeb-generated): the /promo-demo seminar landing (design
+// experiment; see src/_front/views/PromoDemoPage.vue). Needs a physical dist/promo-demo/index.html
+// for direct hits/refresh.
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['promo-demo-en'] = {
+            ..._tpl,
+            outputDir: './promo-demo',
+            title: 'Энергетические нарушения — семинар доктора Крутова — МитГуру',
+            meta: [
+                { name: 'title', content: 'Энергетические нарушения — семинар доктора Крутова — МитГуру' },
+                { name: 'description', content: 'Семинар по прикладной кинезиологии: как энергетические нарушения проявляются на уровне тела. 28 августа, 18:30, онлайн.' },
+            ],
+        };
+    }
+}
+
+// Hand-added standalone page (NOT WeWeb-generated): the /profile-demo promo-styled public profile
+// (DEMO; see src/_front/views/ProfileDemoPage.vue). Needs a physical dist/profile-demo/index.html
+// for direct hits/refresh (no SPA fallback).
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['profile-demo-en'] = {
+            ..._tpl,
+            outputDir: './profile-demo',
+            title: 'Профиль — МитГуру',
+            meta: [
+                { name: 'title', content: 'Профиль — МитГуру' },
+                { name: 'description', content: 'Публичный профиль автора на платформе МитГуру.' },
+            ],
+        };
+    }
+}
+
 // Read the main HTML template
 const template = fs.readFileSync(path.resolve(__dirname, 'template.html'), 'utf-8');
 const compiledTemplate = handlebars.compile(template);

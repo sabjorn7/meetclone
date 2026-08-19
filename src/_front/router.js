@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 
 import wwPage from './views/wwPage.vue';
 import StreamsPage from './views/StreamsPage.vue';
+import ProfileDemoPage from './views/ProfileDemoPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -239,6 +240,15 @@ routes.push({
     path: '/streams',
     name: 'streams',
     component: StreamsPage,
+});
+
+// Hand-added standalone route (NOT a WeWeb page): DEMO promo-styled public profile
+// (/profile-demo?user=<uuid>; see src/_front/views/ProfileDemoPage.vue). A physical
+// dist/profile-demo/index.html is produced via a matching entry in vite.config.js.
+routes.push({
+    path: '/profile-demo',
+    name: 'profile-demo',
+    component: ProfileDemoPage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

@@ -61,8 +61,8 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
-// Hand-added standalone page (NOT WeWeb-generated): the /profile-demo promo-styled public profile
-// (DEMO; see src/_front/views/ProfileDemoPage.vue). Needs a physical dist/profile-demo/index.html
+// Hand-added standalone page: the /profile-demo alias of the public profile (ProfilePage.vue; the
+// canonical route is the WeWeb /profile_page override). Needs a physical dist/profile-demo/index.html
 // for direct hits/refresh (no SPA fallback).
 {
     const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];

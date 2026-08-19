@@ -22,8 +22,8 @@ import { isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
 // once that page is verified live with the fixed header. The hand-written pages (streams/faq/legal)
 // are content-only now and rely on this chrome, so they are intentionally NOT excluded.
 const CHROME_EXCLUDE = [
-    // account / product
-    '/profile', '/profile_page', '/my_finanse', '/my_courses', '/dashboard', '/feedback',
+    // account / product ( /profile_page is the redesigned public profile — it gets the new chrome)
+    '/profile', '/my_finanse', '/my_courses', '/dashboard', '/feedback',
     // creator management (courses_manage runs coursesManageStyle.js — verify before enabling)
     '/courses_manage', '/articles_manage',
     // admin

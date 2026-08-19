@@ -1,9 +1,10 @@
 <!--
-  ProfileDemoPage.vue — DEMO / EXPERIMENT: a public speaker/school profile rendered in the
-  /promo-demo visual language (route: /profile-demo?user=<uuid>). Content-only — the shared
-  AppHeader/AppFooter come from App.vue. Profile + published courses are fetched from Supabase via
-  the shared client. Reuses the MeetGuru brand palette (navy/blue + orange spark), Onest, and the
-  pd-* design system from PromoDemoPage.vue. Primary CTA → the author's booking_url (fallback: courses).
+  ProfilePage.vue — the public profile page (overrides the WeWeb /profile_page; also served at
+  /profile-demo). route: /profile_page?user=<uuid>. Content-only — the shared AppHeader/AppFooter
+  come from App.vue. Fetches the users row + their courses/taken courses/articles from Supabase and
+  renders them in the MeetGuru brand language (navy/blue + orange, Onest, pd-* design system).
+  Persona-aware (speaker/school catalog vs specialist portfolio); honours users.hide = { my, buy }.
+  Primary "Записаться" CTA shows only when booking_url is set.
 -->
 <template>
     <main class="pd" :class="{ 'is-ready': ready }" ref="rootEl">
@@ -176,7 +177,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
-import { getSupabase } from '@/_front/chrome/headerAccount.js';
+import { getSupabase, authCookieUser } from '@/_front/chrome/headerAccount.js';
 
 const route = useRoute();
 const rootEl = ref(null);
@@ -292,13 +293,15 @@ async function fetchCourses(sb, ids, publishedOnly) {
 }
 
 async function load() {
-    const uid = route.query.user;
+    // ?user=<uuid> selects whose profile to show; bare /profile_page falls back to the logged-in user.
+    const uid = route.query.user || authCookieUser()?.id;
     const sb = getSupabase();
     if (!uid || !sb) { loading.value = false; return; }
     const { data } = await sb.from('users')
         .select('id, "Name", "Photo", role, "Description", email, vk_url, youtube_url, telegram_url, whatsapp_url, website_url, booking_url, courses, articles, hide')
         .eq('id', uid).limit(1);
     user.value = data?.[0] || null;
+    if (user.value?.Name) document.title = `${user.value.Name} — МитГуру`;
     // Authored courses (published only) — the speaker/school catalog. Free first, then newest.
     courses.value = (await fetchCourses(sb, user.value?.courses, true))
         .sort((a, b) => (Number(!!b.Free) - Number(!!a.Free)) || String(b.created_at).localeCompare(String(a.created_at)));

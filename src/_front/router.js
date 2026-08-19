@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 
 import wwPage from './views/wwPage.vue';
 import StreamsPage from './views/StreamsPage.vue';
-import ProfileDemoPage from './views/ProfileDemoPage.vue';
+import ProfilePage from './views/ProfilePage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -218,6 +218,8 @@ const PAGE_OVERRIDES = [
     // /soglasie is brand-new (no WeWeb page at that path), so no wwPath to skip.
     { path: '/soglasie', name: 'legal-soglasie', component: SoglasiePage },
     { path: '/faq', name: 'faq', component: FaqPage, wwPath: 'faq' },
+    // Public profile: promo-styled ProfilePage replaces the WeWeb /profile_page (reads ?user=<uuid>).
+    { path: '/profile_page', name: 'profile-page', component: ProfilePage, wwPath: 'profile_page' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {
@@ -242,13 +244,13 @@ routes.push({
     component: StreamsPage,
 });
 
-// Hand-added standalone route (NOT a WeWeb page): DEMO promo-styled public profile
-// (/profile-demo?user=<uuid>; see src/_front/views/ProfileDemoPage.vue). A physical
+// Standalone alias for the public profile (same ProfilePage component as the /profile_page override
+// above). Kept so older /profile-demo?user=<uuid> links still resolve; a physical
 // dist/profile-demo/index.html is produced via a matching entry in vite.config.js.
 routes.push({
     path: '/profile-demo',
     name: 'profile-demo',
-    component: ProfileDemoPage,
+    component: ProfilePage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

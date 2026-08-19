@@ -52,26 +52,29 @@ export async function courseInCart(sb, courseId, uid) {
 }
 
 // PAID → ADD to cart only — clone of the WeWeb NewCourse insert (90ddb3ae): one `shop` row for this
-// course (owner / price=Price / status:'cart' / prolong:12 / position / quantity:1 / course_id /
-// course_name). `is_renewal` is left to its DB default (false; audit-only, does not branch n8n logic).
-// NO order and NO redirect — the user reviews the header cart and checks out from there. Guards against
-// a duplicate row so repeated clicks don't stack the same course. Returns true if a row was inserted.
-export async function addToCart(sb, { buyer, course }) {
+// course (owner / status:'cart' / prolong:12 / position / quantity:1 / course_id / course_name).
+// `renewal` mirrors WeWeb's owner branch: a renewal charges `DurationPrice` and stamps `is_renewal`
+// (audit-only, does not branch n8n logic); a fresh buy charges `Price` and leaves `is_renewal` at its
+// DB default (false). NO order and NO redirect — the user reviews the header cart and checks out from
+// there. Guards against a duplicate row so repeated clicks don't stack the same course. Returns true
+// if a row was inserted.
+export async function addToCart(sb, { buyer, course, renewal = false }) {
     if (await courseInCart(sb, course.id, buyer.id)) return false; // already in cart → header shows it
     const { count } = await sb.from('shop')
         .select('id', { count: 'exact', head: true })
         .eq('owner', buyer.id).eq('status', 'cart');
-    const { error } = await sb.from('shop')
-        .insert({
-            owner: buyer.id,
-            price: course.Price,
-            status: 'cart',
-            prolong: 12,
-            position: (count || 0) + 1,
-            quantity: 1,
-            course_id: course.id,
-            course_name: course.Title,
-        });
+    const row = {
+        owner: buyer.id,
+        price: renewal ? course.DurationPrice : course.Price,
+        status: 'cart',
+        prolong: 12,
+        position: (count || 0) + 1,
+        quantity: 1,
+        course_id: course.id,
+        course_name: course.Title,
+    };
+    if (renewal) row.is_renewal = true;
+    const { error } = await sb.from('shop').insert(row);
     if (error) throw new Error(`Корзина: ${error.message}`);
     return true;
 }

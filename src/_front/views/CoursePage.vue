@@ -39,7 +39,11 @@
                                 <span class="pd-buycard__now">{{ priceText }}</span>
                                 <span v-if="course.old_price" class="pd-buycard__old">{{ money(course.old_price) }} ₽</span>
                             </div>
-                            <a v-if="owns" class="pd-btn pd-btn--lg pd-btn--block" href="/my_courses">Уже в библиотеке</a>
+                            <template v-if="owns">
+                                <button v-if="canRenew" class="pd-btn pd-btn--lg pd-btn--block" type="button" :disabled="buying" @click="onRenew">{{ renewLabel }}</button>
+                                <a v-else class="pd-btn pd-btn--lg pd-btn--block" href="/my_courses">Уже в библиотеке</a>
+                                <a v-if="canRenew" class="pd-owned-link" href="/my_courses">Уже куплено — открыть в «Мои курсы»</a>
+                            </template>
                             <button v-else class="pd-btn pd-btn--lg pd-btn--block" type="button" :disabled="buying" @click="onBuy">{{ ctaLabel }}</button>
                             <p v-if="buyError" class="pd-buyerr">{{ buyError }}</p>
                             <ul class="pd-statlist">
@@ -147,9 +151,14 @@
                                 {{ course.Free ? 'Бесплатно' : money(course.Price) }}<span v-if="!course.Free" class="cur"> ₽</span>
                             </div>
                             <p v-if="course.old_price" class="pd-price__old">{{ money(course.old_price) }} ₽</p>
-                            <a v-if="owns" class="pd-btn pd-btn--lg pd-btn--block" href="/my_courses">Уже в библиотеке</a>
+                            <template v-if="owns">
+                                <button v-if="canRenew" class="pd-btn pd-btn--lg pd-btn--block" type="button" :disabled="buying" @click="onRenew">{{ renewLabel }}</button>
+                                <a v-else class="pd-btn pd-btn--lg pd-btn--block" href="/my_courses">Уже в библиотеке</a>
+                            </template>
                             <button v-else class="pd-btn pd-btn--lg pd-btn--block" type="button" :disabled="buying" @click="onBuy">{{ ctaLabel }}</button>
                             <p v-if="buyError" class="pd-buyerr">{{ buyError }}</p>
+                            <p v-else-if="canRenew && inCart" class="pd-price__demo">Продление в корзине — оформите заказ (значок в шапке).</p>
+                            <p v-else-if="canRenew" class="pd-price__demo">Курс уже у вас — можно продлить доступ или открыть в «Мои курсы».</p>
                             <p v-else-if="owns" class="pd-price__demo">Курс уже у вас — смотрите в разделе «Мои курсы».</p>
                             <p v-else-if="inCart" class="pd-price__demo">Курс в корзине — оформите заказ в корзине (значок в шапке).</p>
                         </div>
@@ -250,12 +259,18 @@ const learnItems = computed(() => bullets(course.value?.WhatTeach));
 const forItems = computed(() => bullets(course.value?.For));
 const priceText = computed(() => (course.value?.Free ? 'Бесплатно' : `${money(course.value?.Price)} ₽`));
 const videoEmbed = computed(() => (course.value?.video_id ? embedUrl(course.value.video_id) : ''));
-// CTA label follows purchase state: owner → library, free → free enroll, in-cart → cart, else buy.
+// CTA label for the NON-owner button: free enroll, in-cart, or buy.
 const ctaLabel = computed(() => {
-    if (owns.value) return 'Уже в библиотеке';
     if (buying.value) return 'Секунду…';
     if (course.value?.Free) return 'Получить бесплатно';
     return inCart.value ? 'В корзине — оформить' : 'Купить';
+});
+// Renewal is offered to owners only when the author set a positive DurationPrice (parity with the
+// WeWeb course_info owner branch; DurationPrice<=0 → no self-serve renewal, just the library link).
+const canRenew = computed(() => owns.value && Number(course.value?.DurationPrice) > 0);
+const renewLabel = computed(() => {
+    if (buying.value) return 'Секунду…';
+    return inCart.value ? 'Продление в корзине — оформить' : `Продлить за ${money(course.value?.DurationPrice)} ₽`;
 });
 
 // Ask the shared AppHeader to open its cart dropdown (and reload it), so the user sees the item and
@@ -266,24 +281,25 @@ function openHeaderCart() {
     setTimeout(() => window.dispatchEvent(new CustomEvent('mg-open-cart')), 0);
 }
 
-// Single entry point for the CTA. Guests → /login; owners never reach here (they get a link).
-async function onBuy() {
-    if (buying.value || owns.value) return;
+// Add this course to the cart. `renewal` = an owner extending access (charges DurationPrice); false =
+// a fresh purchase (charges Price). Guests → /login; free courses are granted directly (not renewable).
+async function addCourse(renewal) {
+    if (buying.value) return;
     buyError.value = '';
     if (!buyerId.value) { window.location.assign('/login'); return; }
-    // Paid course already in the cart → just open the header cart to finish there (no DB write).
-    if (!course.value.Free && inCart.value) { openHeaderCart(); return; }
+    // Already in the cart → just open the header cart to finish there (no DB write).
+    if (inCart.value) { openHeaderCart(); return; }
     buying.value = true;
     try {
         const sb = getSupabase();
         if (!buyer.value) buyer.value = await getBuyerRow(sb, buyerId.value);
         if (!buyer.value) throw new Error('Не удалось определить пользователя.');
-        if (course.value.Free) {
+        if (!renewal && course.value.Free) {
             await enrollFree(sb, { buyer: buyer.value, course: course.value });
             window.location.assign('/my_courses'); // free access granted → straight to the library
         } else {
             // ADD to cart only — no order, no redirect. Checkout is done from the header cart.
-            await addToCart(sb, { buyer: buyer.value, course: course.value });
+            await addToCart(sb, { buyer: buyer.value, course: course.value, renewal });
             inCart.value = true;
             openHeaderCart();
         }
@@ -293,6 +309,8 @@ async function onBuy() {
         buying.value = false;
     }
 }
+function onBuy() { if (!owns.value) addCourse(false); }   // fresh purchase (non-owner CTA)
+function onRenew() { addCourse(true); }                    // owner extends access
 const authorHref = computed(() => (author.value ? `/profile_page?user=${author.value.id}` : '#'));
 const authorInitials = computed(() => {
     const parts = (author.value?.Name || '').split(/\s+/).filter(Boolean);
@@ -346,8 +364,8 @@ async function load() {
         buyerId.value = readStoredSession()?.user?.id || null;
         if (buyerId.value) {
             owns.value = await ownsCourse(sb, course.value.id, buyerId.value);
-            // for paid courses the viewer doesn't own, note if it's already in their cart
-            if (!owns.value && !course.value.Free) inCart.value = await courseInCart(sb, course.value.id, buyerId.value);
+            // for any paid course, note if it's already in the cart (a fresh buy OR an owner's renewal)
+            if (!course.value.Free) inCart.value = await courseInCart(sb, course.value.id, buyerId.value);
         }
     }
     loading.value = false;
@@ -402,6 +420,8 @@ button.pd-btn { font-family: inherit; }
 .pd-btn:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
 @media (hover: hover) and (pointer: fine) { .pd-btn:disabled:hover { background: var(--blue); transform: none; box-shadow: none; } }
 .pd-buyerr { margin: 12px 0 0; text-align: center; font-size: 0.85rem; color: #c0392b; }
+.pd-owned-link { display: block; margin: 12px 0 0; text-align: center; font-size: 0.9rem; color: var(--blue-ink); text-decoration: none; }
+@media (hover: hover) and (pointer: fine) { .pd-owned-link:hover { text-decoration: underline; } }
 
 /* ── Hero (course) ──────────────────────────────────────────────────────── */
 .pd-hero { position: relative; padding: 54px 0 74px; overflow: hidden; }

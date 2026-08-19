@@ -169,11 +169,29 @@
 
         <div v-else-if="loading" class="pd-state">Загрузка курса…</div>
         <div v-else class="pd-state">Курс не найден.</div>
+
+        <!-- Guest auth prompt (same offer as /all_course: войти / зарегистрироваться, without leaving) -->
+        <transition name="pd-modal">
+            <div v-if="showAuthModal" class="pd-modal" role="dialog" aria-modal="true" aria-labelledby="pd-auth-title" @click.self="showAuthModal = false">
+                <div class="pd-modal__card">
+                    <button class="pd-modal__x" type="button" aria-label="Закрыть" @click="showAuthModal = false">×</button>
+                    <div class="pd-modal__ic" aria-hidden="true">
+                        <svg viewBox="0 0 24 24"><path d="M16 12H5m0 0 3.5-3.5M5 12l3.5 3.5" fill="none"/><path d="M12 3h6a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-6" fill="none"/></svg>
+                    </div>
+                    <h2 id="pd-auth-title" class="pd-modal__title">Войдите, чтобы продолжить</h2>
+                    <p class="pd-modal__text">Чтобы купить курс, войдите в аккаунт или зарегистрируйтесь — это займёт минуту.</p>
+                    <div class="pd-modal__actions">
+                        <a class="pd-btn pd-btn--lg pd-btn--block" href="/login">Войти</a>
+                        <a class="pd-btn pd-btn--lg pd-btn--block pd-btn--ghost" href="/registration">Зарегистрироваться</a>
+                    </div>
+                </div>
+            </div>
+        </transition>
     </main>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
@@ -195,6 +213,7 @@ const owns = ref(false);     // already has a user_course row for this course
 const inCart = ref(false);   // this course is already in the header cart (status='cart')
 const buying = ref(false);   // in-flight add/enroll (disables the CTA)
 const buyError = ref('');
+const showAuthModal = ref(false); // guest clicked Купить/Продлить → login/register prompt
 
 function plural(n, forms) {
     const a = Math.abs(n) % 100, b = a % 10;
@@ -286,7 +305,8 @@ function openHeaderCart() {
 async function addCourse(renewal) {
     if (buying.value) return;
     buyError.value = '';
-    if (!buyerId.value) { window.location.assign('/login'); return; }
+    // Guest → offer login/register in a popup (stay on the page), matching the /all_course flow.
+    if (!buyerId.value) { showAuthModal.value = true; return; }
     // Already in the cart → just open the header cart to finish there (no DB write).
     if (inCart.value) { openHeaderCart(); return; }
     buying.value = true;
@@ -375,6 +395,18 @@ async function load() {
 
 onMounted(() => { ensureFonts(); load(); });
 
+// Auth modal: close on Escape, and lock body scroll while it's open.
+function onModalKey(e) { if (e.key === 'Escape') showAuthModal.value = false; }
+watch(showAuthModal, (open) => {
+    document.body.style.overflow = open ? 'hidden' : '';
+    if (open) document.addEventListener('keydown', onModalKey);
+    else document.removeEventListener('keydown', onModalKey);
+});
+onBeforeUnmount(() => {
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', onModalKey);
+});
+
 function ensureFonts() {
     if (document.getElementById('pd-fonts')) return;
     const l = document.createElement('link');
@@ -419,9 +451,31 @@ function ensureFonts() {
 button.pd-btn { font-family: inherit; }
 .pd-btn:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
 @media (hover: hover) and (pointer: fine) { .pd-btn:disabled:hover { background: var(--blue); transform: none; box-shadow: none; } }
+.pd-btn--ghost { background: transparent; color: var(--blue-ink); border: 1.5px solid var(--line); box-shadow: none; }
+@media (hover: hover) and (pointer: fine) { .pd-btn--ghost:hover { background: var(--blue-tint); border-color: var(--blue-soft); box-shadow: none; } }
 .pd-buyerr { margin: 12px 0 0; text-align: center; font-size: 0.85rem; color: #c0392b; }
 .pd-owned-link { display: block; margin: 12px 0 0; text-align: center; font-size: 0.9rem; color: var(--blue-ink); text-decoration: none; }
 @media (hover: hover) and (pointer: fine) { .pd-owned-link:hover { text-decoration: underline; } }
+
+/* ── Auth prompt modal ──────────────────────────────────────────────────── */
+.pd-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 22px; background: rgba(9, 23, 71, 0.44); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+.pd-modal__card { position: relative; width: 100%; max-width: 420px; background: var(--surface); border-radius: var(--r-lg); padding: 40px 36px 34px; box-shadow: 0 34px 80px -34px rgba(9, 23, 71, 0.55); text-align: center; }
+.pd-modal__x { position: absolute; top: 14px; right: 16px; width: 34px; height: 34px; border: none; border-radius: 50%; background: transparent; color: var(--ink-3); font-size: 26px; line-height: 1; cursor: pointer; transition: background 0.16s var(--ease-out), color 0.16s var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .pd-modal__x:hover { background: var(--bg-tint); color: var(--ink); } }
+.pd-modal__ic { width: 60px; height: 60px; margin: 0 auto 20px; border-radius: 50%; background: var(--blue-tint); color: var(--blue-ink); display: grid; place-items: center; }
+.pd-modal__ic svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.pd-modal__title { margin: 0 0 10px; font-weight: 700; font-size: 1.5rem; letter-spacing: -0.02em; line-height: 1.15; }
+.pd-modal__text { margin: 0 auto 26px; max-width: 34ch; color: var(--ink-2); font-size: 1rem; }
+.pd-modal__actions { display: grid; gap: 12px; }
+
+.pd-modal-enter-active, .pd-modal-leave-active { transition: opacity 0.2s var(--ease-out); }
+.pd-modal-enter-active .pd-modal__card, .pd-modal-leave-active .pd-modal__card { transition: transform 0.22s var(--ease-out), opacity 0.22s var(--ease-out); }
+.pd-modal-enter-from, .pd-modal-leave-to { opacity: 0; }
+.pd-modal-enter-from .pd-modal__card, .pd-modal-leave-to .pd-modal__card { opacity: 0; transform: translateY(10px) scale(0.96); }
+@media (prefers-reduced-motion: reduce) {
+    .pd-modal-enter-active, .pd-modal-leave-active, .pd-modal-enter-active .pd-modal__card, .pd-modal-leave-active .pd-modal__card { transition: opacity 0.15s ease; }
+    .pd-modal-enter-from .pd-modal__card, .pd-modal-leave-to .pd-modal__card { transform: none; }
+}
 
 /* ── Hero (course) ──────────────────────────────────────────────────────── */
 .pd-hero { position: relative; padding: 54px 0 74px; overflow: hidden; }

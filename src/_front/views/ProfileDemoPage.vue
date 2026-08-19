@@ -19,7 +19,7 @@
                         <h1 class="pd-hero__title" data-reveal>{{ user.Name }}</h1>
                         <p v-if="hook" class="pd-hero__hook" data-reveal>{{ hook }}</p>
                         <div class="pd-hero__cta" data-reveal>
-                            <a v-if="user.booking_url" class="pd-btn pd-btn--lg" :href="user.booking_url" target="_blank" rel="noopener noreferrer">
+                            <a v-if="primaryCtaUrl" class="pd-btn pd-btn--lg" :href="primaryCtaUrl" target="_blank" rel="noopener noreferrer">
                                 Записаться
                             </a>
                             <button v-else class="pd-btn pd-btn--lg" type="button" @click="scrollTo('courses')">Смотреть курсы</button>
@@ -222,6 +222,11 @@ const aboutLabel = computed(() => (isSchool.value ? 'О школе' : hasAuthore
 const coursesLabel = computed(() => (isSchool.value ? 'Курсы школы' : 'Курсы автора'));
 // The taken-courses section reads as a portfolio for a specialist, or "education" for a speaker who also teaches.
 const completedLabel = computed(() => (hasAuthored.value ? 'Образование' : 'Пройденные курсы'));
+// Primary "Записаться" target: a real booking link if set, else the best available contact channel.
+const primaryCtaUrl = computed(() => {
+    const u = user.value || {};
+    return u.booking_url || u.telegram_url || u.whatsapp_url || (u.email ? `mailto:${u.email}` : '');
+});
 
 function courseWord(n) {
     const a = Math.abs(n) % 100, b = a % 10;
@@ -402,8 +407,10 @@ function ensureFonts() {
 .pd-badge { display: inline-flex; align-items: center; gap: 9px; padding: 8px 16px; border-radius: var(--r-pill); background: var(--blue-tint); color: var(--blue-ink); font-weight: 600; font-size: 14px; }
 .pd-badge__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 4px rgba(240, 145, 87, 0.22); }
 .pd-hero__title { margin: 22px 0 0; font-weight: 700; font-size: clamp(2.2rem, 5.2vw, 4rem); line-height: 1.02; letter-spacing: -0.025em; }
-.pd-hero__hook { margin: 22px 0 30px; max-width: 52ch; font-size: 1.14rem; color: var(--ink-2); }
-.pd-hero__cta { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.pd-hero__hook { margin: 22px 0 0; max-width: 52ch; font-size: 1.14rem; color: var(--ink-2); }
+/* margin-top keeps a gap above the CTA whether or not the bio hook is present (short/no-bio profiles
+   otherwise let the button ride up against the name). */
+.pd-hero__cta { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-top: 30px; }
 .pd-socials { display: flex; gap: 12px; margin-top: 28px; }
 .pd-social { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--blue-tint); color: var(--blue-ink); transition: transform 0.16s var(--ease-out), background 0.16s var(--ease-out), color 0.16s var(--ease-out); }
 .pd-social :deep(svg) { width: 22px; height: 22px; fill: currentColor; }

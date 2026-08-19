@@ -175,9 +175,7 @@
             <div v-if="showAuthModal" class="pd-modal" role="dialog" aria-modal="true" aria-labelledby="pd-auth-title" @click.self="showAuthModal = false">
                 <div class="pd-modal__card">
                     <button class="pd-modal__x" type="button" aria-label="Закрыть" @click="showAuthModal = false">×</button>
-                    <div class="pd-modal__ic" aria-hidden="true">
-                        <svg viewBox="0 0 24 24"><path d="M16 12H5m0 0 3.5-3.5M5 12l3.5 3.5" fill="none"/><path d="M12 3h6a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-6" fill="none"/></svg>
-                    </div>
+                    <img class="pd-modal__mascot" src="/images/minime-06.png" alt="" aria-hidden="true" width="626" height="626" />
                     <h2 id="pd-auth-title" class="pd-modal__title">Войдите, чтобы продолжить</h2>
                     <p class="pd-modal__text">Чтобы купить курс, войдите в аккаунт или зарегистрируйтесь — это займёт минуту.</p>
                     <div class="pd-modal__actions">
@@ -355,14 +353,17 @@ function fmtDate(iso) {
     return isNaN(d.getTime()) ? '' : d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function load() {
-    const slug = route.params.slug || route.query.slug;
-    const id = route.query.id;
+    // The path/query identifier is a slug OR an id (site convention /course/<slug||id>: a course
+    // without a slug is linked by its uuid). Resolve by shape so both forms load.
+    const key = route.params.slug || route.query.slug || route.query.id;
     const sb = getSupabase();
-    if (!sb || (!slug && !id)) { loading.value = false; return; }
+    if (!sb || !key) { loading.value = false; return; }
     let q = sb.from('course')
         .select('id, "Title", "Decription", "WhatTeach", "For", "Price", "Free", old_price, "Category", video_id, "Less_Id", "DurationLong", "DurationPrice", owner, slug, comment, rating');
-    q = slug ? q.eq('slug', slug) : q.eq('id', id);
+    q = UUID_RE.test(key) ? q.eq('id', key) : q.eq('slug', key);
     const { data } = await q.limit(1);
     course.value = data?.[0] || null;
     if (course.value) {
@@ -462,8 +463,7 @@ button.pd-btn { font-family: inherit; }
 .pd-modal__card { position: relative; width: 100%; max-width: 420px; background: var(--surface); border-radius: var(--r-lg); padding: 40px 36px 34px; box-shadow: 0 34px 80px -34px rgba(9, 23, 71, 0.55); text-align: center; }
 .pd-modal__x { position: absolute; top: 14px; right: 16px; width: 34px; height: 34px; border: none; border-radius: 50%; background: transparent; color: var(--ink-3); font-size: 26px; line-height: 1; cursor: pointer; transition: background 0.16s var(--ease-out), color 0.16s var(--ease-out); }
 @media (hover: hover) and (pointer: fine) { .pd-modal__x:hover { background: var(--bg-tint); color: var(--ink); } }
-.pd-modal__ic { width: 60px; height: 60px; margin: 0 auto 20px; border-radius: 50%; background: var(--blue-tint); color: var(--blue-ink); display: grid; place-items: center; }
-.pd-modal__ic svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.pd-modal__mascot { display: block; width: 132px; height: auto; margin: 0 auto 18px; }
 .pd-modal__title { margin: 0 0 10px; font-weight: 700; font-size: 1.5rem; letter-spacing: -0.02em; line-height: 1.15; }
 .pd-modal__text { margin: 0 auto 26px; max-width: 34ch; color: var(--ink-2); font-size: 1rem; }
 .pd-modal__actions { display: grid; gap: 12px; }

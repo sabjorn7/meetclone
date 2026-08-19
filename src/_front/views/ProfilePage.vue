@@ -234,8 +234,10 @@ function courseWord(n) {
     return 'курсов';
 }
 function money(n) { return Number(n || 0).toLocaleString('ru-RU'); }
-function courseHref(c) { return `/course/${c.id}`; }
-function articleHref(a) { return `/articles/${a.id}`; }
+// Human-readable slug URLs (the site convention: slug || id fallback, same as my_courses/Home).
+// A course/article without a slug falls back to its id; the target pages resolve either form.
+function courseHref(c) { return `/course/${c.slug || c.id}`; }
+function articleHref(a) { return `/articles/${a.slug || a.id}`; }
 
 const SOCIAL_ICONS = {
     vk: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.8 16.3c-5 0-8-3.5-8.1-9.3h2.5c.1 4.3 2 6.1 3.5 6.5V7h2.4v3.6c1.5-.2 3-1.8 3.6-3.6h2.4c-.5 2.2-2.1 3.8-3.2 4.5 1.1.6 2.9 2 3.6 4.8h-2.6c-.5-1.7-1.9-3-3.8-3.2v3.2h-.3z"/></svg>',

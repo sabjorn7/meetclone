@@ -710,9 +710,14 @@ onBeforeUnmount(() => {
     color: #1b1f27;
 }
 .sp-inner {
-    max-width: 900px;
+    /* Match the header container width so content aligns with the logo (left) and the
+       Регистрация button (right). Extra top padding nudges the whole block down. */
+    max-width: 1200px;
     margin: 0 auto;
-    padding: 24px 16px 64px;
+    padding: 44px 40px 64px;
+}
+@media (max-width: 900px) {
+    .sp-inner { padding-inline: 22px; } /* align with the header's mobile padding */
 }
 .sp-back {
     color: #5b6472;
@@ -729,7 +734,7 @@ onBeforeUnmount(() => {
 .sp-title {
     font-size: 26px;
     font-weight: 600;
-    margin: 0;
+    margin: 0 0 20px; /* small gap after "Трансляции" before the content */
 }
 .sp-card {
     background: #fff;

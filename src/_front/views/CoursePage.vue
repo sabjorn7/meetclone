@@ -151,6 +151,7 @@
                             <button v-else class="pd-btn pd-btn--lg pd-btn--block" type="button" :disabled="buying" @click="onBuy">{{ ctaLabel }}</button>
                             <p v-if="buyError" class="pd-buyerr">{{ buyError }}</p>
                             <p v-else-if="owns" class="pd-price__demo">Курс уже у вас — смотрите в разделе «Мои курсы».</p>
+                            <p v-else-if="inCart" class="pd-price__demo">Курс в корзине — оформите заказ в корзине (значок в шапке).</p>
                         </div>
                     </div>
                 </div>
@@ -167,7 +168,7 @@ import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
-import { getBuyerRow, ownsCourse, enrollFree, buyCourse } from '@/_front/course/coursesApi.js';
+import { getBuyerRow, ownsCourse, enrollFree, addToCart, courseInCart } from '@/_front/course/coursesApi.js';
 
 const route = useRoute();
 const rootEl = ref(null);
@@ -182,7 +183,8 @@ const ready = ref(false);
 const buyerId = ref(null);   // logged-in user's id (null = guest)
 const buyer = ref(null);     // full users row (id + arrays) once resolved
 const owns = ref(false);     // already has a user_course row for this course
-const buying = ref(false);   // in-flight buy/enroll (disables the CTA)
+const inCart = ref(false);   // this course is already in the header cart (status='cart')
+const buying = ref(false);   // in-flight add/enroll (disables the CTA)
 const buyError = ref('');
 
 function plural(n, forms) {
@@ -248,18 +250,29 @@ const learnItems = computed(() => bullets(course.value?.WhatTeach));
 const forItems = computed(() => bullets(course.value?.For));
 const priceText = computed(() => (course.value?.Free ? 'Бесплатно' : `${money(course.value?.Price)} ₽`));
 const videoEmbed = computed(() => (course.value?.video_id ? embedUrl(course.value.video_id) : ''));
-// CTA label follows purchase state: owner → library, free → free enroll, otherwise buy.
+// CTA label follows purchase state: owner → library, free → free enroll, in-cart → cart, else buy.
 const ctaLabel = computed(() => {
     if (owns.value) return 'Уже в библиотеке';
     if (buying.value) return 'Секунду…';
-    return course.value?.Free ? 'Получить бесплатно' : 'Купить';
+    if (course.value?.Free) return 'Получить бесплатно';
+    return inCart.value ? 'В корзине — оформить' : 'Купить';
 });
+
+// Ask the shared AppHeader to open its cart dropdown (and reload it), so the user sees the item and
+// can review/add more/checkout — matching the old "Купить → корзина" flow. Deferred a tick so the
+// triggering click finishes bubbling first — otherwise the header's outside-click handler (the click
+// lands outside .mgh__pop) would immediately close the cart we just opened.
+function openHeaderCart() {
+    setTimeout(() => window.dispatchEvent(new CustomEvent('mg-open-cart')), 0);
+}
 
 // Single entry point for the CTA. Guests → /login; owners never reach here (they get a link).
 async function onBuy() {
     if (buying.value || owns.value) return;
     buyError.value = '';
     if (!buyerId.value) { window.location.assign('/login'); return; }
+    // Paid course already in the cart → just open the header cart to finish there (no DB write).
+    if (!course.value.Free && inCart.value) { openHeaderCart(); return; }
     buying.value = true;
     try {
         const sb = getSupabase();
@@ -269,10 +282,14 @@ async function onBuy() {
             await enrollFree(sb, { buyer: buyer.value, course: course.value });
             window.location.assign('/my_courses'); // free access granted → straight to the library
         } else {
-            await buyCourse(sb, { buyer: buyer.value, course: course.value }); // redirects to Prodamus itself
+            // ADD to cart only — no order, no redirect. Checkout is done from the header cart.
+            await addToCart(sb, { buyer: buyer.value, course: course.value });
+            inCart.value = true;
+            openHeaderCart();
         }
     } catch (e) {
-        buyError.value = e?.message || 'Не удалось оформить покупку. Попробуйте ещё раз.';
+        buyError.value = e?.message || 'Не удалось добавить в корзину. Попробуйте ещё раз.';
+    } finally {
         buying.value = false;
     }
 }
@@ -327,7 +344,11 @@ async function load() {
         students.value = count || 0;
         // purchase state: is the viewer logged in, and do they already own this course?
         buyerId.value = readStoredSession()?.user?.id || null;
-        if (buyerId.value) owns.value = await ownsCourse(sb, course.value.id, buyerId.value);
+        if (buyerId.value) {
+            owns.value = await ownsCourse(sb, course.value.id, buyerId.value);
+            // for paid courses the viewer doesn't own, note if it's already in their cart
+            if (!owns.value && !course.value.Free) inCart.value = await courseInCart(sb, course.value.id, buyerId.value);
+        }
     }
     loading.value = false;
     await nextTick();

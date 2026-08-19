@@ -2,14 +2,11 @@
 //
 // MONEY-ADJACENT (reviewed before deploy). This mirrors the WeWeb `course_info` buy workflow 1:1:
 //   - FREE course → grant access directly (insert user_course + append to the user's arrays), no payment.
-//   - PAID course → create ONE `shop` cart row for this course, then hand it to the proven
-//     `checkoutCart` (order → Prodamus do=link → persist link → redirect). Settlement (mark paid,
-//     grant user_course, sales, balance) stays entirely in the UNTOUCHED n8n `BuyCourse` workflow,
-//     invoked by the Prodamus callback — identical to the rest of the site and to purchaseStream.
-//
-// The paid path deliberately isolates the order to just this course's cart row (same as
-// purchaseStream), so clicking "Купить" never sweeps in unrelated rows left in the cart.
-import { checkoutCart } from '@/_front/chrome/headerAccount.js';
+//   - PAID course → ADD to the cart only (one `shop` row status='cart', clone of WeWeb NewCourse
+//     insert 90ddb3ae). NO order and NO redirect here — checkout happens later from the header cart
+//     (headerAccount.checkoutCart), exactly like the old WeWeb "Купить". Settlement (mark paid, grant
+//     user_course, sales, balance) stays entirely in the UNTOUCHED n8n `BuyCourse` workflow via the
+//     Prodamus callback — identical to the rest of the site.
 
 // The logged-in buyer's `users` row: id + the two arrays the free grant appends to. Reads the stored
 // session id (no getSession() — that acquires the Web Locks auth lock and can hang), then fetches the row.
@@ -45,29 +42,36 @@ export async function enrollFree(sb, { buyer, course }) {
         .eq('id', buyer.id);
 }
 
-// PAID purchase — clone of the WeWeb NewCourse insert (90ddb3ae): one `shop` cart row for this course
-// (owner / price=Price / status:'cart' / prolong:12 / position / quantity:1 / course_id / course_name).
-// `is_renewal` is left to its DB default (false; audit-only, does not branch n8n logic). Then hand the
-// single row to the proven checkoutCart, which builds the order, fetches the Prodamus link and redirects.
-export async function buyCourse(sb, { buyer, course }) {
-    const price = course.Price;
+// Whether this course is already sitting in the user's cart (a `shop` row with status='cart') —
+// drives the "В корзине" state and guards addToCart against stacking duplicate rows.
+export async function courseInCart(sb, courseId, uid) {
+    if (!sb || !courseId || !uid) return false;
+    const { data } = await sb.from('shop')
+        .select('id').eq('owner', uid).eq('status', 'cart').eq('course_id', courseId).limit(1);
+    return !!data?.length;
+}
+
+// PAID → ADD to cart only — clone of the WeWeb NewCourse insert (90ddb3ae): one `shop` row for this
+// course (owner / price=Price / status:'cart' / prolong:12 / position / quantity:1 / course_id /
+// course_name). `is_renewal` is left to its DB default (false; audit-only, does not branch n8n logic).
+// NO order and NO redirect — the user reviews the header cart and checks out from there. Guards against
+// a duplicate row so repeated clicks don't stack the same course. Returns true if a row was inserted.
+export async function addToCart(sb, { buyer, course }) {
+    if (await courseInCart(sb, course.id, buyer.id)) return false; // already in cart → header shows it
     const { count } = await sb.from('shop')
         .select('id', { count: 'exact', head: true })
         .eq('owner', buyer.id).eq('status', 'cart');
-    const { data: shopRows, error } = await sb.from('shop')
+    const { error } = await sb.from('shop')
         .insert({
             owner: buyer.id,
-            price,
+            price: course.Price,
             status: 'cart',
             prolong: 12,
             position: (count || 0) + 1,
             quantity: 1,
             course_id: course.id,
             course_name: course.Title,
-        })
-        .select('id, price, quantity, course_name, course_id')
-        .limit(1);
+        });
     if (error) throw new Error(`Корзина: ${error.message}`);
-    // checkoutCart isolates the order to just this row and redirects the browser to Prodamus.
-    await checkoutCart(sb, { user: buyer, cart: shopRows });
+    return true;
 }

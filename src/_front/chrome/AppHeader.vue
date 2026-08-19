@@ -191,6 +191,15 @@ function onDocClick(e) {
 }
 function onKey(e) { if (e.key === 'Escape') { open.value = null; menuOpen.value = false; } }
 
+// CoursePage (and any page) can ask the header to reveal the cart after adding an item, so the user
+// sees it and can review/checkout — the "Купить → корзина" flow. Reload explicitly in case the
+// realtime event lagged.
+function onOpenCart() {
+    if (!user.value?.id) return;
+    reloadCart();
+    open.value = 'cart';
+}
+
 // scroll threshold (boolean toggle, passive) for the optional CTA
 let onScroll, cartChannel;
 onMounted(async () => {
@@ -200,6 +209,7 @@ onMounted(async () => {
     window.addEventListener('scroll', onScroll, { passive: true });
     document.addEventListener('click', onDocClick);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('mg-open-cart', onOpenCart);
 
     await refreshUser();
     // Only logged-in users have a cart / need realtime. Guests do ZERO Supabase work here, so the
@@ -217,6 +227,7 @@ onBeforeUnmount(() => {
     if (onScroll) window.removeEventListener('scroll', onScroll);
     document.removeEventListener('click', onDocClick);
     document.removeEventListener('keydown', onKey);
+    window.removeEventListener('mg-open-cart', onOpenCart);
     try { if (cartChannel && sb) sb.removeChannel(cartChannel); } catch (e) { /* noop */ }
 });
 

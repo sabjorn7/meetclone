@@ -10,40 +10,39 @@
             <!-- ── HERO ─────────────────────────────────────────────── -->
             <header class="pd-hero">
                 <div class="pd-blob" aria-hidden="true"></div>
-                <div class="pd-wrap pd-hero__grid">
-                    <div class="pd-hero__lead">
+                <div class="pd-wrap pd-chero">
+                    <div class="pd-chero__main">
                         <span class="pd-badge" data-reveal>
                             <span class="pd-badge__dot" aria-hidden="true"></span>{{ course.Category || 'Курс' }}
                         </span>
-                        <h1 class="pd-hero__title pd-hero__title--course" data-reveal>{{ course.Title }}</h1>
+                        <h1 class="pd-hero__title--course" data-reveal>{{ course.Title }}</h1>
                         <p v-if="hook" class="pd-hero__hook" data-reveal>{{ hook }}</p>
-
-                        <div class="pd-buybar" data-reveal>
-                            <div class="pd-buybar__price">
-                                <span class="pd-buybar__now">{{ priceText }}</span>
-                                <span v-if="course.old_price" class="pd-buybar__old">{{ money(course.old_price) }} ₽</span>
-                            </div>
-                            <a class="pd-btn pd-btn--lg" :href="buyHref">Купить</a>
-                        </div>
-
-                        <ul class="pd-facts" data-reveal>
-                            <li><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 5h11a2 2 0 0 1 2 2v12l-4-2-4 2V7a2 2 0 0 0-2-2H4z"/></svg>{{ lessons.length || course.Less_Id?.length || 0 }} {{ lessonWord(lessons.length || course.Less_Id?.length || 0) }}</li>
-                            <li v-if="course.DurationLong"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg>Доступ {{ course.DurationLong }} мес.</li>
-                            <li v-if="!course.Free"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 3v18M7 8h7a3 3 0 0 1 0 6H8"/></svg>Онлайн, из любой точки</li>
-                        </ul>
 
                         <a v-if="author" class="pd-author-mini" :href="authorHref" data-reveal>
                             <img v-if="author.Photo" :src="author.Photo" :alt="author.Name" />
                             <span v-else class="pd-author-mini__ava">{{ authorInitials }}</span>
                             <span class="pd-author-mini__text"><span class="muted">Курс от</span><b>{{ author.Name }}</b></span>
                         </a>
+
+                        <div v-if="videoEmbed" class="pd-video" data-reveal>
+                            <iframe :src="videoEmbed" title="Видео о курсе" frameborder="0"
+                                allow="fullscreen" allowfullscreen loading="lazy"></iframe>
+                        </div>
                     </div>
 
-                    <aside class="pd-hero__art" data-reveal>
-                        <div class="pd-video">
-                            <iframe v-if="videoEmbed" :src="videoEmbed" title="Видео о курсе" frameborder="0"
-                                allow="fullscreen" allowfullscreen loading="lazy"></iframe>
-                            <div v-else class="pd-video__empty"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></div>
+                    <aside class="pd-chero__side">
+                        <div class="pd-buycard" data-reveal>
+                            <div class="pd-buycard__price">
+                                <span class="pd-buycard__now">{{ priceText }}</span>
+                                <span v-if="course.old_price" class="pd-buycard__old">{{ money(course.old_price) }} ₽</span>
+                            </div>
+                            <a class="pd-btn pd-btn--lg pd-btn--block" :href="buyHref">Купить</a>
+                            <ul class="pd-statlist">
+                                <li v-for="(s, i) in statItems" :key="i">
+                                    <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true" v-html="STAT_ICONS[s.icon]"></svg>
+                                    <span>{{ s.text }}</span>
+                                </li>
+                            </ul>
                         </div>
                     </aside>
                 </div>
@@ -101,6 +100,29 @@
                 </div>
             </section>
 
+            <!-- ── REVIEWS ──────────────────────────────────────────── -->
+            <section v-if="reviews.length" class="pd-section pd-section--tint">
+                <div class="pd-wrap">
+                    <div class="pd-head">
+                        <h2 class="pd-h2" data-reveal>Отзывы</h2>
+                        <p v-if="nRatings" class="pd-head__note" data-reveal>{{ nRatings }} {{ plural(nRatings, ['оценка', 'оценки', 'оценок']) }} · средняя {{ avgText }}</p>
+                    </div>
+                    <div class="pd-cards pd-cards--rev">
+                        <article v-for="(r, i) in reviews" :key="i" class="pd-rev" data-reveal :style="{ '--i': Math.min(i, 5) }">
+                            <div v-if="ratingByUser[r.user_id]" class="pd-rev__stars" :aria-label="`Оценка ${ratingByUser[r.user_id]} из 5`">
+                                <svg v-for="n in 5" :key="n" viewBox="0 0 24 24" class="pd-star" :class="{ on: n <= ratingByUser[r.user_id] }" aria-hidden="true"><path d="M12 4l2.5 5.1 5.6.8-4 4 1 5.6-5.1-2.7-5.1 2.7 1-5.6-4-4 5.6-.8z"/></svg>
+                            </div>
+                            <p class="pd-rev__text">{{ r.comment }}</p>
+                            <div class="pd-rev__by">
+                                <img v-if="r.photo" :src="r.photo" :alt="r.name" />
+                                <span v-else class="pd-rev__ava">{{ reviewInitials(r.name) }}</span>
+                                <div class="pd-rev__meta"><b>{{ r.name || 'Ученик' }}</b><span v-if="fmtDate(r.date)">{{ fmtDate(r.date) }}</span></div>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
             <!-- ── PRICE ────────────────────────────────────────────── -->
             <section class="pd-price-wrap">
                 <div class="pd-wrap">
@@ -144,8 +166,59 @@ const rootEl = ref(null);
 const course = ref(null);
 const author = ref(null);
 const lessons = ref([]);
+const students = ref(0);
 const loading = ref(true);
 const ready = ref(false);
+
+function plural(n, forms) {
+    const a = Math.abs(n) % 100, b = a % 10;
+    if (a > 10 && a < 20) return forms[2];
+    if (b > 1 && b < 5) return forms[1];
+    if (b === 1) return forms[0];
+    return forms[2];
+}
+const asArray = (v) => (Array.isArray(v) ? v : []);
+const nLessons = computed(() => lessons.value.length || course.value?.Less_Id?.length || 0);
+const nMaterials = computed(() => lessons.value.filter((l) => (l.File || '').trim()).length);
+const nStudents = computed(() => students.value);
+const reviews = computed(() => asArray(course.value?.comment).filter((c) => (c?.comment || '').trim()));
+const nReviews = computed(() => reviews.value.length);
+const ratings = computed(() => asArray(course.value?.rating));
+const nRatings = computed(() => ratings.value.length);
+const avgRating = computed(() => {
+    const r = ratings.value;
+    if (!r.length) return 0;
+    return r.reduce((s, it) => s + Number(it?.rating ?? it?.value ?? it ?? 0), 0) / r.length;
+});
+const avgText = computed(() => (nRatings.value ? avgRating.value.toFixed(1).replace('.0', '') : '0'));
+// star rating per review (matched by user_id) so a comment card can show its author's grade.
+const ratingByUser = computed(() => {
+    const m = {};
+    for (const r of ratings.value) if (r?.user_id != null) m[r.user_id] = Number(r.rating ?? 0);
+    return m;
+});
+const statItems = computed(() => {
+    const c = course.value || {};
+    const items = [
+        { icon: 'play', text: `${nLessons.value} ${plural(nLessons.value, ['урок', 'урока', 'уроков'])}` },
+        { icon: 'doc', text: `${nMaterials.value} ${plural(nMaterials.value, ['материал', 'материала', 'материалов'])}` },
+        { icon: 'users', text: `${nStudents.value} ${plural(nStudents.value, ['ученик', 'ученика', 'учеников'])}` },
+        { icon: 'chat', text: `${nReviews.value} ${plural(nReviews.value, ['отзыв', 'отзыва', 'отзывов'])}` },
+        { icon: 'star', text: `${nRatings.value} ${plural(nRatings.value, ['оценка', 'оценки', 'оценок'])} · ср. ${avgText.value}` },
+    ];
+    if (c.DurationLong) items.push({ icon: 'cal', text: `Доступ на ${c.DurationLong} ${plural(c.DurationLong, ['месяц', 'месяца', 'месяцев'])}` });
+    if (c.DurationPrice) items.push({ icon: 'renew', text: `Продление за ${money(c.DurationPrice)} ₽` });
+    return items;
+});
+const STAT_ICONS = {
+    play: '<path d="M9 5H4v14h5M9 5l11 7-11 7z" fill="none"/>',
+    doc: '<path d="M6 3h9l4 4v14H6z" fill="none"/><path d="M14 3v5h5" fill="none"/>',
+    users: '<circle cx="9" cy="8" r="3" fill="none"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0" fill="none"/><path d="M16 5.5a3 3 0 0 1 0 5.5" fill="none"/>',
+    chat: '<path d="M4 5h16v11H9l-4 3v-3H4z" fill="none"/>',
+    star: '<path d="M12 4l2.5 5.1 5.6.8-4 4 1 5.6-5.1-2.7-5.1 2.7 1-5.6-4-4 5.6-.8z" fill="none"/>',
+    cal: '<rect x="4" y="5" width="16" height="16" rx="2" fill="none"/><path d="M4 9h16M9 3v4M15 3v4" fill="none"/>',
+    renew: '<path d="M4 12a8 8 0 0 1 13.6-5.7L20 8" fill="none"/><path d="M20 4v4h-4" fill="none"/><path d="M20 12a8 8 0 0 1-13.6 5.7L4 16" fill="none"/><path d="M4 20v-4h4" fill="none"/>',
+};
 
 // bullet lists are stored as "- item\n- item"; split, strip the marker, drop blanks.
 function bullets(text) {
@@ -176,6 +249,14 @@ function lessonWord(n) {
     return 'уроков';
 }
 function cleanLesson(t) { return (t || '').replace(/^\s*\d+[.)]\s*/, ''); } // drop a leading "1. " (we render our own number)
+function reviewInitials(name) {
+    const p = (name || '').split(/\s+/).filter(Boolean);
+    return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || '·';
+}
+function fmtDate(iso) {
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' });
+}
 
 async function load() {
     const slug = route.params.slug || route.query.slug;
@@ -183,7 +264,7 @@ async function load() {
     const sb = getSupabase();
     if (!sb || (!slug && !id)) { loading.value = false; return; }
     let q = sb.from('course')
-        .select('id, "Title", "Decription", "WhatTeach", "For", "Price", "Free", old_price, "Category", video_id, "Less_Id", "DurationLong", "DurationPrice", owner, slug');
+        .select('id, "Title", "Decription", "WhatTeach", "For", "Price", "Free", old_price, "Category", video_id, "Less_Id", "DurationLong", "DurationPrice", owner, slug, comment, rating');
     q = slug ? q.eq('slug', slug) : q.eq('id', id);
     const { data } = await q.limit(1);
     course.value = data?.[0] || null;
@@ -195,10 +276,13 @@ async function load() {
         }
         const lids = course.value.Less_Id || [];
         if (lids.length) {
-            const { data: ls } = await sb.from('lessons').select('id, "Title"').in('id', lids);
+            const { data: ls } = await sb.from('lessons').select('id, "Title", "File"').in('id', lids);
             const byId = Object.fromEntries((ls || []).map((l) => [l.id, l]));
             lessons.value = lids.map((lid) => byId[lid]).filter(Boolean); // keep the course's lesson order
         }
+        // students = how many people own this course (user_course rows).
+        const { count } = await sb.from('user_course').select('id', { count: 'exact', head: true }).eq('course', course.value.id);
+        students.value = count || 0;
     }
     loading.value = false;
     await nextTick();
@@ -249,37 +333,36 @@ function ensureFonts() {
 .pd-btn--lg { padding: 16px 34px; font-size: 17px; }
 .pd-btn--block { display: block; width: 100%; text-align: center; }
 
-/* ── Hero ───────────────────────────────────────────────────────────────── */
-.pd-hero { position: relative; padding: 60px 0 80px; overflow: hidden; }
+/* ── Hero (course) ──────────────────────────────────────────────────────── */
+.pd-hero { position: relative; padding: 54px 0 74px; overflow: hidden; }
 .pd-blob { position: absolute; top: -180px; right: -150px; width: 620px; height: 620px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, rgba(84, 149, 243, 0.22), rgba(84, 149, 243, 0.05) 60%, transparent 72%); pointer-events: none; z-index: 0; }
-.pd-hero__grid { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 52px; align-items: center; }
+.pd-chero { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) 358px; gap: 44px; align-items: start; }
+.pd-chero__main { min-width: 0; }
 .pd-badge { display: inline-flex; align-items: center; gap: 9px; padding: 8px 16px; border-radius: var(--r-pill); background: var(--blue-tint); color: var(--blue-ink); font-weight: 600; font-size: 14px; }
 .pd-badge__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 4px rgba(240, 145, 87, 0.22); }
-.pd-hero__title--course { margin: 22px 0 0; font-weight: 700; font-size: clamp(1.9rem, 3.6vw, 3rem); line-height: 1.08; letter-spacing: -0.02em; }
-.pd-hero__hook { margin: 20px 0 0; max-width: 54ch; font-size: 1.1rem; color: var(--ink-2); }
+.pd-hero__title--course { margin: 22px 0 0; font-weight: 700; font-size: clamp(1.9rem, 3.4vw, 2.9rem); line-height: 1.08; letter-spacing: -0.02em; }
+.pd-hero__hook { margin: 20px 0 0; max-width: 60ch; font-size: 1.1rem; color: var(--ink-2); }
 
-.pd-buybar { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin-top: 28px; }
-.pd-buybar__price { display: flex; align-items: baseline; gap: 12px; }
-.pd-buybar__now { font-weight: 700; font-size: 2rem; letter-spacing: -0.02em; }
-.pd-buybar__old { color: var(--ink-3); text-decoration: line-through; font-size: 1.1rem; }
-
-.pd-facts { list-style: none; margin: 26px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px 24px; }
-.pd-facts li { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); font-weight: 500; font-size: 0.98rem; }
-.pd-facts .pd-ic { width: 19px; height: 19px; color: var(--blue-ink); }
-
-.pd-author-mini { display: inline-flex; align-items: center; gap: 12px; margin-top: 26px; text-decoration: none; color: inherit; }
+.pd-author-mini { display: inline-flex; align-items: center; gap: 12px; margin-top: 24px; text-decoration: none; color: inherit; }
 .pd-author-mini img, .pd-author-mini__ava { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; flex: none; }
 .pd-author-mini__ava { display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-weight: 700; }
 .pd-author-mini__text { display: flex; flex-direction: column; line-height: 1.25; font-size: 0.98rem; }
 .pd-author-mini__text .muted { color: var(--ink-3); font-size: 0.85rem; }
 @media (hover: hover) and (pointer: fine) { .pd-author-mini:hover b { color: var(--blue-ink); } }
 
-/* teaser video */
-.pd-hero__art { display: flex; justify-content: center; width: 100%; }
-.pd-video { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--r-lg); overflow: hidden; background: var(--ink); box-shadow: var(--shadow); border: 1px solid var(--line); }
+/* teaser video (in the main column, under the title; hidden entirely when there is none) */
+.pd-video { position: relative; width: 100%; aspect-ratio: 16 / 9; margin-top: 30px; border-radius: var(--r-lg); overflow: hidden; background: var(--ink); box-shadow: var(--shadow); border: 1px solid var(--line); }
 .pd-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
-.pd-video__empty { position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(120% 120% at 60% 20%, var(--blue-tint), #fff 80%); color: var(--blue-ink); }
-.pd-video__empty .pd-ic { width: 54px; height: 54px; fill: currentColor; stroke: none; }
+
+/* buy / info card (sticky sidebar) */
+.pd-chero__side { min-width: 0; }
+.pd-buycard { position: sticky; top: 82px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 26px 26px 22px; box-shadow: var(--shadow); }
+.pd-buycard__price { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
+.pd-buycard__now { font-weight: 700; font-size: 2.1rem; letter-spacing: -0.02em; }
+.pd-buycard__old { color: var(--ink-3); text-decoration: line-through; font-size: 1.1rem; }
+.pd-statlist { list-style: none; margin: 22px 0 0; padding: 20px 0 0; border-top: 1px solid var(--line); display: grid; gap: 14px; }
+.pd-statlist li { display: flex; align-items: center; gap: 12px; color: var(--ink-2); font-size: 0.98rem; }
+.pd-statlist .pd-ic { flex: none; width: 20px; height: 20px; color: var(--blue-ink); }
 
 /* ── Learn (checklist) ──────────────────────────────────────────────────── */
 .pd-learn { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 32px; }
@@ -306,6 +389,20 @@ function ensureFonts() {
 .pd-forcard__dot { position: absolute; left: 24px; top: 30px; width: 10px; height: 10px; border-radius: 50%; background: var(--blue-soft); }
 .pd-forcard p { margin: 0 0 0 22px; color: var(--ink-2); font-size: 1rem; }
 
+/* ── Reviews ────────────────────────────────────────────────────────────── */
+.pd-cards--rev { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.pd-rev { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 26px; }
+.pd-rev__stars { display: flex; gap: 3px; margin-bottom: 14px; }
+.pd-star { width: 18px; height: 18px; fill: var(--line); stroke: none; }
+.pd-star.on { fill: var(--orange); }
+.pd-rev__text { margin: 0 0 20px; color: var(--ink); font-size: 1rem; line-height: 1.55; white-space: pre-line; flex: 1; }
+.pd-rev__by { display: flex; align-items: center; gap: 12px; }
+.pd-rev__by img, .pd-rev__ava { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex: none; }
+.pd-rev__ava { display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-weight: 700; font-size: 0.95rem; }
+.pd-rev__meta { display: flex; flex-direction: column; line-height: 1.3; }
+.pd-rev__meta b { font-weight: 600; }
+.pd-rev__meta span { color: var(--ink-3); font-size: 0.85rem; }
+
 /* ── Price ──────────────────────────────────────────────────────────────── */
 .pd-price-wrap { padding: 20px 0 88px; }
 .pd-price { display: grid; grid-template-columns: 1.25fr 0.85fr; border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow); }
@@ -325,8 +422,8 @@ function ensureFonts() {
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 1000px) {
-    .pd-hero__grid { grid-template-columns: 1fr; gap: 34px; }
-    .pd-hero__art { order: -1; }
+    .pd-chero { grid-template-columns: 1fr; gap: 26px; }
+    .pd-buycard { position: static; }
     .pd-cards--for { grid-template-columns: 1fr; }
     .pd-learn { grid-template-columns: 1fr; }
 }
@@ -338,6 +435,5 @@ function ensureFonts() {
 }
 @media (max-width: 560px) {
     .pd-lesson { grid-template-columns: 44px 1fr; gap: 12px; padding: 16px 18px; }
-    .pd-buybar .pd-btn { width: 100%; text-align: center; }
 }
 </style>

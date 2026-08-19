@@ -35,12 +35,40 @@ export function readStoredSession() {
     return null;
 }
 
+// Decode the auth user (id + email) from the sb-access-token JWT cookie. The Supabase auth plugin
+// sets sb-access-token / sb-refresh-token on login and removes them on logout, so this is a reliable
+// logged-in signal that does NOT touch sb.auth.getSession() (which can hang on Web Locks). Used as a
+// fallback when the localStorage session isn't present (stale/cleared storage) but the cookie is.
+export function authCookieUser() {
+    try {
+        const c = document.cookie.split(';').map((s) => s.trim()).find((s) => s.startsWith('sb-access-token='));
+        if (!c) return null;
+        const jwt = decodeURIComponent(c.slice('sb-access-token='.length));
+        const payload = jwt.split('.')[1];
+        if (!payload) return null;
+        // base64url -> base64 (+ padding, which JWTs usually omit and atob otherwise rejects).
+        const b64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+        const json = JSON.parse(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)));
+        return json?.sub ? { id: json.sub, email: json.email } : null;
+    } catch (e) { return null; }
+}
+
+// Reliable "is a user logged in?" check with NO getSession()/Web-Locks dependency: the auth cookie
+// OR a persisted localStorage session. Fails OPEN (returns true) on any error so a real user is never
+// treated as a guest. Used by the App.vue home guard so logged-in users are never bounced to the
+// public catalog even when localStorage is stale, cleared, or blocked.
+export function isLikelyLoggedIn() {
+    try {
+        return !!(authCookieUser() || readStoredSession());
+    } catch (e) { return true; }
+}
+
 // Resolve the logged-in user's `users` row (users.id == auth uid for this project; fall back to email).
-// Guests (no stored session) return null WITHOUT any Supabase call, so the header never touches auth
-// on public pages.
+// Guests (no stored session AND no auth cookie) return null WITHOUT any Supabase call, so the header
+// never touches auth on public pages.
 export async function loadUser(sb) {
     if (!sb) return null;
-    const authUser = readStoredSession()?.user;
+    const authUser = readStoredSession()?.user || authCookieUser();
     if (!authUser?.id) return null;
     let { data } = await sb.from('users').select(USER_COLS).eq('id', authUser.id).limit(1);
     if (!data?.length && authUser.email) {

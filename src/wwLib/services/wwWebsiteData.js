@@ -101,7 +101,12 @@ async function fetchData(pageId) {
                 workflows,
                 libraryComponents,
             },
-        } = await axios.get(url);
+        } = await axios.get(url, {
+            // Bypass the HTTP cache so `cacheVersion` always reflects the CURRENTLY deployed data,
+            // even on a fully-stale browser (otherwise a stale bundle re-reads a stale data.json at
+            // the same ?_wwcv version and the mismatch below never fires). Revalidates → mostly 304s.
+            headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+        });
 
         //data.json contains a different cacheVersion
         //due to a deploy before the navigation
@@ -111,7 +116,11 @@ async function fetchData(pageId) {
                 //Reload once to pick up the fresh bundle for this cacheVersion.
                 //Guarded by sessionStorage so a persistent mismatch can't loop forever.
                 window.sessionStorage.setItem('ww-cache-reload-version', String(window.wwg_cacheVersion));
-                window.location.reload();
+                //Force a FRESH index.html by navigating to a URL the browser has not cached: a plain
+                //location.reload() can re-serve a stale bundle when index.html itself is HTTP-cached.
+                const u = new URL(window.location.href);
+                u.searchParams.set('_cb', String(cacheVersion));
+                window.location.replace(u.toString());
                 throw { reloadUrl: true };
             }
             //Already reloaded once for this bundle version and the mismatch persists

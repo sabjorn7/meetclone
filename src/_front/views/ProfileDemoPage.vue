@@ -87,7 +87,7 @@
                     </div>
                     <div v-if="courses.length" class="pd-cards pd-cards--courses">
                         <a
-                            v-for="(c, i) in courses"
+                            v-for="(c, i) in visibleCourses"
                             :key="c.id"
                             class="pd-course"
                             :href="courseHref(c)"
@@ -101,7 +101,38 @@
                             </span>
                         </a>
                     </div>
-                    <p v-else class="pd-empty">Пока нет опубликованных курсов.</p>
+                    <div v-if="courses.length > COURSE_LIMIT && !showAllCourses" class="pd-more">
+                        <button class="pd-showall" type="button" @click="showAllCourses = true">
+                            Показать все {{ courses.length }} {{ courseWord(courses.length) }}
+                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+                        </button>
+                    </div>
+                    <p v-if="!courses.length" class="pd-empty">Пока нет опубликованных курсов.</p>
+                </div>
+            </section>
+
+            <!-- ── ARTICLES ─────────────────────────────────────────── -->
+            <section v-if="articles.length" class="pd-section pd-section--tint">
+                <div class="pd-wrap">
+                    <h2 class="pd-h2" data-reveal>Статьи автора</h2>
+                    <div class="pd-cards pd-cards--articles">
+                        <a
+                            v-for="(a, i) in articles"
+                            :key="a.id"
+                            class="pd-article"
+                            :href="articleHref(a)"
+                            data-reveal
+                            :style="{ '--i': Math.min(i, 5) }"
+                        >
+                            <div class="pd-article__cover">
+                                <img v-if="a.Image" :src="a.Image" :alt="a.Title" loading="lazy" />
+                            </div>
+                            <div class="pd-article__body">
+                                <span v-if="a.Category" class="pd-course__cat">{{ a.Category }}</span>
+                                <h3 class="pd-article__t">{{ a.Title }}</h3>
+                            </div>
+                        </a>
+                    </div>
                 </div>
             </section>
         </template>
@@ -121,8 +152,12 @@ const rootEl = ref(null);
 const statsEl = ref(null);
 const user = ref(null);
 const courses = ref([]);
+const articles = ref([]);
 const loading = ref(true);
 const ready = ref(false); // reactive reveal gate on the root — survives Vue re-renders (stat count-up)
+const showAllCourses = ref(false);
+const COURSE_LIMIT = 6;
+const visibleCourses = computed(() => (showAllCourses.value ? courses.value : courses.value.slice(0, COURSE_LIMIT)));
 
 // ── derived ────────────────────────────────────────────────────────────────
 const hook = computed(() => {
@@ -155,6 +190,7 @@ function courseWord(n) {
 }
 function money(n) { return Number(n || 0).toLocaleString('ru-RU'); }
 function courseHref(c) { return `/course/${c.id}`; }
+function articleHref(a) { return `/articles/${a.id}`; }
 
 const SOCIAL_ICONS = {
     vk: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.8 16.3c-5 0-8-3.5-8.1-9.3h2.5c.1 4.3 2 6.1 3.5 6.5V7h2.4v3.6c1.5-.2 3-1.8 3.6-3.6h2.4c-.5 2.2-2.1 3.8-3.2 4.5 1.1.6 2.9 2 3.6 4.8h-2.6c-.5-1.7-1.9-3-3.8-3.2v3.2h-.3z"/></svg>',
@@ -217,7 +253,16 @@ async function load() {
         ));
         courses.value = results
             .flatMap((r) => r.data || [])
-            .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+            // free courses first, then newest — matches the "бесплатные вначало" request
+            .sort((a, b) => (Number(!!b.Free) - Number(!!a.Free)) || String(b.created_at).localeCompare(String(a.created_at)));
+    }
+    const aids = user.value?.articles || [];
+    if (aids.length) {
+        const { data: arts } = await sb.from('articles')
+            .select('id, "Title", "Image", "Category", slug, "Publish_date"')
+            .in('id', aids).eq('Status', 'Опубликовано')
+            .order('Publish_date', { ascending: false });
+        articles.value = arts || [];
     }
     loading.value = false;
     await nextTick();
@@ -315,7 +360,7 @@ function ensureFonts() {
 
 .pd-hero__art { display: flex; justify-content: center; }
 .pd-hero__art-panel { position: relative; width: 100%; max-width: 420px; aspect-ratio: 1; border-radius: var(--r-lg); background: radial-gradient(120% 120% at 62% 18%, var(--blue-tint), #ffffff 76%); border: 1px solid var(--line); display: grid; place-items: center; padding: 26px; box-shadow: var(--shadow); overflow: hidden; }
-.pd-hero__avatar { width: 100%; height: 100%; object-fit: contain; }
+.pd-hero__avatar { width: 100%; height: 100%; object-fit: contain; border-radius: var(--r-md); }
 .pd-hero__avafallback { display: grid; place-items: center; width: 100%; height: 100%; border-radius: var(--r-md); background: #fff; color: var(--blue-ink); font-weight: 700; font-size: 4rem; box-shadow: var(--shadow-sm); }
 .pd-hero__chip { position: absolute; left: 18px; bottom: 18px; display: inline-flex; align-items: center; gap: 7px; padding: 8px 15px; border-radius: var(--r-pill); background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-sm); font-weight: 700; font-size: 14px; color: var(--ink); }
 .pd-hero__chip .pd-ic { width: 18px; height: 18px; color: var(--orange-ink); }
@@ -345,12 +390,27 @@ function ensureFonts() {
 .pd-course__price { font-weight: 700; font-size: 1.05rem; color: var(--ink); }
 .pd-course__price.is-free { color: var(--orange-ink); }
 
+/* "show all" */
+.pd-more { margin-top: 30px; display: flex; justify-content: center; }
+.pd-showall { display: inline-flex; align-items: center; gap: 8px; font-family: inherit; font-weight: 600; font-size: 15px; color: var(--blue-ink); background: #fff; border: 1px solid var(--line); border-radius: var(--r-pill); padding: 13px 26px; cursor: pointer; transition: border-color 0.16s var(--ease-out), background 0.16s var(--ease-out), transform 0.16s var(--ease-out); }
+.pd-showall .pd-ic { width: 18px; height: 18px; }
+@media (hover: hover) and (pointer: fine) { .pd-showall:hover { border-color: var(--blue-soft); background: var(--blue-tint); transform: translateY(-1px); } }
+
+/* ── Article cards ──────────────────────────────────────────────────────── */
+.pd-cards--articles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+.pd-article { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; text-decoration: none; color: inherit; transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out), border-color 0.22s var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .pd-article:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: rgba(46, 112, 221, 0.4); } }
+.pd-article__cover { aspect-ratio: 16 / 9; background: var(--blue-tint); overflow: hidden; }
+.pd-article__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pd-article__body { display: flex; flex-direction: column; gap: 12px; padding: 20px 22px 22px; }
+.pd-article__t { margin: 0; font-weight: 600; font-size: 1.08rem; line-height: 1.3; letter-spacing: -0.01em; }
+
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 1080px) {
     .pd-hero__grid { grid-template-columns: 1fr; gap: 36px; }
     .pd-hero__art { order: -1; }
     .pd-hero__art-panel { max-width: 320px; }
-    .pd-cards--courses { grid-template-columns: repeat(2, 1fr); }
+    .pd-cards--courses, .pd-cards--articles { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 900px) {
     .pd-wrap { padding-inline: 22px; }
@@ -361,7 +421,7 @@ function ensureFonts() {
     .pd-stat + .pd-stat { padding-left: 0; border-left: none; border-top: 1px solid rgba(255, 255, 255, 0.14); }
 }
 @media (max-width: 560px) {
-    .pd-cards--courses { grid-template-columns: 1fr; }
+    .pd-cards--courses, .pd-cards--articles { grid-template-columns: 1fr; }
     .pd-hero__cta { gap: 14px; }
     .pd-hero__cta .pd-btn { width: 100%; text-align: center; }
 }

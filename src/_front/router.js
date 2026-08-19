@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import wwPage from './views/wwPage.vue';
 import StreamsPage from './views/StreamsPage.vue';
 import ProfilePage from './views/ProfilePage.vue';
+import CourseDemoPage from './views/CourseDemoPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -251,6 +252,15 @@ routes.push({
     path: '/profile-demo',
     name: 'profile-demo',
     component: ProfilePage,
+});
+
+// DEMO: promo-styled course landing (/course-demo?slug=<slug>|?id=<uuid>; see
+// src/_front/views/CourseDemoPage.vue). A physical dist/course-demo/index.html is produced via a
+// matching entry in vite.config.js.
+routes.push({
+    path: '/course-demo',
+    name: 'course-demo',
+    component: CourseDemoPage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

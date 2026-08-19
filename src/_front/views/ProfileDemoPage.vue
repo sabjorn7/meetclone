@@ -78,7 +78,7 @@
             </section>
 
             <!-- ── AUTHORED COURSES (speaker / school catalog) ──────── -->
-            <section v-if="courses.length" id="courses" class="pd-section">
+            <section v-if="showAuthored" id="courses" class="pd-section">
                 <div class="pd-wrap">
                     <div class="pd-head">
                         <h2 class="pd-h2" data-reveal>{{ coursesLabel }}</h2>
@@ -110,7 +110,7 @@
             </section>
 
             <!-- ── TAKEN COURSES (specialist portfolio / education) ─── -->
-            <section v-if="completed.length" :id="hasAuthored ? undefined : 'courses'" class="pd-section" :class="{ 'pd-section--tint': hasAuthored }">
+            <section v-if="showCompleted" :id="hasAuthored ? undefined : 'courses'" class="pd-section" :class="{ 'pd-section--tint': hasAuthored }">
                 <div class="pd-wrap">
                     <div class="pd-head">
                         <h2 class="pd-h2" data-reveal>{{ completedLabel }}</h2>
@@ -203,12 +203,15 @@ const hook = computed(() => {
 const bioParagraphs = computed(() =>
     (user.value?.Description || '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
 );
-const hasAuthored = computed(() => courses.value.length > 0); // speaker/school vs specialist persona
-const nPublished = computed(() => courses.value.length); // authored, published-only
-const nCompleted = computed(() => completed.value.length); // courses taken (portfolio)
+// The owner can hide either list in profile settings — users.hide = { my, buy }.
+const hideMy = computed(() => user.value?.hide?.my === true);   // hide authored / created courses
+const hideBuy = computed(() => user.value?.hide?.buy === true); // hide taken / completed courses
+const showAuthored = computed(() => courses.value.length > 0 && !hideMy.value);
+const showCompleted = computed(() => completed.value.length > 0 && !hideBuy.value);
+const hasAuthored = computed(() => showAuthored.value); // persona: speaker/school = has VISIBLE authored courses
 const nArticles = computed(() => user.value?.articles?.length || 0);
-// "Primary" course set drives the hero chip + first stat: authored for a speaker/school, taken for a specialist.
-const primaryCourses = computed(() => (hasAuthored.value ? courses.value : completed.value));
+// "Primary" course set drives the hero chip + first stat: authored if shown, else taken if shown.
+const primaryCourses = computed(() => (showAuthored.value ? courses.value : showCompleted.value ? completed.value : []));
 const nPrimary = computed(() => primaryCourses.value.length);
 const primaryLabel = computed(() => (hasAuthored.value ? 'курсов и семинаров' : 'пройденных курсов'));
 const nCategories = computed(() => new Set(primaryCourses.value.map((c) => c.Category).filter(Boolean)).size);
@@ -293,7 +296,7 @@ async function load() {
     const sb = getSupabase();
     if (!uid || !sb) { loading.value = false; return; }
     const { data } = await sb.from('users')
-        .select('id, "Name", "Photo", role, "Description", email, vk_url, youtube_url, telegram_url, whatsapp_url, website_url, booking_url, courses, articles')
+        .select('id, "Name", "Photo", role, "Description", email, vk_url, youtube_url, telegram_url, whatsapp_url, website_url, booking_url, courses, articles, hide')
         .eq('id', uid).limit(1);
     user.value = data?.[0] || null;
     // Authored courses (published only) — the speaker/school catalog. Free first, then newest.

@@ -703,7 +703,9 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .streams-page {
-    /* #app already reserves 62px for the fixed AppHeader (rendered globally by App.vue) */
+    /* #app already reserves 62px for the fixed AppHeader (rendered globally by App.vue). Fill the
+       viewport below it so the global footer is pushed to the bottom on short content. */
+    min-height: calc(100vh - 62px);
     font-family: inherit;
     color: #1b1f27;
 }

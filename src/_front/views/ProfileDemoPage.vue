@@ -37,9 +37,9 @@
                         <div class="pd-hero__art-panel">
                             <img v-if="user.Photo" class="pd-hero__avatar" :src="user.Photo" :alt="user.Name" @error="user.Photo = ''" />
                             <span v-else class="pd-hero__avafallback">{{ initials }}</span>
-                            <span v-if="nPublished" class="pd-hero__chip">
+                            <span v-if="nPrimary" class="pd-hero__chip">
                                 <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 5h11a2 2 0 0 1 2 2v12l-4-2-4 2V7a2 2 0 0 0-2-2H4z"/></svg>
-                                {{ nPublished }} {{ courseWord(nPublished) }}
+                                {{ nPrimary }} {{ courseWord(nPrimary) }}
                             </span>
                         </div>
                     </aside>
@@ -47,11 +47,11 @@
             </header>
 
             <!-- ── STATS ────────────────────────────────────────────── -->
-            <section v-if="nPublished" class="pd-stats" ref="statsEl" aria-label="Показатели">
+            <section v-if="nPrimary" class="pd-stats" ref="statsEl" aria-label="Показатели">
                 <div class="pd-wrap pd-stats__row">
                     <div class="pd-stat" data-reveal>
                         <span class="pd-stat__n">{{ statCourses }}</span>
-                        <span class="pd-stat__l">курсов и семинаров</span>
+                        <span class="pd-stat__l">{{ primaryLabel }}</span>
                     </div>
                     <div v-if="nArticles" class="pd-stat" data-reveal>
                         <span class="pd-stat__n">{{ statArticles }}</span>
@@ -78,14 +78,14 @@
                 </div>
             </section>
 
-            <!-- ── COURSES ──────────────────────────────────────────── -->
-            <section id="courses" class="pd-section">
+            <!-- ── AUTHORED COURSES (speaker / school catalog) ──────── -->
+            <section v-if="courses.length" id="courses" class="pd-section">
                 <div class="pd-wrap">
                     <div class="pd-head">
                         <h2 class="pd-h2" data-reveal>{{ coursesLabel }}</h2>
-                        <p v-if="courses.length" class="pd-head__note" data-reveal>{{ courses.length }} {{ courseWord(courses.length) }} — нажмите, чтобы открыть.</p>
+                        <p class="pd-head__note" data-reveal>{{ courses.length }} {{ courseWord(courses.length) }} — нажмите, чтобы открыть.</p>
                     </div>
-                    <div v-if="courses.length" class="pd-cards pd-cards--courses">
+                    <div class="pd-cards pd-cards--courses">
                         <a
                             v-for="(c, i) in visibleCourses"
                             :key="c.id"
@@ -107,7 +107,39 @@
                             <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
                         </button>
                     </div>
-                    <p v-if="!courses.length" class="pd-empty">Пока нет опубликованных курсов.</p>
+                </div>
+            </section>
+
+            <!-- ── TAKEN COURSES (specialist portfolio / education) ─── -->
+            <section v-if="completed.length" :id="hasAuthored ? undefined : 'courses'" class="pd-section" :class="{ 'pd-section--tint': hasAuthored }">
+                <div class="pd-wrap">
+                    <div class="pd-head">
+                        <h2 class="pd-h2" data-reveal>{{ completedLabel }}</h2>
+                        <p class="pd-head__note" data-reveal>{{ completed.length }} {{ courseWord(completed.length) }} пройдено на платформе.</p>
+                    </div>
+                    <div class="pd-cards pd-cards--courses">
+                        <a
+                            v-for="(c, i) in visibleCompleted"
+                            :key="c.id"
+                            class="pd-course"
+                            :href="courseHref(c)"
+                            data-reveal
+                            :style="{ '--i': Math.min(i, 7) }"
+                        >
+                            <span class="pd-course__cat">{{ c.Category || 'Курс' }}</span>
+                            <h3 class="pd-course__t">{{ c.Title }}</h3>
+                            <span class="pd-course__done">
+                                <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>
+                                Пройден
+                            </span>
+                        </a>
+                    </div>
+                    <div v-if="completed.length > COURSE_LIMIT && !showAllCompleted" class="pd-more">
+                        <button class="pd-showall" type="button" @click="showAllCompleted = true">
+                            Показать все {{ completed.length }} {{ courseWord(completed.length) }}
+                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+                        </button>
+                    </div>
                 </div>
             </section>
 
@@ -151,13 +183,16 @@ const route = useRoute();
 const rootEl = ref(null);
 const statsEl = ref(null);
 const user = ref(null);
-const courses = ref([]);
+const courses = ref([]);      // courses the profile AUTHORS (speaker/school catalog)
+const completed = ref([]);    // courses the profile has TAKEN (buied_courses) — specialist portfolio
 const articles = ref([]);
 const loading = ref(true);
 const ready = ref(false); // reactive reveal gate on the root — survives Vue re-renders (stat count-up)
 const showAllCourses = ref(false);
+const showAllCompleted = ref(false);
 const COURSE_LIMIT = 6;
 const visibleCourses = computed(() => (showAllCourses.value ? courses.value : courses.value.slice(0, COURSE_LIMIT)));
+const visibleCompleted = computed(() => (showAllCompleted.value ? completed.value : completed.value.slice(0, COURSE_LIMIT)));
 
 // ── derived ────────────────────────────────────────────────────────────────
 const hook = computed(() => {
@@ -169,17 +204,24 @@ const hook = computed(() => {
 const bioParagraphs = computed(() =>
     (user.value?.Description || '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
 );
-const nCourses = computed(() => user.value?.courses?.length || 0);
-const nPublished = computed(() => courses.value.length); // real, published-only count (shown in UI)
+const hasAuthored = computed(() => courses.value.length > 0); // speaker/school vs specialist persona
+const nPublished = computed(() => courses.value.length); // authored, published-only
+const nCompleted = computed(() => completed.value.length); // courses taken (portfolio)
 const nArticles = computed(() => user.value?.articles?.length || 0);
-const nCategories = computed(() => new Set(courses.value.map((c) => c.Category).filter(Boolean)).size);
+// "Primary" course set drives the hero chip + first stat: authored for a speaker/school, taken for a specialist.
+const primaryCourses = computed(() => (hasAuthored.value ? courses.value : completed.value));
+const nPrimary = computed(() => primaryCourses.value.length);
+const primaryLabel = computed(() => (hasAuthored.value ? 'курсов и семинаров' : 'пройденных курсов'));
+const nCategories = computed(() => new Set(primaryCourses.value.map((c) => c.Category).filter(Boolean)).size);
 const initials = computed(() => {
     const parts = (user.value?.Name || '').split(/\s+/).filter(Boolean);
     return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '·';
 });
 const isSchool = computed(() => user.value?.role === 'Учебное заведение');
-const aboutLabel = computed(() => (isSchool.value ? 'О школе' : 'Об авторе'));
+const aboutLabel = computed(() => (isSchool.value ? 'О школе' : hasAuthored.value ? 'Об авторе' : 'О специалисте'));
 const coursesLabel = computed(() => (isSchool.value ? 'Курсы школы' : 'Курсы автора'));
+// The taken-courses section reads as a portfolio for a specialist, or "education" for a speaker who also teaches.
+const completedLabel = computed(() => (hasAuthored.value ? 'Образование' : 'Пройденные курсы'));
 
 function courseWord(n) {
     const a = Math.abs(n) % 100, b = a % 10;
@@ -233,6 +275,20 @@ function scrollTo(id) {
 // ── data + reveal ────────────────────────────────────────────────────────────
 let statsIo = null, counted = false;
 
+// Fetch course rows by an id array, chunked — a single .in() over 100+ UUIDs overflows the GET URL (414).
+async function fetchCourses(sb, ids, publishedOnly) {
+    const list = ids || [];
+    if (!list.length) return [];
+    const chunks = [];
+    for (let i = 0; i < list.length; i += 40) chunks.push(list.slice(i, i + 40));
+    const results = await Promise.all(chunks.map((ch) => {
+        let q = sb.from('course').select('id, "Title", "Price", "Free", "Category", slug, created_at').in('id', ch);
+        if (publishedOnly) q = q.eq('ModStatus', 'Опубликовано');
+        return q;
+    }));
+    return results.flatMap((r) => r.data || []);
+}
+
 async function load() {
     const uid = route.query.user;
     const sb = getSupabase();
@@ -241,21 +297,16 @@ async function load() {
         .select('id, "Name", "Photo", role, "Description", email, vk_url, youtube_url, telegram_url, whatsapp_url, website_url, booking_url, courses, articles')
         .eq('id', uid).limit(1);
     user.value = data?.[0] || null;
-    const ids = user.value?.courses || [];
-    if (ids.length) {
-        // Chunk the id list: a single .in() with ~100+ UUIDs overflows the GET request URL (414).
-        const chunks = [];
-        for (let i = 0; i < ids.length; i += 40) chunks.push(ids.slice(i, i + 40));
-        const results = await Promise.all(chunks.map((ch) =>
-            sb.from('course')
-                .select('id, "Title", "Price", "Free", "Category", slug, created_at')
-                .in('id', ch).eq('ModStatus', 'Опубликовано')
-        ));
-        courses.value = results
-            .flatMap((r) => r.data || [])
-            // free courses first, then newest — matches the "бесплатные вначало" request
-            .sort((a, b) => (Number(!!b.Free) - Number(!!a.Free)) || String(b.created_at).localeCompare(String(a.created_at)));
-    }
+    // Authored courses (published only) — the speaker/school catalog. Free first, then newest.
+    courses.value = (await fetchCourses(sb, user.value?.courses, true))
+        .sort((a, b) => (Number(!!b.Free) - Number(!!a.Free)) || String(b.created_at).localeCompare(String(a.created_at)));
+    // Taken courses — the specialist portfolio. user_course maps a user to the courses they own
+    // (users.buied_courses holds user_course row ids, NOT course ids). Read the junction, dedupe,
+    // then fetch the course rows. Kept even if a course is no longer on sale. Newest first.
+    const { data: uc } = await sb.from('user_course').select('course').eq('user', uid);
+    const takenIds = [...new Set((uc || []).map((r) => r.course).filter(Boolean))];
+    completed.value = (await fetchCourses(sb, takenIds, false))
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
     const aids = user.value?.articles || [];
     if (aids.length) {
         const { data: arts } = await sb.from('articles')
@@ -277,7 +328,7 @@ function setupStats() {
         statsIo = new IntersectionObserver((es) => {
             if (es[0].isIntersecting && !counted) {
                 counted = true;
-                countUp(statCourses, nPublished.value, 1300);
+                countUp(statCourses, nPrimary.value, 1300);
                 countUp(statArticles, nArticles.value, 1000);
                 countUp(statCats, nCategories.value, 900);
                 statsIo.disconnect();
@@ -285,7 +336,7 @@ function setupStats() {
         }, { threshold: 0.4 });
         statsIo.observe(statsEl.value);
     } else {
-        statCourses.value = String(nPublished.value);
+        statCourses.value = String(nPrimary.value);
         statArticles.value = String(nArticles.value);
         statCats.value = String(nCategories.value);
     }
@@ -389,6 +440,8 @@ function ensureFonts() {
 .pd-course__t { margin: 0; font-weight: 600; font-size: 1.08rem; line-height: 1.28; letter-spacing: -0.01em; flex: 1; }
 .pd-course__price { font-weight: 700; font-size: 1.05rem; color: var(--ink); }
 .pd-course__price.is-free { color: var(--orange-ink); }
+.pd-course__done { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.95rem; color: #178a5a; }
+.pd-course__done .pd-ic { width: 18px; height: 18px; stroke-width: 2.6; color: #21a366; }
 
 /* "show all" */
 .pd-more { margin-top: 30px; display: flex; justify-content: center; }

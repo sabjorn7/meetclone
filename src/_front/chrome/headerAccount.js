@@ -110,8 +110,50 @@ export function cartTotal(cart) {
     return (cart || []).reduce((s, r) => s + Number(r.price || 0), 0);
 }
 
+// The app's canonical auth-plugin (plugin-1fa0dd68 / friendly name "supabaseAuth"). Its signOut()
+// removes the sb-access/refresh-token cookies with the exact path/domain it set them and clears the
+// app's user state — a raw sb.auth.signOut() does neither.
+function getAuthPlugin() {
+    const p = window.wwLib?.wwPlugins;
+    if (!p) return null;
+    if (typeof p.supabaseAuth?.signOut === 'function') return p.supabaseAuth;
+    const byId = p['1fa0dd68-5069-436c-9a7d-3b54c340f1fa'];
+    return typeof byId?.signOut === 'function' ? byId : null;
+}
+
+// Fallback cookie removal (matches setCookies: path '/', domain = hostname; plus '.'+hostname for
+// Safari) in case the auth plugin isn't reachable.
+function clearAuthCookies() {
+    const host = window.location.hostname;
+    for (const name of ['sb-access-token', 'sb-refresh-token']) {
+        for (const domain of [host, '.' + host, '']) {
+            const d = domain ? `; domain=${domain}` : '';
+            document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0${d}`;
+        }
+    }
+}
+
+// Remove any persisted supabase session from localStorage (the second source isLikelyLoggedIn reads).
+function clearStoredSession() {
+    try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            const v = localStorage.getItem(k);
+            if (v && v.includes('access_token') && v.includes('refresh_token')) localStorage.removeItem(k);
+        }
+    } catch (e) { /* ignore */ }
+}
+
+// Full, race-free sign-out. isLikelyLoggedIn() reads the auth COOKIE **or** the localStorage session,
+// so logout must clear BOTH before the caller redirects — otherwise a leftover source keeps the app
+// "logged in" and it restores the session on the next load (the observed "logout needs two clicks").
+// The synchronous clears below are the guarantee; the network signOut is fired best-effort and NOT
+// awaited because it acquires the Web Locks auth lock and can hang.
 export async function signOutUser(sb) {
-    if (sb) await sb.auth.signOut();
+    try { getAuthPlugin()?.signOut(); } catch (e) { /* ignore */ }
+    try { sb?.auth?.signOut(); } catch (e) { /* ignore */ }
+    clearAuthCookies();
+    clearStoredSession();
 }
 
 // MONEY (reviewed before deploy): verbatim port of the site's cart checkout, same flow the WeWeb

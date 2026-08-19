@@ -1,8 +1,11 @@
 <!--
-  CourseDemoPage.vue — DEMO / EXPERIMENT: a course landing in the MeetGuru promo (pd-*) brand
-  language. route: /course-demo?slug=<slug> (or ?id=<uuid>). Content-only — the shared
-  AppHeader/AppFooter come from App.vue. Course + author + lessons are fetched from Supabase.
-  The "Купить" CTA links to the real /course/<slug> page (this prototype does NOT process payment).
+  CoursePage.vue — the course landing at /course/:slug in the MeetGuru promo (pd-*) brand language.
+  Overrides the WeWeb `course_info` page. Content-only — the shared AppHeader/AppFooter come from
+  App.vue. Course + author + lessons are fetched from Supabase.
+
+  The "Купить" CTA is REAL (see @/_front/course/coursesApi.js, money-adjacent): guests go to /login,
+  owners see "Уже в библиотеке" → /my_courses, free courses grant access directly, paid courses go
+  through the cart → Prodamus. Buyers watch their lessons on /my_courses (this page never plays them).
 -->
 <template>
     <main class="pd" :class="{ 'is-ready': ready }" ref="rootEl">
@@ -36,7 +39,9 @@
                                 <span class="pd-buycard__now">{{ priceText }}</span>
                                 <span v-if="course.old_price" class="pd-buycard__old">{{ money(course.old_price) }} ₽</span>
                             </div>
-                            <a class="pd-btn pd-btn--lg pd-btn--block" :href="buyHref">Купить</a>
+                            <a v-if="owns" class="pd-btn pd-btn--lg pd-btn--block" href="/my_courses">Уже в библиотеке</a>
+                            <button v-else class="pd-btn pd-btn--lg pd-btn--block" type="button" :disabled="buying" @click="onBuy">{{ ctaLabel }}</button>
+                            <p v-if="buyError" class="pd-buyerr">{{ buyError }}</p>
                             <ul class="pd-statlist">
                                 <li v-for="(s, i) in statItems" :key="i">
                                     <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true" v-html="STAT_ICONS[s.icon]"></svg>
@@ -142,8 +147,10 @@
                                 {{ course.Free ? 'Бесплатно' : money(course.Price) }}<span v-if="!course.Free" class="cur"> ₽</span>
                             </div>
                             <p v-if="course.old_price" class="pd-price__old">{{ money(course.old_price) }} ₽</p>
-                            <a class="pd-btn pd-btn--lg pd-btn--block" :href="buyHref">Купить</a>
-                            <p class="pd-price__demo">Демонстрация — покупка проходит на странице курса.</p>
+                            <a v-if="owns" class="pd-btn pd-btn--lg pd-btn--block" href="/my_courses">Уже в библиотеке</a>
+                            <button v-else class="pd-btn pd-btn--lg pd-btn--block" type="button" :disabled="buying" @click="onBuy">{{ ctaLabel }}</button>
+                            <p v-if="buyError" class="pd-buyerr">{{ buyError }}</p>
+                            <p v-else-if="owns" class="pd-price__demo">Курс уже у вас — смотрите в разделе «Мои курсы».</p>
                         </div>
                     </div>
                 </div>
@@ -158,8 +165,9 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
-import { getSupabase } from '@/_front/chrome/headerAccount.js';
+import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
+import { getBuyerRow, ownsCourse, enrollFree, buyCourse } from '@/_front/course/coursesApi.js';
 
 const route = useRoute();
 const rootEl = ref(null);
@@ -169,6 +177,13 @@ const lessons = ref([]);
 const students = ref(0);
 const loading = ref(true);
 const ready = ref(false);
+
+// purchase state
+const buyerId = ref(null);   // logged-in user's id (null = guest)
+const buyer = ref(null);     // full users row (id + arrays) once resolved
+const owns = ref(false);     // already has a user_course row for this course
+const buying = ref(false);   // in-flight buy/enroll (disables the CTA)
+const buyError = ref('');
 
 function plural(n, forms) {
     const a = Math.abs(n) % 100, b = a % 10;
@@ -233,7 +248,34 @@ const learnItems = computed(() => bullets(course.value?.WhatTeach));
 const forItems = computed(() => bullets(course.value?.For));
 const priceText = computed(() => (course.value?.Free ? 'Бесплатно' : `${money(course.value?.Price)} ₽`));
 const videoEmbed = computed(() => (course.value?.video_id ? embedUrl(course.value.video_id) : ''));
-const buyHref = computed(() => `/course/${course.value?.slug || course.value?.id}`);
+// CTA label follows purchase state: owner → library, free → free enroll, otherwise buy.
+const ctaLabel = computed(() => {
+    if (owns.value) return 'Уже в библиотеке';
+    if (buying.value) return 'Секунду…';
+    return course.value?.Free ? 'Получить бесплатно' : 'Купить';
+});
+
+// Single entry point for the CTA. Guests → /login; owners never reach here (they get a link).
+async function onBuy() {
+    if (buying.value || owns.value) return;
+    buyError.value = '';
+    if (!buyerId.value) { window.location.assign('/login'); return; }
+    buying.value = true;
+    try {
+        const sb = getSupabase();
+        if (!buyer.value) buyer.value = await getBuyerRow(sb, buyerId.value);
+        if (!buyer.value) throw new Error('Не удалось определить пользователя.');
+        if (course.value.Free) {
+            await enrollFree(sb, { buyer: buyer.value, course: course.value });
+            window.location.assign('/my_courses'); // free access granted → straight to the library
+        } else {
+            await buyCourse(sb, { buyer: buyer.value, course: course.value }); // redirects to Prodamus itself
+        }
+    } catch (e) {
+        buyError.value = e?.message || 'Не удалось оформить покупку. Попробуйте ещё раз.';
+        buying.value = false;
+    }
+}
 const authorHref = computed(() => (author.value ? `/profile_page?user=${author.value.id}` : '#'));
 const authorInitials = computed(() => {
     const parts = (author.value?.Name || '').split(/\s+/).filter(Boolean);
@@ -283,6 +325,9 @@ async function load() {
         // students = how many people own this course (user_course rows).
         const { count } = await sb.from('user_course').select('id', { count: 'exact', head: true }).eq('course', course.value.id);
         students.value = count || 0;
+        // purchase state: is the viewer logged in, and do they already own this course?
+        buyerId.value = readStoredSession()?.user?.id || null;
+        if (buyerId.value) owns.value = await ownsCourse(sb, course.value.id, buyerId.value);
     }
     loading.value = false;
     await nextTick();
@@ -332,6 +377,10 @@ function ensureFonts() {
 @media (hover: hover) and (pointer: fine) { .pd-btn:hover { background: var(--blue-strong); transform: translateY(-2px); box-shadow: 0 16px 32px -14px rgba(46, 112, 221, 0.8); } }
 .pd-btn--lg { padding: 16px 34px; font-size: 17px; }
 .pd-btn--block { display: block; width: 100%; text-align: center; }
+button.pd-btn { font-family: inherit; }
+.pd-btn:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
+@media (hover: hover) and (pointer: fine) { .pd-btn:disabled:hover { background: var(--blue); transform: none; box-shadow: none; } }
+.pd-buyerr { margin: 12px 0 0; text-align: center; font-size: 0.85rem; color: #c0392b; }
 
 /* ── Hero (course) ──────────────────────────────────────────────────────── */
 .pd-hero { position: relative; padding: 54px 0 74px; overflow: hidden; }

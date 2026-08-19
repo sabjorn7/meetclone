@@ -3,7 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import wwPage from './views/wwPage.vue';
 import StreamsPage from './views/StreamsPage.vue';
 import ProfilePage from './views/ProfilePage.vue';
-import CourseDemoPage from './views/CourseDemoPage.vue';
+import CoursePage from './views/CoursePage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -221,6 +221,9 @@ const PAGE_OVERRIDES = [
     { path: '/faq', name: 'faq', component: FaqPage, wwPath: 'faq' },
     // Public profile: promo-styled ProfilePage replaces the WeWeb /profile_page (reads ?user=<uuid>).
     { path: '/profile_page', name: 'profile-page', component: ProfilePage, wwPath: 'profile_page' },
+    // Course landing: promo-styled CoursePage replaces the WeWeb `course_info` (paths course/{{slug|}}).
+    // Buyers still watch lessons on /my_courses — this page is the sales landing only (verified empirically).
+    { path: '/course/:slug', name: 'course', component: CoursePage, wwPath: 'course/{{slug|}}' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {
@@ -254,13 +257,13 @@ routes.push({
     component: ProfilePage,
 });
 
-// DEMO: promo-styled course landing (/course-demo?slug=<slug>|?id=<uuid>; see
-// src/_front/views/CourseDemoPage.vue). A physical dist/course-demo/index.html is produced via a
-// matching entry in vite.config.js.
+// Standalone alias for the course landing (same CoursePage as the /course/:slug override above).
+// Kept so older /course-demo?slug=<slug>|?id=<uuid> links still resolve; a physical
+// dist/course-demo/index.html is produced via a matching entry in vite.config.js.
 routes.push({
     path: '/course-demo',
     name: 'course-demo',
-    component: CourseDemoPage,
+    component: CoursePage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

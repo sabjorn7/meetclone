@@ -203,6 +203,15 @@ const qvBuyLabel = computed(() => {
     return qvInCart.value ? 'В корзине — оформить' : 'Купить';
 });
 
+// Russian plural helper (one / few / many).
+function pl(n, f) {
+    const a = Math.abs(n) % 100, b = a % 10;
+    if (a > 10 && a < 20) return f[2];
+    if (b > 1 && b < 5) return f[1];
+    if (b === 1) return f[0];
+    return f[2];
+}
+
 // stat rows shown in the popup (parity with the course page: lessons/materials/students/reviews/ratings).
 const qvStatItems = computed(() => {
     const s = qvStats.value;

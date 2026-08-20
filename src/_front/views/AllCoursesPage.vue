@@ -230,30 +230,37 @@ async function openQuickView(c) {
     qvStats.value = null;
     const sb = getSupabase();
     if (!sb) return;
-    // note if this paid course is already in the buyer's cart (drives the "В корзине" label)
-    if (buyerId.value && !c.Free) qvInCart.value = await courseInCart(sb, c.id, buyerId.value);
-    // stats — fetched lazily for just this course (lessons list, materials, students, reviews, ratings)
-    const { data: full } = await sb.from('course').select('"Less_Id", comment, rating').eq('id', c.id).limit(1);
-    const row = full?.[0] || {};
-    const lids = row.Less_Id || [];
-    let materials = 0;
-    if (lids.length) {
-        const { data: ls } = await sb.from('lessons').select('id, "File"').in('id', lids);
-        materials = (ls || []).filter((l) => (l.File || '').trim()).length;
-    }
-    const { count } = await sb.from('user_course').select('id', { count: 'exact', head: true }).eq('course', c.id);
-    const comments = Array.isArray(row.comment) ? row.comment.filter((x) => (x?.comment || '').trim()) : [];
-    const ratings = Array.isArray(row.rating) ? row.rating : [];
-    const avg = ratings.length ? ratings.reduce((s, r) => s + Number(r?.rating ?? 0), 0) / ratings.length : 0;
-    if (qv.value?.id !== c.id) return; // a newer quick-view was opened meanwhile — drop this result
-    qvStats.value = {
-        lessons: lids.length,
-        materials,
-        students: count || 0,
-        reviews: comments.length,
-        ratings: ratings.length,
-        avg: ratings.length ? avg.toFixed(1).replace('.0', '') : '0',
-    };
+    try {
+        // note if this paid course is already in the buyer's cart (drives the "В корзине" label)
+        if (buyerId.value && !c.Free) qvInCart.value = await courseInCart(sb, c.id, buyerId.value);
+        // stats from the reliable queries (course row + lessons list). Students is fetched separately
+        // below because its HEAD count endpoint is flaky (intermittent 503) and must not block the block.
+        const { data: full } = await sb.from('course').select('"Less_Id", comment, rating').eq('id', c.id).limit(1);
+        if (qv.value?.id !== c.id) return; // a newer quick-view was opened meanwhile — drop this result
+        const row = full?.[0] || {};
+        const lids = row.Less_Id || [];
+        let materials = 0;
+        if (lids.length) {
+            const { data: ls } = await sb.from('lessons').select('id, "File"').in('id', lids);
+            materials = (ls || []).filter((l) => (l.File || '').trim()).length;
+        }
+        const comments = Array.isArray(row.comment) ? row.comment.filter((x) => (x?.comment || '').trim()) : [];
+        const ratings = Array.isArray(row.rating) ? row.rating : [];
+        const avg = ratings.length ? ratings.reduce((s, r) => s + Number(r?.rating ?? 0), 0) / ratings.length : 0;
+        if (qv.value?.id !== c.id) return;
+        qvStats.value = {
+            lessons: lids.length,
+            materials,
+            students: 0,
+            reviews: comments.length,
+            ratings: ratings.length,
+            avg: ratings.length ? avg.toFixed(1).replace('.0', '') : '0',
+        };
+        // student count — best-effort; a transient 503 on the HEAD count must not break the stats block
+        sb.from('user_course').select('id', { count: 'exact', head: true }).eq('course', c.id)
+            .then(({ count }) => { if (qv.value?.id === c.id && qvStats.value) qvStats.value = { ...qvStats.value, students: count || 0 }; })
+            .catch(() => { /* leave students at 0 */ });
+    } catch (e) { /* stats are non-critical — show whatever resolved */ }
 }
 function closeQuickView() { qv.value = null; }
 function closeOverlay() { showAuthModal.value = false; qv.value = null; }

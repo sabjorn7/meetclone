@@ -503,7 +503,7 @@ button.pd-course { font-family: inherit; text-align: left; width: 100%; cursor: 
 @media (max-width: 960px) { .pd-cards--courses { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 900px) { .pd-wrap { padding-inline: 22px; } .pd-section { padding: 48px 0 64px; } }
 @media (max-width: 560px) {
-    .pd-cards--courses { grid-template-columns: 1fr; }
+    .pd-cards--courses { grid-template-columns: minmax(0, 1fr); }
     .pd-filters__row { flex-direction: column; align-items: stretch; }
     .pd-toggle { justify-content: center; }
     .pd-qv__stats { grid-template-columns: 1fr; }

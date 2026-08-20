@@ -223,44 +223,38 @@ const QV_STAT_ICONS = {
     star: '<path d="M12 4l2.5 5.1 5.6.8-4 4 1 5.6-5.1-2.7-5.1 2.7 1-5.6-4-4 5.6-.8z"/>',
 };
 
-async function openQuickView(c) {
+function openQuickView(c) {
     qv.value = c;
     buyError.value = '';
     qvInCart.value = false;
-    qvStats.value = null;
+    // Stats are set SYNCHRONOUSLY from the already-loaded course row (Less_Id / comment / rating), so the
+    // block is in the first render — no dependency on an async re-render. Materials (lessons File) and the
+    // student count need extra queries, so they load best-effort below and patch in when they resolve.
+    const lids = c.Less_Id || [];
+    const comments = Array.isArray(c.comment) ? c.comment.filter((x) => (x?.comment || '').trim()) : [];
+    const ratings = Array.isArray(c.rating) ? c.rating : [];
+    const avg = ratings.length ? ratings.reduce((s, r) => s + Number(r?.rating ?? 0), 0) / ratings.length : 0;
+    qvStats.value = {
+        lessons: lids.length,
+        materials: 0,
+        students: 0,
+        reviews: comments.length,
+        ratings: ratings.length,
+        avg: ratings.length ? avg.toFixed(1).replace('.0', '') : '0',
+    };
     const sb = getSupabase();
     if (!sb) return;
-    try {
-        // note if this paid course is already in the buyer's cart (drives the "В корзине" label)
-        if (buyerId.value && !c.Free) qvInCart.value = await courseInCart(sb, c.id, buyerId.value);
-        // stats from the reliable queries (course row + lessons list). Students is fetched separately
-        // below because its HEAD count endpoint is flaky (intermittent 503) and must not block the block.
-        const { data: full } = await sb.from('course').select('"Less_Id", comment, rating').eq('id', c.id).limit(1);
-        if (qv.value?.id !== c.id) return; // a newer quick-view was opened meanwhile — drop this result
-        const row = full?.[0] || {};
-        const lids = row.Less_Id || [];
-        let materials = 0;
-        if (lids.length) {
-            const { data: ls } = await sb.from('lessons').select('id, "File"').in('id', lids);
-            materials = (ls || []).filter((l) => (l.File || '').trim()).length;
-        }
-        const comments = Array.isArray(row.comment) ? row.comment.filter((x) => (x?.comment || '').trim()) : [];
-        const ratings = Array.isArray(row.rating) ? row.rating : [];
-        const avg = ratings.length ? ratings.reduce((s, r) => s + Number(r?.rating ?? 0), 0) / ratings.length : 0;
-        if (qv.value?.id !== c.id) return;
-        qvStats.value = {
-            lessons: lids.length,
-            materials,
-            students: 0,
-            reviews: comments.length,
-            ratings: ratings.length,
-            avg: ratings.length ? avg.toFixed(1).replace('.0', '') : '0',
-        };
-        // student count — best-effort; a transient 503 on the HEAD count must not break the stats block
-        sb.from('user_course').select('id', { count: 'exact', head: true }).eq('course', c.id)
-            .then(({ count }) => { if (qv.value?.id === c.id && qvStats.value) qvStats.value = { ...qvStats.value, students: count || 0 }; })
-            .catch(() => { /* leave students at 0 */ });
-    } catch (e) { /* stats are non-critical — show whatever resolved */ }
+    const patch = (extra) => { if (qv.value?.id === c.id && qvStats.value) qvStats.value = { ...qvStats.value, ...extra }; };
+    // cart state (paid, logged-in) — drives the "В корзине" label
+    if (buyerId.value && !c.Free) courseInCart(sb, c.id, buyerId.value).then((v) => { if (qv.value?.id === c.id) qvInCart.value = v; }).catch(() => {});
+    // materials = lessons that carry a File
+    if (lids.length) {
+        sb.from('lessons').select('id, "File"').in('id', lids)
+            .then(({ data }) => patch({ materials: (data || []).filter((l) => (l.File || '').trim()).length })).catch(() => {});
+    }
+    // student count — its HEAD count endpoint is flaky (intermittent 503); best-effort, leave 0 on failure
+    sb.from('user_course').select('id', { count: 'exact', head: true }).eq('course', c.id)
+        .then(({ count }) => patch({ students: count || 0 })).catch(() => {});
 }
 function closeQuickView() { qv.value = null; }
 function closeOverlay() { showAuthModal.value = false; qv.value = null; }
@@ -308,7 +302,7 @@ async function load() {
     if (!sb) { loading.value = false; return; }
     buyerId.value = readStoredSession()?.user?.id || null; // guest = null (no supabase call)
     const { data } = await sb.from('course')
-        .select('id, "Title", "Price", "Free", old_price, "Category", slug, owner, video_id, created_at')
+        .select('id, "Title", "Price", "Free", old_price, "Category", slug, owner, video_id, "Less_Id", comment, rating, created_at')
         .eq('ModStatus', 'Опубликовано')
         .order('created_at', { ascending: false });
     courses.value = data || [];

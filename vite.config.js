@@ -97,6 +97,23 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Hand-added standalone page: the /all-course-demo promo-styled course catalog (DEMO; see
+// src/_front/views/AllCoursesPage.vue). Physical dist/all-course-demo/index.html for direct hits.
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['all-course-demo-en'] = {
+            ..._tpl,
+            outputDir: './all-course-demo',
+            title: 'Все курсы — МитГуру',
+            meta: [
+                { name: 'title', content: 'Все курсы — МитГуру' },
+                { name: 'description', content: 'Каталог онлайн-курсов и семинаров по прикладной кинезиологии на платформе МитГуру.' },
+            ],
+        };
+    }
+}
+
 // Read the main HTML template
 const template = fs.readFileSync(path.resolve(__dirname, 'template.html'), 'utf-8');
 const compiledTemplate = handlebars.compile(template);

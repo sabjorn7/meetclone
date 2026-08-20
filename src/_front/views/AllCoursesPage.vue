@@ -62,7 +62,12 @@
                         <span class="pd-course__cat">{{ c.Category || 'Курс' }}</span>
                         <h3 class="pd-course__t">{{ c.Title }}</h3>
                         <div class="pd-course__foot">
-                            <span v-if="authorName(c)" class="pd-course__author">{{ authorName(c) }}</span>
+                            <span v-if="author(c)" class="pd-course__auth">
+                                <img v-if="author(c).Photo" class="pd-course__ava" :src="author(c).Photo" :alt="author(c).Name" />
+                                <span v-else class="pd-course__ava pd-course__ava--i">{{ initialsOf(author(c).Name) }}</span>
+                                <span class="pd-course__author">{{ author(c).Name }}</span>
+                            </span>
+                            <span v-else></span>
                             <span class="pd-course__price" :class="{ 'is-free': c.Free }">{{ c.Free ? 'Бесплатно' : money(c.Price) + ' ₽' }}</span>
                         </div>
                     </button>
@@ -102,13 +107,21 @@
                         <img v-else class="pd-qv__mascot" src="/images/minime-06.png" alt="" aria-hidden="true" />
                     </div>
                     <div class="pd-qv__body">
-                        <a v-if="author(qv)" class="pd-qv__author" :href="authorHref(qv)">
-                            <img v-if="author(qv).Photo" :src="author(qv).Photo" :alt="author(qv).Name" />
-                            <span v-else class="pd-qv__ava">{{ initialsOf(author(qv).Name) }}</span>
-                            <span class="pd-qv__by"><span class="muted">Курс от</span><b>{{ author(qv).Name }}</b></span>
-                        </a>
-                        <span class="pd-course__cat">{{ qv.Category || 'Курс' }}</span>
+                        <div class="pd-qv__top">
+                            <a v-if="author(qv)" class="pd-qv__author" :href="authorHref(qv)">
+                                <img v-if="author(qv).Photo" :src="author(qv).Photo" :alt="author(qv).Name" />
+                                <span v-else class="pd-qv__ava">{{ initialsOf(author(qv).Name) }}</span>
+                                <span class="pd-qv__by"><span class="muted">Курс от</span><b>{{ author(qv).Name }}</b></span>
+                            </a>
+                            <span class="pd-qv__cat">{{ qv.Category || 'Курс' }}</span>
+                        </div>
                         <h3 class="pd-qv__title">{{ qv.Title }}</h3>
+                        <ul v-if="qvStatItems.length" class="pd-qv__stats">
+                            <li v-for="(s, i) in qvStatItems" :key="i">
+                                <svg class="pd-qv__sic" viewBox="0 0 24 24" aria-hidden="true" v-html="QV_STAT_ICONS[s.icon]"></svg>
+                                <span>{{ s.text }}</span>
+                            </li>
+                        </ul>
                         <div class="pd-qv__actions">
                             <button class="pd-btn" type="button" :disabled="buying" @click="buyFromQuickView">{{ qvBuyLabel }}</button>
                             <a class="pd-btn pd-btn--ghost" :href="courseHref(qv)">Подробнее о курсе</a>
@@ -144,6 +157,7 @@ const buyer = ref(null);         // full users row (resolved lazily on first buy
 const buying = ref(false);
 const buyError = ref('');
 const qvInCart = ref(false);     // the quick-view course is already in the cart
+const qvStats = ref(null);       // {lessons, materials, students, reviews, ratings, avg} for the popup
 const showAuthModal = ref(false); // guest tried to buy → login/register prompt
 
 // category tabs derived from the data (label + live count), "Все" first.
@@ -189,15 +203,57 @@ const qvBuyLabel = computed(() => {
     return qvInCart.value ? 'В корзине — оформить' : 'Купить';
 });
 
+// stat rows shown in the popup (parity with the course page: lessons/materials/students/reviews/ratings).
+const qvStatItems = computed(() => {
+    const s = qvStats.value;
+    if (!s) return [];
+    return [
+        { icon: 'play', text: `${s.lessons} ${pl(s.lessons, ['урок', 'урока', 'уроков'])}` },
+        { icon: 'doc', text: `${s.materials} ${pl(s.materials, ['материал', 'материала', 'материалов'])}` },
+        { icon: 'users', text: `${s.students} ${pl(s.students, ['ученик', 'ученика', 'учеников'])}` },
+        { icon: 'chat', text: `${s.reviews} ${pl(s.reviews, ['отзыв', 'отзыва', 'отзывов'])}` },
+        { icon: 'star', text: `${s.ratings} ${pl(s.ratings, ['оценка', 'оценки', 'оценок'])} · ср. ${s.avg}` },
+    ];
+});
+const QV_STAT_ICONS = {
+    play: '<path d="M9 5H4v14h5M9 5l11 7-11 7z"/>',
+    doc: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/>',
+    users: '<circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.5a3 3 0 0 1 0 5.5"/>',
+    chat: '<path d="M4 5h16v11H9l-4 3v-3H4z"/>',
+    star: '<path d="M12 4l2.5 5.1 5.6.8-4 4 1 5.6-5.1-2.7-5.1 2.7 1-5.6-4-4 5.6-.8z"/>',
+};
+
 async function openQuickView(c) {
     qv.value = c;
     buyError.value = '';
     qvInCart.value = false;
+    qvStats.value = null;
+    const sb = getSupabase();
+    if (!sb) return;
     // note if this paid course is already in the buyer's cart (drives the "В корзине" label)
-    if (buyerId.value && !c.Free) {
-        const sb = getSupabase();
-        qvInCart.value = await courseInCart(sb, c.id, buyerId.value);
+    if (buyerId.value && !c.Free) qvInCart.value = await courseInCart(sb, c.id, buyerId.value);
+    // stats — fetched lazily for just this course (lessons list, materials, students, reviews, ratings)
+    const { data: full } = await sb.from('course').select('"Less_Id", comment, rating').eq('id', c.id).limit(1);
+    const row = full?.[0] || {};
+    const lids = row.Less_Id || [];
+    let materials = 0;
+    if (lids.length) {
+        const { data: ls } = await sb.from('lessons').select('id, "File"').in('id', lids);
+        materials = (ls || []).filter((l) => (l.File || '').trim()).length;
     }
+    const { count } = await sb.from('user_course').select('id', { count: 'exact', head: true }).eq('course', c.id);
+    const comments = Array.isArray(row.comment) ? row.comment.filter((x) => (x?.comment || '').trim()) : [];
+    const ratings = Array.isArray(row.rating) ? row.rating : [];
+    const avg = ratings.length ? ratings.reduce((s, r) => s + Number(r?.rating ?? 0), 0) / ratings.length : 0;
+    if (qv.value?.id !== c.id) return; // a newer quick-view was opened meanwhile — drop this result
+    qvStats.value = {
+        lessons: lids.length,
+        materials,
+        students: count || 0,
+        reviews: comments.length,
+        ratings: ratings.length,
+        avg: ratings.length ? avg.toFixed(1).replace('.0', '') : '0',
+    };
 }
 function closeQuickView() { qv.value = null; }
 function closeOverlay() { showAuthModal.value = false; qv.value = null; }
@@ -347,14 +403,17 @@ function ensureFonts() {
 .pd-count { margin: 0 0 22px; color: var(--ink-2); font-size: 0.98rem; }
 
 /* ── Cards (reused from ProfilePage for consistency) ────────────────────── */
-.pd-cards--courses { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.pd-cards--courses { display: grid; grid-template-columns: 1fr 1fr 1.35fr; gap: 20px; }
 .pd-course { display: flex; flex-direction: column; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 24px 24px 22px; text-decoration: none; color: inherit; transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out), border-color 0.22s var(--ease-out); }
 @media (hover: hover) and (pointer: fine) { .pd-course:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: rgba(46, 112, 221, 0.4); } }
 .pd-course__cat { align-self: flex-start; padding: 5px 12px; border-radius: var(--r-pill); background: var(--blue-tint); color: var(--blue-ink); font-weight: 600; font-size: 12px; }
 .pd-course__t { margin: 0; font-weight: 600; font-size: 1.08rem; line-height: 1.28; letter-spacing: -0.01em; flex: 1; }
-.pd-course__foot { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 2px; }
-.pd-course__author { color: var(--ink-3); font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pd-course__price { font-weight: 700; font-size: 1.05rem; color: var(--ink); white-space: nowrap; }
+.pd-course__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 2px; }
+.pd-course__auth { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.pd-course__ava { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex: none; }
+.pd-course__ava--i { display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-weight: 700; font-size: 10px; }
+.pd-course__author { color: var(--ink-3); font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-course__price { font-weight: 700; font-size: 1.05rem; color: var(--ink); white-space: nowrap; flex: none; }
 .pd-course__price.is-free { color: var(--orange-ink); }
 
 /* ── Empty state ────────────────────────────────────────────────────────── */
@@ -381,7 +440,7 @@ button.pd-course { font-family: inherit; text-align: left; width: 100%; cursor: 
 
 /* ── Overlay + modal shell (shared) ─────────────────────────────────────── */
 .pd-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 22px; background: rgba(9, 23, 71, 0.44); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
-.pd-modal__x { position: absolute; top: 12px; right: 14px; z-index: 2; width: 34px; height: 34px; border: none; border-radius: 50%; background: rgba(255, 255, 255, 0.9); color: var(--ink-2); font-size: 24px; line-height: 1; cursor: pointer; transition: background 0.16s var(--ease-out), color 0.16s var(--ease-out); }
+.pd-modal__x { position: absolute; top: 12px; right: 12px; z-index: 3; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: none; border-radius: 50%; background: rgba(255, 255, 255, 0.92); color: var(--ink-2); font-size: 22px; line-height: 1; cursor: pointer; box-shadow: 0 2px 10px -2px rgba(9, 23, 71, 0.35); transition: background 0.16s var(--ease-out), color 0.16s var(--ease-out); }
 @media (hover: hover) and (pointer: fine) { .pd-modal__x:hover { background: #fff; color: var(--ink); } }
 .pd-modal__card { position: relative; width: 100%; max-width: 420px; background: var(--surface); border-radius: var(--r-lg); padding: 40px 36px 34px; box-shadow: 0 34px 80px -34px rgba(9, 23, 71, 0.55); text-align: center; }
 .pd-modal__mascot { display: block; width: 132px; height: auto; margin: 0 auto 18px; }
@@ -396,13 +455,19 @@ button.pd-course { font-family: inherit; text-align: left; width: 100%; cursor: 
 .pd-qv__media.is-empty { background: var(--blue-tint); display: grid; place-items: center; }
 .pd-qv__mascot { width: 128px; height: auto; }
 .pd-qv__body { padding: 22px 26px 26px; }
-.pd-qv__author { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; margin-bottom: 14px; }
+.pd-qv__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.pd-qv__author { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; min-width: 0; }
 .pd-qv__author img, .pd-qv__ava { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex: none; }
 .pd-qv__ava { display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-weight: 700; }
-.pd-qv__by { display: flex; flex-direction: column; line-height: 1.25; font-size: 0.95rem; }
+.pd-qv__by { display: flex; flex-direction: column; line-height: 1.25; font-size: 0.95rem; min-width: 0; }
+.pd-qv__by b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pd-qv__by .muted { color: var(--ink-3); font-size: 0.8rem; }
 @media (hover: hover) and (pointer: fine) { .pd-qv__author:hover b { color: var(--blue-ink); } }
-.pd-qv__title { margin: 10px 0 18px; font-weight: 700; font-size: 1.4rem; line-height: 1.2; letter-spacing: -0.01em; }
+.pd-qv__cat { flex: none; padding: 5px 12px; border-radius: var(--r-pill); background: var(--blue-tint); color: var(--blue-ink); font-weight: 600; font-size: 12px; }
+.pd-qv__title { margin: 12px 0 16px; font-weight: 700; font-size: 1.4rem; line-height: 1.2; letter-spacing: -0.01em; }
+.pd-qv__stats { list-style: none; margin: 0 0 20px; padding: 16px 0 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr; gap: 11px 22px; }
+.pd-qv__stats li { display: flex; align-items: center; gap: 9px; color: var(--ink-2); font-size: 0.92rem; }
+.pd-qv__sic { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--blue-ink); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .pd-qv__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .pd-qv__price { margin-left: auto; font-weight: 700; font-size: 1.3rem; color: var(--ink); }
 .pd-qv__price.is-free { color: var(--orange-ink); }
@@ -429,5 +494,9 @@ button.pd-course { font-family: inherit; text-align: left; width: 100%; cursor: 
     .pd-cards--courses { grid-template-columns: 1fr; }
     .pd-filters__row { flex-direction: column; align-items: stretch; }
     .pd-toggle { justify-content: center; }
+    .pd-qv__stats { grid-template-columns: 1fr; }
+    .pd-qv__actions { flex-direction: column; align-items: stretch; }
+    .pd-qv__actions .pd-btn { width: 100%; }
+    .pd-qv__price { margin: 4px 0 0; text-align: center; }
 }
 </style>

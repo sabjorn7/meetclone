@@ -50,13 +50,14 @@
                 <p class="pd-count" aria-live="polite">{{ visibleCourses.length }} {{ courseWord(visibleCourses.length) }}</p>
 
                 <div v-if="visibleCourses.length" class="pd-cards pd-cards--courses">
-                    <a
+                    <button
                         v-for="(c, i) in visibleCourses"
                         :key="c.id"
                         class="pd-course"
-                        :href="courseHref(c)"
+                        type="button"
                         data-reveal
                         :style="{ '--i': Math.min(i, 7) }"
+                        @click="openQuickView(c)"
                     >
                         <span class="pd-course__cat">{{ c.Category || 'Курс' }}</span>
                         <h3 class="pd-course__t">{{ c.Title }}</h3>
@@ -64,7 +65,7 @@
                             <span v-if="authorName(c)" class="pd-course__author">{{ authorName(c) }}</span>
                             <span class="pd-course__price" :class="{ 'is-free': c.Free }">{{ c.Free ? 'Бесплатно' : money(c.Price) + ' ₽' }}</span>
                         </div>
-                    </a>
+                    </button>
                 </div>
 
                 <div v-else-if="!loading" class="pd-empty">
@@ -76,12 +77,58 @@
                 <p v-if="loading" class="pd-state">Загрузка курсов…</p>
             </div>
         </section>
+
+        <!-- ── QUICK-VIEW POPUP (teaser + author + buy), matching the old catalog on-click popup ── -->
+        <transition name="pd-modal">
+            <div v-if="qv" class="pd-modal" role="dialog" aria-modal="true" :aria-label="qv.Title" @click.self="closeQuickView">
+                <div class="pd-qv">
+                    <button class="pd-modal__x" type="button" aria-label="Закрыть" @click="closeQuickView">×</button>
+                    <div class="pd-qv__media" :class="{ 'is-empty': !qvEmbed }">
+                        <iframe v-if="qvEmbed" :src="qvEmbed" title="Видео о курсе" frameborder="0" allow="fullscreen" allowfullscreen loading="lazy"></iframe>
+                        <img v-else class="pd-qv__mascot" src="/images/minime-06.png" alt="" aria-hidden="true" />
+                    </div>
+                    <div class="pd-qv__body">
+                        <a v-if="author(qv)" class="pd-qv__author" :href="authorHref(qv)">
+                            <img v-if="author(qv).Photo" :src="author(qv).Photo" :alt="author(qv).Name" />
+                            <span v-else class="pd-qv__ava">{{ initialsOf(author(qv).Name) }}</span>
+                            <span class="pd-qv__by"><span class="muted">Курс от</span><b>{{ author(qv).Name }}</b></span>
+                        </a>
+                        <span class="pd-course__cat">{{ qv.Category || 'Курс' }}</span>
+                        <h3 class="pd-qv__title">{{ qv.Title }}</h3>
+                        <div class="pd-qv__actions">
+                            <button class="pd-btn" type="button" :disabled="buying" @click="buyFromQuickView">{{ qvBuyLabel }}</button>
+                            <a class="pd-btn pd-btn--ghost" :href="courseHref(qv)">Подробнее о курсе</a>
+                            <span class="pd-qv__price" :class="{ 'is-free': qv.Free }">{{ qv.Free ? 'Бесплатно' : money(qv.Price) + ' ₽' }}</span>
+                        </div>
+                        <p v-if="buyError" class="pd-buyerr">{{ buyError }}</p>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- ── GUEST AUTH PROMPT (same offer as /all_course: войти / зарегистрироваться) ── -->
+        <transition name="pd-modal">
+            <div v-if="showAuthModal" class="pd-modal" role="dialog" aria-modal="true" aria-labelledby="pd-auth-title" @click.self="showAuthModal = false">
+                <div class="pd-modal__card">
+                    <button class="pd-modal__x" type="button" aria-label="Закрыть" @click="showAuthModal = false">×</button>
+                    <img class="pd-modal__mascot" src="/images/minime-06.png" alt="" aria-hidden="true" width="626" height="626" />
+                    <h2 id="pd-auth-title" class="pd-modal__title">Войдите, чтобы продолжить</h2>
+                    <p class="pd-modal__text">Чтобы купить курс, войдите в аккаунт или зарегистрируйтесь — это займёт минуту.</p>
+                    <div class="pd-modal__actions">
+                        <a class="pd-btn pd-btn--lg pd-btn--block" href="/login">Войти</a>
+                        <a class="pd-btn pd-btn--lg pd-btn--block pd-btn--ghost" href="/registration">Зарегистрироваться</a>
+                    </div>
+                </div>
+            </div>
+        </transition>
     </main>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue';
-import { getSupabase } from '@/_front/chrome/headerAccount.js';
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
+import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
+import { embedUrl } from '@/_front/streams/peertubeLive.js';
+import { getBuyerRow, enrollFree, addToCart, courseInCart } from '@/_front/course/coursesApi.js';
 
 const courses = ref([]);
 const authorsById = ref({});
@@ -91,6 +138,15 @@ const ready = ref(false);
 const selectedCat = ref('all');
 const query = ref('');
 const freeOnly = ref(false);
+
+// quick-view popup + purchase state
+const qv = ref(null);            // the course shown in the quick-view popup (null = closed)
+const buyerId = ref(null);       // logged-in user's id (null = guest)
+const buyer = ref(null);         // full users row (resolved lazily on first buy)
+const buying = ref(false);
+const buyError = ref('');
+const qvInCart = ref(false);     // the quick-view course is already in the cart
+const showAuthModal = ref(false); // guest tried to buy → login/register prompt
 
 // category tabs derived from the data (label + live count), "Все" first.
 const categories = computed(() => {
@@ -118,8 +174,65 @@ const visibleCourses = computed(() => {
 
 function resetFilters() { selectedCat.value = 'all'; query.value = ''; freeOnly.value = false; }
 function courseHref(c) { return `/course/${c.slug || c.id}`; }
-function authorName(c) { return authorsById.value[c.owner] || ''; }
+function author(c) { return authorsById.value[c?.owner] || null; }
+function authorName(c) { return author(c)?.Name || ''; }
+function authorHref(c) { return c?.owner ? `/profile_page?user=${c.owner}` : '#'; }
+function initialsOf(name) {
+    const p = (name || '').split(/\s+/).filter(Boolean);
+    return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || '·';
+}
 function money(n) { return Number(n || 0).toLocaleString('ru-RU'); }
+
+// ── Quick-view popup (teaser + author + buy), matching the old catalog's on-click popup ──
+const qvEmbed = computed(() => (qv.value?.video_id ? embedUrl(qv.value.video_id) : ''));
+const qvBuyLabel = computed(() => {
+    if (buying.value) return 'Секунду…';
+    if (qv.value?.Free) return 'Получить бесплатно';
+    return qvInCart.value ? 'В корзине — оформить' : 'Купить';
+});
+
+async function openQuickView(c) {
+    qv.value = c;
+    buyError.value = '';
+    qvInCart.value = false;
+    // note if this paid course is already in the buyer's cart (drives the "В корзине" label)
+    if (buyerId.value && !c.Free) {
+        const sb = getSupabase();
+        qvInCart.value = await courseInCart(sb, c.id, buyerId.value);
+    }
+}
+function closeQuickView() { qv.value = null; }
+
+// Ask the shared AppHeader to open its cart dropdown (deferred a tick past the click, so the header's
+// outside-click handler doesn't immediately close it).
+function openHeaderCart() { setTimeout(() => window.dispatchEvent(new CustomEvent('mg-open-cart')), 0); }
+
+// Buy the quick-view course. Guest → auth modal; free → direct grant; paid → add to cart + open cart.
+// Reuses the shared coursesApi (same money path as CoursePage); no order/redirect happens here.
+async function buyFromQuickView() {
+    if (buying.value || !qv.value) return;
+    buyError.value = '';
+    if (!buyerId.value) { qv.value = null; showAuthModal.value = true; return; } // guest → login prompt
+    if (!qv.value.Free && qvInCart.value) { openHeaderCart(); return; }
+    buying.value = true;
+    try {
+        const sb = getSupabase();
+        if (!buyer.value) buyer.value = await getBuyerRow(sb, buyerId.value);
+        if (!buyer.value) throw new Error('Не удалось определить пользователя.');
+        if (qv.value.Free) {
+            await enrollFree(sb, { buyer: buyer.value, course: qv.value });
+            window.location.assign('/my_courses');
+        } else {
+            await addToCart(sb, { buyer: buyer.value, course: qv.value });
+            qvInCart.value = true;
+            openHeaderCart();
+        }
+    } catch (e) {
+        buyError.value = e?.message || 'Не удалось добавить в корзину. Попробуйте ещё раз.';
+    } finally {
+        buying.value = false;
+    }
+}
 function courseWord(n) {
     const a = Math.abs(n) % 100, b = a % 10;
     if (a > 10 && a < 20) return 'курсов';
@@ -131,16 +244,17 @@ function courseWord(n) {
 async function load() {
     const sb = getSupabase();
     if (!sb) { loading.value = false; return; }
+    buyerId.value = readStoredSession()?.user?.id || null; // guest = null (no supabase call)
     const { data } = await sb.from('course')
-        .select('id, "Title", "Price", "Free", old_price, "Category", slug, owner, created_at')
+        .select('id, "Title", "Price", "Free", old_price, "Category", slug, owner, video_id, created_at')
         .eq('ModStatus', 'Опубликовано')
         .order('created_at', { ascending: false });
     courses.value = data || [];
-    // author names (school / teacher) for the card footer — one batched query over distinct owners.
+    // authors (school / teacher) — name for the card footer, name+photo for the quick-view popup.
     const ownerIds = [...new Set(courses.value.map((c) => c.owner).filter(Boolean))];
     if (ownerIds.length) {
-        const { data: us } = await sb.from('users').select('id, "Name"').in('id', ownerIds);
-        authorsById.value = Object.fromEntries((us || []).map((u) => [u.id, u.Name]));
+        const { data: us } = await sb.from('users').select('id, "Name", "Photo"').in('id', ownerIds);
+        authorsById.value = Object.fromEntries((us || []).map((u) => [u.id, u]));
     }
     loading.value = false;
     await nextTick();
@@ -148,6 +262,19 @@ async function load() {
 }
 
 onMounted(() => { ensureFonts(); load(); });
+
+// Any open overlay (quick-view or auth modal) locks body scroll and closes on Escape.
+const anyOverlay = computed(() => !!qv.value || showAuthModal.value);
+function onOverlayKey(e) { if (e.key === 'Escape') { showAuthModal.value = false; qv.value = null; } }
+watch(anyOverlay, (open) => {
+    document.body.style.overflow = open ? 'hidden' : '';
+    if (open) document.addEventListener('keydown', onOverlayKey);
+    else document.removeEventListener('keydown', onOverlayKey);
+});
+onBeforeUnmount(() => {
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', onOverlayKey);
+});
 
 function ensureFonts() {
     if (document.getElementById('pd-fonts')) return;
@@ -237,6 +364,64 @@ function ensureFonts() {
 .pd-empty p { margin: 0 0 18px; font-size: 1.1rem; }
 .pd-ghostbtn { font-family: inherit; font-weight: 600; font-size: 15px; color: var(--blue-ink); background: transparent; border: 1.5px solid var(--line); border-radius: var(--r-pill); padding: 12px 24px; cursor: pointer; transition: background 0.16s var(--ease-out), border-color 0.16s var(--ease-out); }
 @media (hover: hover) and (pointer: fine) { .pd-ghostbtn:hover { background: var(--blue-tint); border-color: var(--blue-soft); } }
+
+/* card is a <button> that opens the quick-view — reset native button chrome */
+button.pd-course { font-family: inherit; text-align: left; width: 100%; cursor: pointer; }
+
+/* ── Buttons (shared with the popups) ───────────────────────────────────── */
+.pd-btn { display: inline-block; font-family: inherit; font-weight: 600; font-size: 16px; color: #fff; background: var(--blue); border: none; border-radius: var(--r-pill); padding: 14px 26px; cursor: pointer; text-decoration: none; text-align: center; transition: transform 0.16s var(--ease-out), background 0.16s var(--ease-out), box-shadow 0.16s var(--ease-out); box-shadow: 0 10px 26px -12px rgba(46, 112, 221, 0.7); }
+.pd-btn:active { transform: translateY(1px); }
+@media (hover: hover) and (pointer: fine) { .pd-btn:hover { background: var(--blue-strong); transform: translateY(-2px); box-shadow: 0 16px 32px -14px rgba(46, 112, 221, 0.8); } }
+.pd-btn--lg { padding: 16px 34px; font-size: 17px; }
+.pd-btn--block { display: block; width: 100%; }
+.pd-btn:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
+@media (hover: hover) and (pointer: fine) { .pd-btn:disabled:hover { background: var(--blue); transform: none; box-shadow: none; } }
+.pd-btn--ghost { background: transparent; color: var(--blue-ink); border: 1.5px solid var(--line); box-shadow: none; }
+@media (hover: hover) and (pointer: fine) { .pd-btn--ghost:hover { background: var(--blue-tint); border-color: var(--blue-soft); box-shadow: none; } }
+.pd-buyerr { margin: 12px 0 0; text-align: center; font-size: 0.85rem; color: #c0392b; }
+
+/* ── Overlay + modal shell (shared) ─────────────────────────────────────── */
+.pd-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 22px; background: rgba(9, 23, 71, 0.44); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+.pd-modal__x { position: absolute; top: 12px; right: 14px; z-index: 2; width: 34px; height: 34px; border: none; border-radius: 50%; background: rgba(255, 255, 255, 0.9); color: var(--ink-2); font-size: 24px; line-height: 1; cursor: pointer; transition: background 0.16s var(--ease-out), color 0.16s var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .pd-modal__x:hover { background: #fff; color: var(--ink); } }
+.pd-modal__card { position: relative; width: 100%; max-width: 420px; background: var(--surface); border-radius: var(--r-lg); padding: 40px 36px 34px; box-shadow: 0 34px 80px -34px rgba(9, 23, 71, 0.55); text-align: center; }
+.pd-modal__mascot { display: block; width: 132px; height: auto; margin: 0 auto 18px; }
+.pd-modal__title { margin: 0 0 10px; font-weight: 700; font-size: 1.5rem; letter-spacing: -0.02em; line-height: 1.15; }
+.pd-modal__text { margin: 0 auto 26px; max-width: 34ch; color: var(--ink-2); font-size: 1rem; }
+.pd-modal__actions { display: grid; gap: 12px; }
+
+/* ── Quick-view popup ───────────────────────────────────────────────────── */
+.pd-qv { position: relative; width: 100%; max-width: 560px; background: var(--surface); border-radius: var(--r-lg); overflow: hidden; box-shadow: 0 34px 80px -34px rgba(9, 23, 71, 0.55); }
+.pd-qv__media { position: relative; width: 100%; aspect-ratio: 16 / 9; background: var(--ink); }
+.pd-qv__media iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.pd-qv__media.is-empty { background: var(--blue-tint); display: grid; place-items: center; }
+.pd-qv__mascot { width: 128px; height: auto; }
+.pd-qv__body { padding: 22px 26px 26px; }
+.pd-qv__author { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; margin-bottom: 14px; }
+.pd-qv__author img, .pd-qv__ava { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex: none; }
+.pd-qv__ava { display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-weight: 700; }
+.pd-qv__by { display: flex; flex-direction: column; line-height: 1.25; font-size: 0.95rem; }
+.pd-qv__by .muted { color: var(--ink-3); font-size: 0.8rem; }
+@media (hover: hover) and (pointer: fine) { .pd-qv__author:hover b { color: var(--blue-ink); } }
+.pd-qv__title { margin: 10px 0 18px; font-weight: 700; font-size: 1.4rem; line-height: 1.2; letter-spacing: -0.01em; }
+.pd-qv__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.pd-qv__price { margin-left: auto; font-weight: 700; font-size: 1.3rem; color: var(--ink); }
+.pd-qv__price.is-free { color: var(--orange-ink); }
+
+/* ── Modal transitions (shared) ─────────────────────────────────────────── */
+.pd-modal-enter-active, .pd-modal-leave-active { transition: opacity 0.2s var(--ease-out); }
+.pd-modal-enter-active .pd-qv, .pd-modal-leave-active .pd-qv,
+.pd-modal-enter-active .pd-modal__card, .pd-modal-leave-active .pd-modal__card { transition: transform 0.22s var(--ease-out), opacity 0.22s var(--ease-out); }
+.pd-modal-enter-from, .pd-modal-leave-to { opacity: 0; }
+.pd-modal-enter-from .pd-qv, .pd-modal-leave-to .pd-qv,
+.pd-modal-enter-from .pd-modal__card, .pd-modal-leave-to .pd-modal__card { opacity: 0; transform: translateY(10px) scale(0.96); }
+@media (prefers-reduced-motion: reduce) {
+    .pd-modal-enter-active, .pd-modal-leave-active,
+    .pd-modal-enter-active .pd-qv, .pd-modal-leave-active .pd-qv,
+    .pd-modal-enter-active .pd-modal__card, .pd-modal-leave-active .pd-modal__card { transition: opacity 0.15s ease; }
+    .pd-modal-enter-from .pd-qv, .pd-modal-leave-to .pd-qv,
+    .pd-modal-enter-from .pd-modal__card, .pd-modal-leave-to .pd-modal__card { transform: none; }
+}
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 960px) { .pd-cards--courses { grid-template-columns: repeat(2, 1fr); } }

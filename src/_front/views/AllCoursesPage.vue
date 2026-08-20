@@ -104,7 +104,10 @@
                     <button class="pd-modal__x" type="button" aria-label="Закрыть" @click="closeQuickView">×</button>
                     <div class="pd-qv__media" :class="{ 'is-empty': !qvEmbed }">
                         <iframe v-if="qvEmbed" :src="qvEmbed" title="Видео о курсе" frameborder="0" allow="fullscreen" allowfullscreen loading="lazy"></iframe>
-                        <img v-else class="pd-qv__mascot" src="/images/minime-06.png" alt="" aria-hidden="true" />
+                        <div v-else class="pd-qv__novideo">
+                            <img class="pd-qv__mascot" src="/images/minime-17.png" alt="" aria-hidden="true" />
+                            <span class="pd-qv__novideo-t">Нет видеотизера</span>
+                        </div>
                     </div>
                     <div class="pd-qv__body">
                         <div class="pd-qv__top">
@@ -464,8 +467,10 @@ button.pd-course { font-family: inherit; text-align: left; width: 100%; cursor: 
 .pd-qv { position: relative; width: 100%; max-width: 560px; background: var(--surface); border-radius: var(--r-lg); overflow: hidden; box-shadow: 0 34px 80px -34px rgba(9, 23, 71, 0.55); }
 .pd-qv__media { position: relative; width: 100%; aspect-ratio: 16 / 9; background: var(--ink); }
 .pd-qv__media iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-.pd-qv__media.is-empty { background: var(--blue-tint); display: grid; place-items: center; }
-.pd-qv__mascot { width: 128px; height: auto; }
+.pd-qv__media.is-empty { background: var(--bg-tint); display: grid; place-items: center; }
+.pd-qv__novideo { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.pd-qv__mascot { width: 120px; height: auto; }
+.pd-qv__novideo-t { font-weight: 600; font-size: 0.95rem; color: var(--ink-3); }
 .pd-qv__body { padding: 22px 26px 26px; }
 .pd-qv__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 .pd-qv__author { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; min-width: 0; }

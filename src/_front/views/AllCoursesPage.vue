@@ -10,10 +10,13 @@
         <!-- ── HERO ─────────────────────────────────────────────── -->
         <header class="pd-hero">
             <div class="pd-blob" aria-hidden="true"></div>
-            <div class="pd-wrap">
-                <span class="pd-badge" data-reveal><span class="pd-badge__dot" aria-hidden="true"></span>Каталог</span>
-                <h1 class="pd-hero__title" data-reveal>Все курсы по кинезиологии</h1>
-                <p class="pd-hero__sub" data-reveal>Программы и семинары от практикующих экспертов — выбирайте направление и учитесь в удобном темпе.</p>
+            <div class="pd-wrap pd-hero__grid">
+                <div class="pd-hero__text">
+                    <span class="pd-badge" data-reveal><span class="pd-badge__dot" aria-hidden="true"></span>Каталог</span>
+                    <h1 class="pd-hero__title" data-reveal>Все курсы по кинезиологии</h1>
+                    <p class="pd-hero__sub" data-reveal>Программы и семинары от практикующих экспертов — выбирайте направление и учитесь в удобном темпе.</p>
+                </div>
+                <img class="pd-hero__art" src="/images/881bb218-6026-4212-8809-c79020cf4a58.png" alt="" aria-hidden="true" data-reveal />
             </div>
         </header>
 
@@ -385,6 +388,9 @@ function ensureFonts() {
 .pd-hero > .pd-wrap { position: relative; z-index: 1; }
 .pd-badge { display: inline-flex; align-items: center; gap: 9px; padding: 8px 16px; border-radius: var(--r-pill); background: var(--blue-tint); color: var(--blue-ink); font-weight: 600; font-size: 14px; }
 .pd-badge__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 4px rgba(240, 145, 87, 0.22); }
+.pd-hero__grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 48px; }
+.pd-hero__text { min-width: 0; }
+.pd-hero__art { height: 300px; width: auto; max-width: 100%; justify-self: end; display: block; filter: drop-shadow(0 20px 40px rgba(9, 23, 71, 0.14)); }
 .pd-hero__title { margin: 22px 0 0; font-weight: 700; font-size: clamp(2rem, 4.4vw, 3.2rem); line-height: 1.05; letter-spacing: -0.02em; }
 .pd-hero__sub { margin: 18px 0 0; max-width: 56ch; font-size: 1.12rem; color: var(--ink-2); }
 
@@ -506,7 +512,12 @@ button.pd-course { font-family: inherit; text-align: left; width: 100%; cursor: 
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 960px) { .pd-cards--courses { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 900px) { .pd-wrap { padding-inline: 22px; } .pd-section { padding: 48px 0 64px; } }
+@media (max-width: 900px) {
+    .pd-wrap { padding-inline: 22px; }
+    .pd-section { padding: 48px 0 64px; }
+    .pd-hero__grid { grid-template-columns: 1fr; }
+    .pd-hero__art { display: none; }
+}
 @media (max-width: 560px) {
     .pd-cards--courses { grid-template-columns: minmax(0, 1fr); }
     .pd-filters__row { flex-direction: column; align-items: stretch; }

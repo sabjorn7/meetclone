@@ -78,10 +78,24 @@
             </div>
         </section>
 
-        <!-- ── QUICK-VIEW POPUP (teaser + author + buy), matching the old catalog on-click popup ── -->
+        <!-- ── SINGLE OVERLAY: quick-view (teaser + author + buy) OR the guest auth prompt ──
+             One backdrop, swapping content, so a guest clicking Купить in the quick-view doesn't
+             cross-fade two stacked overlays. -->
         <transition name="pd-modal">
-            <div v-if="qv" class="pd-modal" role="dialog" aria-modal="true" :aria-label="qv.Title" @click.self="closeQuickView">
-                <div class="pd-qv">
+            <div v-if="qv || showAuthModal" class="pd-modal" role="dialog" aria-modal="true" @click.self="closeOverlay">
+                <!-- guest auth prompt takes priority (shown when a guest triggers a buy) -->
+                <div v-if="showAuthModal" class="pd-modal__card">
+                    <button class="pd-modal__x" type="button" aria-label="Закрыть" @click="closeOverlay">×</button>
+                    <img class="pd-modal__mascot" src="/images/minime-06.png" alt="" aria-hidden="true" width="626" height="626" />
+                    <h2 id="pd-auth-title" class="pd-modal__title">Войдите, чтобы продолжить</h2>
+                    <p class="pd-modal__text">Чтобы купить курс, войдите в аккаунт или зарегистрируйтесь — это займёт минуту.</p>
+                    <div class="pd-modal__actions">
+                        <a class="pd-btn pd-btn--lg pd-btn--block" href="/login">Войти</a>
+                        <a class="pd-btn pd-btn--lg pd-btn--block pd-btn--ghost" href="/registration">Зарегистрироваться</a>
+                    </div>
+                </div>
+                <!-- quick-view -->
+                <div v-else-if="qv" class="pd-qv">
                     <button class="pd-modal__x" type="button" aria-label="Закрыть" @click="closeQuickView">×</button>
                     <div class="pd-qv__media" :class="{ 'is-empty': !qvEmbed }">
                         <iframe v-if="qvEmbed" :src="qvEmbed" title="Видео о курсе" frameborder="0" allow="fullscreen" allowfullscreen loading="lazy"></iframe>
@@ -101,22 +115,6 @@
                             <span class="pd-qv__price" :class="{ 'is-free': qv.Free }">{{ qv.Free ? 'Бесплатно' : money(qv.Price) + ' ₽' }}</span>
                         </div>
                         <p v-if="buyError" class="pd-buyerr">{{ buyError }}</p>
-                    </div>
-                </div>
-            </div>
-        </transition>
-
-        <!-- ── GUEST AUTH PROMPT (same offer as /all_course: войти / зарегистрироваться) ── -->
-        <transition name="pd-modal">
-            <div v-if="showAuthModal" class="pd-modal" role="dialog" aria-modal="true" aria-labelledby="pd-auth-title" @click.self="showAuthModal = false">
-                <div class="pd-modal__card">
-                    <button class="pd-modal__x" type="button" aria-label="Закрыть" @click="showAuthModal = false">×</button>
-                    <img class="pd-modal__mascot" src="/images/minime-06.png" alt="" aria-hidden="true" width="626" height="626" />
-                    <h2 id="pd-auth-title" class="pd-modal__title">Войдите, чтобы продолжить</h2>
-                    <p class="pd-modal__text">Чтобы купить курс, войдите в аккаунт или зарегистрируйтесь — это займёт минуту.</p>
-                    <div class="pd-modal__actions">
-                        <a class="pd-btn pd-btn--lg pd-btn--block" href="/login">Войти</a>
-                        <a class="pd-btn pd-btn--lg pd-btn--block pd-btn--ghost" href="/registration">Зарегистрироваться</a>
                     </div>
                 </div>
             </div>
@@ -202,6 +200,7 @@ async function openQuickView(c) {
     }
 }
 function closeQuickView() { qv.value = null; }
+function closeOverlay() { showAuthModal.value = false; qv.value = null; }
 
 // Ask the shared AppHeader to open its cart dropdown (deferred a tick past the click, so the header's
 // outside-click handler doesn't immediately close it).

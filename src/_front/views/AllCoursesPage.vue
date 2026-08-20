@@ -413,7 +413,9 @@ function ensureFonts() {
 .pd-count { margin: 0 0 22px; color: var(--ink-2); font-size: 0.98rem; }
 
 /* ── Cards (reused from ProfilePage for consistency) ────────────────────── */
-.pd-cards--courses { display: grid; grid-template-columns: 1fr 1fr 1.35fr; gap: 20px; }
+/* minmax(0, …) caps each track to its fr share — without it the default minmax(auto, fr) lets a
+   card's min-content push the track (and the whole grid) past the container. Cols 1 & 2 equal; 3rd wider. */
+.pd-cards--courses { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.35fr); gap: 20px; }
 .pd-course { display: flex; flex-direction: column; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 24px 24px 22px; text-decoration: none; color: inherit; transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out), border-color 0.22s var(--ease-out); }
 @media (hover: hover) and (pointer: fine) { .pd-course:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: rgba(46, 112, 221, 0.4); } }
 .pd-course__cat { align-self: flex-start; padding: 5px 12px; border-radius: var(--r-pill); background: var(--blue-tint); color: var(--blue-ink); font-weight: 600; font-size: 12px; }
@@ -498,7 +500,7 @@ button.pd-course { font-family: inherit; text-align: left; width: 100%; cursor: 
 }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
-@media (max-width: 960px) { .pd-cards--courses { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 960px) { .pd-cards--courses { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 900px) { .pd-wrap { padding-inline: 22px; } .pd-section { padding: 48px 0 64px; } }
 @media (max-width: 560px) {
     .pd-cards--courses { grid-template-columns: 1fr; }

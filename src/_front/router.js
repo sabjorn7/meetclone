@@ -225,6 +225,8 @@ const PAGE_OVERRIDES = [
     // Course landing: promo-styled CoursePage replaces the WeWeb `course_info` (paths course/{{slug|}}).
     // Buyers still watch lessons on /my_courses — this page is the sales landing only (verified empirically).
     { path: '/course/:slug', name: 'course', component: CoursePage, wwPath: 'course/{{slug|}}' },
+    // Course catalog: promo-styled AllCoursesPage replaces the WeWeb `all_course` page.
+    { path: '/all_course', name: 'all-course', component: AllCoursesPage, wwPath: 'all_course' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

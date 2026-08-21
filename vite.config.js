@@ -114,6 +114,23 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Hand-added standalone page: the /home-demo promo-styled logged-in home (DEMO; see
+// src/_front/views/HomePage.vue). Physical dist/home-demo/index.html for direct hits.
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['home-demo-en'] = {
+            ..._tpl,
+            outputDir: './home-demo',
+            title: 'МитГуру — личный кабинет',
+            meta: [
+                { name: 'title', content: 'МитГуру — личный кабинет' },
+                { name: 'description', content: 'Ваши курсы и прогресс обучения на платформе МитГуру.' },
+            ],
+        };
+    }
+}
+
 // Read the main HTML template
 const template = fs.readFileSync(path.resolve(__dirname, 'template.html'), 'utf-8');
 const compiledTemplate = handlebars.compile(template);

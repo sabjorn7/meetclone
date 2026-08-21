@@ -5,6 +5,7 @@ import StreamsPage from './views/StreamsPage.vue';
 import ProfilePage from './views/ProfilePage.vue';
 import CoursePage from './views/CoursePage.vue';
 import AllCoursesPage from './views/AllCoursesPage.vue';
+import HomePage from './views/HomePage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -275,6 +276,14 @@ routes.push({
     path: '/all-course-demo',
     name: 'all-course-demo',
     component: AllCoursesPage,
+});
+
+// DEMO: promo-styled logged-in home (/home-demo; see src/_front/views/HomePage.vue).
+// A physical dist/home-demo/index.html is produced via a matching entry in vite.config.js.
+routes.push({
+    path: '/home-demo',
+    name: 'home-demo',
+    component: HomePage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

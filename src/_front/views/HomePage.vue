@@ -38,7 +38,7 @@
                     <div class="pd-recent__foot">
                         <span class="pd-access" :class="recent.expired ? 'is-expired' : 'is-active'">{{ accessText(recent) }}</span>
                         <a v-if="recent.expired" class="pd-btn pd-btn--sm" :href="courseHref(recent.course)">Продлить</a>
-                        <a v-else class="pd-btn pd-btn--sm" href="/my_courses">Продолжить</a>
+                        <a v-else class="pd-btn pd-btn--sm" :href="watchHref(recent)">Продолжить</a>
                     </div>
                 </aside>
             </div>
@@ -59,7 +59,7 @@
                         :key="c.id"
                         class="pd-mycard"
                         :class="{ 'is-expired': c.expired }"
-                        :href="c.expired ? null : '/my_courses'"
+                        :href="c.expired ? null : watchHref(c)"
                         data-reveal
                         :style="{ '--i': Math.min(i, 7) }"
                     >
@@ -106,6 +106,8 @@ function courseWord(n) {
     return 'курсов';
 }
 function courseHref(course) { return `/course/${course?.slug || course?.id}`; }
+// Active course → open THAT course on /my_courses (it reads ?course=<id> to deep-link into the player).
+function watchHref(c) { return `/my_courses?course=${c.course?.id}`; }
 
 // day-level date string (matches the WeWeb formatDate DD.MM.YY comparison in the gate)
 function dayKey(d) {

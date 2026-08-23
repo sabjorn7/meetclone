@@ -6,6 +6,7 @@ import ProfilePage from './views/ProfilePage.vue';
 import CoursePage from './views/CoursePage.vue';
 import AllCoursesPage from './views/AllCoursesPage.vue';
 import HomePage from './views/HomePage.vue';
+import AboutPage from './views/AboutPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -286,6 +287,13 @@ routes.push({
     path: '/home-demo',
     name: 'home-demo',
     component: HomePage,
+});
+
+// DEMO: promo-styled about page (/about-demo; see src/_front/views/AboutPage.vue).
+routes.push({
+    path: '/about-demo',
+    name: 'about-demo',
+    component: AboutPage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

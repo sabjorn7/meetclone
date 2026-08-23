@@ -131,6 +131,23 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Hand-added standalone page: the /about-demo promo-styled about page (DEMO; see
+// src/_front/views/AboutPage.vue). Physical dist/about-demo/index.html for direct hits.
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['about-demo-en'] = {
+            ..._tpl,
+            outputDir: './about-demo',
+            title: 'О платформе — МитГуру',
+            meta: [
+                { name: 'title', content: 'О платформе — МитГуру' },
+                { name: 'description', content: 'Облачная платформа для образования в сфере кинезиологии, остеопатии, мануальной терапии и массажа.' },
+            ],
+        };
+    }
+}
+
 // Read the main HTML template
 const template = fs.readFileSync(path.resolve(__dirname, 'template.html'), 'utf-8');
 const compiledTemplate = handlebars.compile(template);

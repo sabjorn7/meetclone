@@ -231,6 +231,8 @@ const PAGE_OVERRIDES = [
     { path: '/all_course', name: 'all-course', component: AllCoursesPage, wwPath: 'all_course' },
     // Logged-in home ("/"): promo-styled HomePage replaces the WeWeb Home (paths.default 'home').
     { path: '/', name: 'home', component: HomePage, wwPath: 'home' },
+    // About: promo-styled AboutPage replaces the WeWeb `about_meet` page.
+    { path: '/about_meet', name: 'about-meet', component: AboutPage, wwPath: 'about_meet' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

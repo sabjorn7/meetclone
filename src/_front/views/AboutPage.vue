@@ -44,38 +44,14 @@
 
         <!-- ── КОНТАКТЫ ──────────────────────────────────────────── -->
         <section class="pd-section pd-section--tint">
-            <div class="pd-wrap pd-contact">
-                <div class="pd-contact__l" data-reveal>
-                    <h2 class="pd-h2">Свяжитесь с нами</h2>
-                    <p class="pd-contact__note">Напишите свой вопрос и мы ответим вам в течение рабочего дня. Нам важен каждый ваш вопрос или предложение.</p>
-                    <a class="pd-btn pd-btn--lg" href="mailto:sa@meetgu.ru">Написать нам</a>
-                </div>
-                <ul class="pd-contact__list" data-reveal>
-                    <li>
-                        <a href="tel:+79824979556">
-                            <span class="pd-contact__ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L20 13l1 4v3a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z"/></svg></span>
-                            <span class="pd-contact__txt"><span class="muted">Телефон</span><b>+7 982 497 9556</b></span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="mailto:sa@meetgu.ru">
-                            <span class="pd-contact__ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span>
-                            <span class="pd-contact__txt"><span class="muted">Почта</span><b>sa@meetgu.ru</b></span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="https://vk.com/meetguruonline" target="_blank" rel="noopener noreferrer">
-                            <span class="pd-contact__ic" aria-hidden="true"><svg viewBox="0 0 24 24" stroke="none" fill="currentColor"><path d="M12.8 16.3c-5 0-8-3.5-8.1-9.3h2.5c.1 4.3 2 6.1 3.5 6.5V7h2.4v3.6c1.5-.2 3-1.8 3.6-3.6h2.4c-.5 2.2-2.1 3.8-3.2 4.5 1.1.6 2.9 2 3.6 4.8h-2.6c-.5-1.7-1.9-3-3.8-3.2v3.2h-.3z"/></svg></span>
-                            <span class="pd-contact__txt"><span class="muted">ВКонтакте</span><b>vk.com/meetguruonline</b></span>
-                        </a>
-                    </li>
-                    <li>
-                        <span class="pd-contact__row">
-                            <span class="pd-contact__ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span>
-                            <span class="pd-contact__txt"><span class="muted">Адрес</span><b>Москва, улица Гарибальди, дом 36</b></span>
-                        </span>
-                    </li>
-                </ul>
+            <div class="pd-wrap pd-contact" data-reveal>
+                <h2 class="pd-h2">Свяжитесь с нами</h2>
+                <p class="pd-contact__note">Напишите свой вопрос и мы ответим вам в течение рабочего дня. Нам важен каждый ваш вопрос или предложение.</p>
+                <a class="pd-contact__mail" href="mailto:adv@meetgu.ru">
+                    <span class="pd-contact__ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span>
+                    <span class="pd-contact__txt"><span class="muted">Почта</span><b>adv@meetgu.ru</b></span>
+                </a>
+                <a class="pd-btn pd-btn--lg" href="mailto:adv@meetgu.ru">Написать нам</a>
             </div>
         </section>
     </main>
@@ -167,23 +143,21 @@ function ensureFonts() {
 .pd-aud__p { margin: 0; color: var(--ink-2); font-size: 1.02rem; line-height: 1.5; }
 
 /* ── Контакты ───────────────────────────────────────────────────────────── */
-.pd-contact { display: grid; grid-template-columns: 1fr 1fr; gap: 44px; align-items: center; }
-.pd-contact__note { margin: 20px 0 28px; max-width: 44ch; color: var(--ink-2); font-size: 1.1rem; }
-.pd-contact__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
-.pd-contact__list li a, .pd-contact__row { display: flex; align-items: center; gap: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 16px 20px; text-decoration: none; color: inherit; transition: transform 0.16s var(--ease-out), box-shadow 0.16s var(--ease-out), border-color 0.16s var(--ease-out); }
-@media (hover: hover) and (pointer: fine) { .pd-contact__list li a:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); border-color: rgba(46, 112, 221, 0.4); } }
+.pd-contact { max-width: 640px; margin-inline: auto; text-align: center; }
+.pd-contact__note { margin: 20px auto 28px; max-width: 48ch; color: var(--ink-2); font-size: 1.1rem; }
+.pd-contact__mail { display: inline-flex; align-items: center; gap: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 15px 24px; text-decoration: none; color: inherit; margin-bottom: 26px; transition: transform 0.16s var(--ease-out), box-shadow 0.16s var(--ease-out), border-color 0.16s var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .pd-contact__mail:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); border-color: rgba(46, 112, 221, 0.4); } }
 .pd-contact__ic { width: 44px; height: 44px; flex: none; border-radius: 50%; background: var(--blue-tint); color: var(--blue-ink); display: grid; place-items: center; }
 .pd-contact__ic svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.pd-contact__txt { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+.pd-contact__txt { display: flex; flex-direction: column; line-height: 1.3; text-align: left; }
 .pd-contact__txt .muted { color: var(--ink-3); font-size: 0.82rem; }
-.pd-contact__txt b { font-weight: 600; font-size: 1.02rem; overflow: hidden; text-overflow: ellipsis; }
+.pd-contact__txt b { font-weight: 600; font-size: 1.05rem; }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 940px) {
     .pd-ahero { grid-template-columns: 1fr; gap: 20px; }
     .pd-ahero__art { display: none; }
     .pd-cards--aud { grid-template-columns: 1fr; }
-    .pd-contact { grid-template-columns: 1fr; gap: 28px; }
 }
 @media (max-width: 900px) { .pd-wrap { padding-inline: 22px; } .pd-section { padding: 52px 0; } }
 </style>

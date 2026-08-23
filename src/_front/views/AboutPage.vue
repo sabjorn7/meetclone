@@ -99,9 +99,19 @@ const AUD_ICONS = {
 
 onMounted(async () => {
     ensureFonts();
+    setMeta();
     await nextTick();
     ready.value = true;
 });
+
+// SEO title + description (the WeWeb about_meet page had neither). Client-side so it applies on the
+// live /about_meet override too.
+function setMeta() {
+    document.title = 'О платформе — МитГуру';
+    let m = document.querySelector('meta[name="description"]');
+    if (!m) { m = document.createElement('meta'); m.setAttribute('name', 'description'); document.head.appendChild(m); }
+    m.setAttribute('content', 'МитГуру — облачная платформа для цифровизации образования в сфере кинезиологии, остеопатии, мануальной терапии и массажа. Курсы от ведущих экспертов и учебных заведений.');
+}
 
 function ensureFonts() {
     if (document.getElementById('pd-fonts')) return;

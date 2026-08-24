@@ -28,8 +28,8 @@ const CHROME_EXCLUDE = [
     '/courses_manage', '/articles_manage',
     // admin
     '/superadmin',
-    // auth utilities
-    '/login', '/registration', '/reset_pw',
+    // auth utilities (login is a full-screen dedicated page — its own chrome, no AppHeader/Footer)
+    '/login', '/login-demo', '/registration', '/reset_pw',
     // dev / internal
     '/components', '/testpage',
 ];

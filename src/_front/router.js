@@ -9,6 +9,7 @@ import HomePage from './views/HomePage.vue';
 import AboutPage from './views/AboutPage.vue';
 import ClubsPage from './views/ClubsPage.vue';
 import ChatsPage from './views/ChatsPage.vue';
+import LoginPage from './views/LoginPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -319,6 +320,15 @@ routes.push({
     path: '/chats-demo',
     name: 'chats-demo',
     component: ChatsPage,
+});
+
+// DEMO: promo-styled login (/login-demo; see src/_front/views/LoginPage.vue). Reproduces the WeWeb
+// auth flow 1:1 (email/password → role redirect, VK ID one-tap, n8n password reset). Pass ?preview=1
+// to bypass the "already logged in → redirect" guard while previewing.
+routes.push({
+    path: '/login-demo',
+    name: 'login-demo',
+    component: LoginPage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

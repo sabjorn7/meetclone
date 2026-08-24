@@ -34,9 +34,9 @@ const CHROME_EXCLUDE = [
     '/components', '/testpage',
 ];
 // Prefix exclusions for dynamic detail routes (a path is excluded if it STARTS WITH any of these).
-// "/course/" now uses the hand-written CoursePage (new chrome + real "Купить"), so it is NO LONGER
-// excluded. Note "/articles/" excludes only the detail pages; the "/articles" list keeps the new chrome.
-const CHROME_EXCLUDE_PREFIX = ['/articles/'];
+// "/course/" uses the hand-written CoursePage, and "/articles/:slug" now uses the hand-written
+// ArticlePage — both get the new chrome, so there are no prefix exclusions left.
+const CHROME_EXCLUDE_PREFIX = [];
 
 export default {
     components: { AppHeader, AppFooter },

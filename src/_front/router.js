@@ -248,6 +248,10 @@ const PAGE_OVERRIDES = [
     // flow 1:1 (email/password → role redirect, VK ID one-tap, n8n password reset). Already in App.vue's
     // CHROME_EXCLUDE, so it renders as a dedicated page. /login-demo stays as the rollback/preview.
     { path: '/login', name: 'login', component: LoginPage, wwPath: 'login' },
+    // Article detail: promo-styled ArticlePage replaces the WeWeb `article_page` (paths articles/{{slug|}}).
+    // Reproduces the marked body, PeerTube video, rating + threaded comments; adds per-article SEO + rating
+    // dedupe. Reads slug from route.params. /article-demo stays as the rollback/preview.
+    { path: '/articles/:slug', name: 'article', component: ArticlePage, wwPath: 'articles/{{slug|}}' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

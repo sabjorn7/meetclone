@@ -238,6 +238,10 @@ const PAGE_OVERRIDES = [
     // Clubs (MeetClub): promo-styled ClubsPage replaces the WeWeb `clubs` catalog (read-only; the
     // recurring subscribe/pay/cancel flow stays on /club).
     { path: '/clubs', name: 'clubs', component: ClubsPage, wwPath: 'clubs' },
+    // Chats: promo-styled ChatsPage (1-on-1 + groups) replaces the WeWeb `chats` page. Same data model
+    // (chats.users[]/read[]/title, messages; groups derive is_group from users length). /chats-demo below
+    // stays as the rollback/preview of the same component.
+    { path: '/chats', name: 'chats', component: ChatsPage, wwPath: 'chats' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

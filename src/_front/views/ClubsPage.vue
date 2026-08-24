@@ -35,9 +35,9 @@
                     <div v-if="clubs.length" class="pd-cards pd-cards--clubs">
                         <article v-for="(c, i) in clubs" :key="c.id" class="pd-club" data-reveal :style="{ '--i': Math.min(i, 6) }">
                             <div class="pd-club__top">
-                                <img v-if="ownerOf(c)?.Photo" class="pd-club__ava" :src="ownerOf(c).Photo" :alt="ownerOf(c).Name" />
+                                <img v-if="clubLogo(c)" class="pd-club__ava" :src="clubLogo(c)" :alt="ownerName(c)" />
                                 <span v-else class="pd-club__ava pd-club__ava--i">{{ initials(c) }}</span>
-                                <span v-if="c.label" class="pd-club__label">{{ c.label }}</span>
+                                <span v-if="ownerName(c)" class="pd-club__label">{{ ownerName(c) }}</span>
                             </div>
                             <h3 class="pd-club__t">{{ c.title }}</h3>
                             <p v-if="c.short_descr" class="pd-club__d">{{ c.short_descr }}</p>
@@ -62,7 +62,7 @@
                     <div v-if="mySubs.length" class="pd-cards pd-cards--clubs">
                         <article v-for="(s, i) in mySubs" :key="s.id" class="pd-club" data-reveal :style="{ '--i': Math.min(i, 6) }">
                             <div class="pd-club__top">
-                                <img v-if="ownerOf(s.club)?.Photo" class="pd-club__ava" :src="ownerOf(s.club).Photo" :alt="ownerOf(s.club).Name" />
+                                <img v-if="clubLogo(s.club)" class="pd-club__ava" :src="clubLogo(s.club)" :alt="ownerName(s.club)" />
                                 <span v-else class="pd-club__ava pd-club__ava--i">{{ initials(s.club) }}</span>
                                 <span class="pd-access is-active">{{ s.end_date ? 'Активна до ' + fmtDate(s.end_date) : 'Активна' }}</span>
                             </div>
@@ -114,6 +114,9 @@ function fmtDate(d) {
 // The WeWeb /club page opens a specific club from ?club=<id> (get_club_bundle p_club) — same routing.
 function clubHref(club) { return `/club?club=${club.id}`; }
 function ownerOf(club) { return ownersById.value[club?.owner] || null; }
+function ownerName(club) { return ownerOf(club)?.Name || ''; }
+// clubs.label is the club's LOGO image URL; fall back to the owner's photo, then initials.
+function clubLogo(club) { return club?.label || ownerOf(club)?.Photo || ''; }
 function initials(club) {
     const n = ownerOf(club)?.Name || club?.title || '';
     const p = n.split(/\s+/).filter(Boolean);

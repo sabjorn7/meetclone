@@ -504,7 +504,9 @@ async function confirmAdd() {
     try {
         const merged = [...new Set([...(activeChat.value.users || []), ...pickSel.value.map((u) => u.id)])];
         const readMerged = [...new Set([...(activeChat.value.read || []), ...pickSel.value.map((u) => u.id)])];
-        const { data } = await sb.from('chats').update({ users: merged, read: readMerged }).eq('id', activeChat.value.id).select(CHAT_COLS).limit(1);
+        // NOTE: PostgREST rejects UPDATE ... select().limit() without an order (PGRST109) — .eq('id') already
+        // scopes to one row, so no limit is needed.
+        const { data } = await sb.from('chats').update({ users: merged, read: readMerged }).eq('id', activeChat.value.id).select(CHAT_COLS);
         for (const u of pickSel.value) usersById.value[u.id] = usersById.value[u.id] || u;
         usersById.value = { ...usersById.value };
         const patch = data?.[0] ? { users: data[0].users, read: data[0].read, is_group: data[0].is_group } : { users: merged, read: readMerged };
@@ -528,7 +530,7 @@ async function removeMember(uid) {
     const id = activeChat.value.id;
     const users = (activeChat.value.users || []).filter((x) => x !== uid);
     confirmAction.value = null;
-    const { data } = await sb.from('chats').update({ users }).eq('id', id).select(CHAT_COLS).limit(1);
+    const { data } = await sb.from('chats').update({ users }).eq('id', id).select(CHAT_COLS);   // no limit — see confirmAdd
     if (uid === myId.value) {
         myChats.value = myChats.value.filter((c) => c.id !== id);
         closeActive();
@@ -592,6 +594,11 @@ function subscribeChats() {
             if (existing) {
                 patchChat(row.id, { read: row.read, sort_date: row.sort_date, users: row.users, title: row.title, is_group: row.is_group });
                 if (isGroup(row)) ensureUsers(row.users || []);
+                // if this is the chat I'm actively viewing and the server just marked it unread for me
+                // (a message reset read[] to [sender]), re-assert my read — robust to realtime event ordering
+                if (activeChat.value?.id === row.id && Array.isArray(row.read) && !row.read.includes(myId.value)) {
+                    markRead(activeChat.value);
+                }
             } else {
                 const resolve = isGroup(row) ? ensureUsers(row.users || []) : ensureUsers([otherId(row)]);
                 resolve.then(() => { myChats.value = [{ ...row, preview: '' }, ...myChats.value.filter((x) => x.id !== row.id)]; });

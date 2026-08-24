@@ -243,6 +243,10 @@ const PAGE_OVERRIDES = [
     // (chats.users[]/read[]/title, messages; groups derive is_group from users length). /chats-demo below
     // stays as the rollback/preview of the same component.
     { path: '/chats', name: 'chats', component: ChatsPage, wwPath: 'chats' },
+    // Login: promo-styled full-screen LoginPage replaces the WeWeb `login` page. Reproduces the auth
+    // flow 1:1 (email/password → role redirect, VK ID one-tap, n8n password reset). Already in App.vue's
+    // CHROME_EXCLUDE, so it renders as a dedicated page. /login-demo stays as the rollback/preview.
+    { path: '/login', name: 'login', component: LoginPage, wwPath: 'login' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

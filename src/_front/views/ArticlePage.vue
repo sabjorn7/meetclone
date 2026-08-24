@@ -431,7 +431,7 @@ function ensureFonts() {
 
 /* ── Head ───────────────────────────────────────────────────────────────── */
 .pd-art__head { padding: 40px 24px 0; }
-.pd-art__back { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-2); text-decoration: none; font-weight: 600; font-size: 0.92rem; }
+.pd-art__back { display: flex; width: fit-content; align-items: center; gap: 4px; color: var(--ink-2); text-decoration: none; font-weight: 600; font-size: 0.92rem; }
 .pd-art__back .pd-ic { width: 18px; height: 18px; }
 .pd-art__back:hover { color: var(--blue-ink); }
 .pd-art__cat { display: inline-block; margin: 22px 0 0; padding: 5px 13px; background: var(--blue-tint); color: var(--blue-ink); border-radius: var(--r-pill); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }

@@ -234,6 +234,9 @@ const PAGE_OVERRIDES = [
     { path: '/', name: 'home', component: HomePage, wwPath: 'home' },
     // About: promo-styled AboutPage replaces the WeWeb `about_meet` page.
     { path: '/about_meet', name: 'about-meet', component: AboutPage, wwPath: 'about_meet' },
+    // Clubs (MeetClub): promo-styled ClubsPage replaces the WeWeb `clubs` catalog (read-only; the
+    // recurring subscribe/pay/cancel flow stays on /club).
+    { path: '/clubs', name: 'clubs', component: ClubsPage, wwPath: 'clubs' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

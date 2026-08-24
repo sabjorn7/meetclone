@@ -97,6 +97,14 @@
                                     <img v-if="other(activeChat)?.Photo" class="pd-thread__ava" :src="other(activeChat).Photo" :alt="other(activeChat).Name" />
                                     <span v-else class="pd-thread__ava pd-thread__ava--i">{{ initials(other(activeChat)?.Name) }}</span>
                                     <b>{{ chatTitle(activeChat) }}</b>
+                                    <span v-if="confirmAction === 'delete'" class="pd-confirm pd-confirm--head">
+                                        Удалить диалог?
+                                        <button class="pd-btn pd-btn--sm pd-btn--danger" type="button" @click="deleteActiveChat">Да</button>
+                                        <button class="pd-btn pd-btn--sm pd-btn--ghost" type="button" @click="confirmAction = null">Нет</button>
+                                    </span>
+                                    <button v-else class="pd-thread__del" type="button" aria-label="Удалить диалог" @click="confirmAction = 'delete'">
+                                        <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7"/><path d="M10 11v6M14 11v6"/></svg>
+                                    </button>
                                 </template>
                             </div>
 
@@ -131,7 +139,7 @@
                                         <button v-if="confirmAction !== 'delete'" class="pd-btn pd-btn--sm pd-btn--danger" type="button" @click="confirmAction = 'delete'">Удалить группу</button>
                                         <span v-else class="pd-confirm">
                                             Удалить для всех?
-                                            <button class="pd-btn pd-btn--sm pd-btn--danger" type="button" @click="deleteGroup">Да</button>
+                                            <button class="pd-btn pd-btn--sm pd-btn--danger" type="button" @click="deleteActiveChat">Да</button>
                                             <button class="pd-btn pd-btn--sm pd-btn--ghost" type="button" @click="confirmAction = null">Нет</button>
                                         </span>
                                     </template>
@@ -540,8 +548,11 @@ async function removeMember(uid) {
     }
 }
 
-async function deleteGroup() {
-    if (!activeChat.value || !isCreator(activeChat.value)) return;
+// hard-delete the active chat (row + all its messages, for everyone — matches the original /chats).
+// A group can only be deleted by its creator; a 1-on-1 by either participant.
+async function deleteActiveChat() {
+    if (!activeChat.value) return;
+    if (isGroup(activeChat.value) && !isCreator(activeChat.value)) return;
     const id = activeChat.value.id;
     confirmAction.value = null;
     await sb.from('chats').delete().eq('id', id);   // BEFORE-DELETE trigger cascades messages + users.chats[]
@@ -711,6 +722,10 @@ function ensureFonts() {
 .pd-thread__meta { font-weight: 500; font-size: 0.8rem; color: var(--ink-3); }
 .pd-thread__manage { margin-left: auto; flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r-pill); padding: 7px 15px; font-family: inherit; font-size: 0.85rem; font-weight: 600; color: var(--blue-ink); cursor: pointer; transition: background 0.14s, border-color 0.14s; }
 @media (hover: hover) and (pointer: fine) { .pd-thread__manage:hover { background: var(--blue-tint); border-color: var(--blue-soft); } }
+.pd-thread__del { margin-left: auto; flex: none; width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--line); background: var(--surface); border-radius: 50%; color: var(--ink-3); cursor: pointer; transition: background 0.14s, border-color 0.14s, color 0.14s; }
+.pd-thread__del .pd-ic { width: 18px; height: 18px; }
+@media (hover: hover) and (pointer: fine) { .pd-thread__del:hover { background: #fdeef1; border-color: var(--red); color: var(--red); } }
+.pd-confirm--head { margin-left: auto; flex: none; }
 
 /* ── Group management panel ─────────────────────────────────────────────── */
 .pd-group { flex: none; border-bottom: 1px solid var(--line); padding: 14px 22px; background: #fafcff; display: flex; flex-direction: column; gap: 12px; }

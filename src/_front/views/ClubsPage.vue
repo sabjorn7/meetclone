@@ -34,21 +34,23 @@
                 <template v-if="tab === 'all'">
                     <div v-if="clubs.length" class="pd-cards pd-cards--clubs">
                         <article v-for="(c, i) in clubs" :key="c.id" class="pd-club" data-reveal :style="{ '--i': Math.min(i, 6) }">
-                            <div class="pd-club__top">
-                                <img v-if="clubLogo(c)" class="pd-club__ava" :src="clubLogo(c)" :alt="ownerName(c)" />
-                                <span v-else class="pd-club__ava pd-club__ava--i">{{ initials(c) }}</span>
+                            <div class="pd-club__cover" :class="{ 'is-empty': !clubLogo(c) }">
+                                <img v-if="clubLogo(c)" :src="clubLogo(c)" :alt="ownerName(c)" loading="lazy" />
+                                <span v-else class="pd-club__cover-i">{{ initials(c) }}</span>
+                            </div>
+                            <div class="pd-club__body">
                                 <span v-if="ownerName(c)" class="pd-club__label">{{ ownerName(c) }}</span>
+                                <h3 class="pd-club__t">{{ c.title }}</h3>
+                                <p v-if="c.short_descr" class="pd-club__d">{{ c.short_descr }}</p>
+                                <div class="pd-club__foot">
+                                    <span class="pd-club__subs">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.5a3 3 0 0 1 0 5.5"/></svg>
+                                        {{ subCount(c) }} {{ plural(subCount(c), ['подписчик', 'подписчика', 'подписчиков']) }}
+                                    </span>
+                                    <span class="pd-club__price">{{ money(c.price) }} ₽<span class="per">/мес</span></span>
+                                </div>
+                                <a class="pd-btn pd-btn--block" :href="clubHref(c)">Перейти</a>
                             </div>
-                            <h3 class="pd-club__t">{{ c.title }}</h3>
-                            <p v-if="c.short_descr" class="pd-club__d">{{ c.short_descr }}</p>
-                            <div class="pd-club__foot">
-                                <span class="pd-club__subs">
-                                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.5a3 3 0 0 1 0 5.5"/></svg>
-                                    {{ subCount(c) }} {{ plural(subCount(c), ['подписчик', 'подписчика', 'подписчиков']) }}
-                                </span>
-                                <span class="pd-club__price">{{ money(c.price) }} ₽<span class="per">/мес</span></span>
-                            </div>
-                            <a class="pd-btn pd-btn--block" :href="clubHref(c)">Перейти</a>
                         </article>
                     </div>
                     <div v-else-if="!loading" class="pd-empty">
@@ -61,17 +63,20 @@
                 <template v-else>
                     <div v-if="mySubs.length" class="pd-cards pd-cards--clubs">
                         <article v-for="(s, i) in mySubs" :key="s.id" class="pd-club" data-reveal :style="{ '--i': Math.min(i, 6) }">
-                            <div class="pd-club__top">
-                                <img v-if="clubLogo(s.club)" class="pd-club__ava" :src="clubLogo(s.club)" :alt="ownerName(s.club)" />
-                                <span v-else class="pd-club__ava pd-club__ava--i">{{ initials(s.club) }}</span>
-                                <span class="pd-access is-active">{{ s.end_date ? 'Активна до ' + fmtDate(s.end_date) : 'Активна' }}</span>
+                            <div class="pd-club__cover" :class="{ 'is-empty': !clubLogo(s.club) }">
+                                <img v-if="clubLogo(s.club)" :src="clubLogo(s.club)" :alt="ownerName(s.club)" loading="lazy" />
+                                <span v-else class="pd-club__cover-i">{{ initials(s.club) }}</span>
+                                <span class="pd-access is-active pd-club__cover-badge">{{ s.end_date ? 'Активна до ' + fmtDate(s.end_date) : 'Активна' }}</span>
                             </div>
-                            <h3 class="pd-club__t">{{ s.club.title }}</h3>
-                            <p v-if="s.club.short_descr" class="pd-club__d">{{ s.club.short_descr }}</p>
-                            <div class="pd-club__foot">
-                                <span class="pd-club__price">{{ money(s.club.price) }} ₽<span class="per">/мес</span></span>
+                            <div class="pd-club__body">
+                                <span v-if="ownerName(s.club)" class="pd-club__label">{{ ownerName(s.club) }}</span>
+                                <h3 class="pd-club__t">{{ s.club.title }}</h3>
+                                <p v-if="s.club.short_descr" class="pd-club__d">{{ s.club.short_descr }}</p>
+                                <div class="pd-club__foot">
+                                    <span class="pd-club__price">{{ money(s.club.price) }} ₽<span class="per">/мес</span></span>
+                                </div>
+                                <a class="pd-btn pd-btn--block" :href="clubHref(s.club)">Перейти в клуб</a>
                             </div>
-                            <a class="pd-btn pd-btn--block" :href="clubHref(s.club)">Перейти в клуб</a>
                         </article>
                     </div>
                     <div v-else-if="!loading" class="pd-empty">
@@ -235,22 +240,25 @@ function ensureFonts() {
 
 /* ── Club cards ─────────────────────────────────────────────────────────── */
 .pd-cards--clubs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
-.pd-club { display: flex; flex-direction: column; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 24px; transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out), border-color 0.22s var(--ease-out); }
+.pd-club { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out), border-color 0.22s var(--ease-out); }
 @media (hover: hover) and (pointer: fine) { .pd-club:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: rgba(46, 112, 221, 0.4); } }
-.pd-club__top { display: flex; align-items: center; gap: 12px; }
-.pd-club__ava { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; flex: none; }
-.pd-club__ava--i { display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-weight: 700; }
-.pd-club__label { padding: 5px 12px; border-radius: var(--r-pill); border: 1px solid var(--blue-soft); color: var(--blue-ink); font-weight: 600; font-size: 12px; }
+.pd-club__cover { position: relative; width: 100%; aspect-ratio: 16 / 9; background: var(--blue-tint); }
+.pd-club__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pd-club__cover.is-empty { display: grid; place-items: center; }
+.pd-club__cover-i { font-weight: 800; font-size: 2.2rem; color: var(--blue-ink); }
+.pd-club__cover-badge { position: absolute; top: 12px; left: 12px; background: rgba(255, 255, 255, 0.94); box-shadow: 0 2px 10px -2px rgba(9, 23, 71, 0.3); }
+.pd-club__body { display: flex; flex-direction: column; gap: 12px; padding: 20px 24px 24px; flex: 1; }
+.pd-club__label { align-self: flex-start; padding: 5px 12px; border-radius: var(--r-pill); border: 1px solid var(--blue-soft); color: var(--blue-ink); font-weight: 600; font-size: 12px; }
 .pd-access { padding: 5px 12px; border-radius: var(--r-pill); font-weight: 600; font-size: 12px; }
 .pd-access.is-active { color: var(--green); background: var(--green-tint); }
-.pd-club__t { margin: 2px 0 0; font-weight: 700; font-size: 1.2rem; line-height: 1.24; letter-spacing: -0.01em; }
+.pd-club__t { margin: 0; font-weight: 700; font-size: 1.2rem; line-height: 1.24; letter-spacing: -0.01em; }
 .pd-club__d { margin: 0; color: var(--ink-2); font-size: 1rem; line-height: 1.45; flex: 1; }
 .pd-club__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .pd-club__subs { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: 0.9rem; }
 .pd-club__subs svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .pd-club__price { font-weight: 700; font-size: 1.1rem; color: var(--orange-ink); white-space: nowrap; }
 .pd-club__price .per { font-weight: 500; font-size: 0.82rem; color: var(--ink-3); }
-.pd-club .pd-btn { margin-top: 4px; }
+.pd-club__body .pd-btn { margin-top: 4px; }
 
 /* ── Empty ──────────────────────────────────────────────────────────────── */
 .pd-empty { text-align: center; padding: 30px 0; color: var(--ink-2); }

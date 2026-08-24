@@ -313,7 +313,7 @@ function ensureFonts() {
 .pd-auth__points { list-style: none; margin: 30px 0 0; padding: 0; display: flex; flex-direction: column; gap: 13px; }
 .pd-auth__points li { display: flex; align-items: center; gap: 12px; color: rgba(255, 255, 255, 0.92); font-size: 0.98rem; }
 .pd-auth__pt { width: 8px; height: 8px; border-radius: 50%; background: var(--orange); flex: none; box-shadow: 0 0 0 4px rgba(240, 145, 87, 0.22); }
-.pd-auth__art { width: 272px; max-width: 100%; margin: 40px 0 0; background: #f8f3e8; border-radius: 24px; padding: 20px; box-shadow: 0 26px 50px -26px rgba(0, 0, 0, 0.45); }
+.pd-auth__art { width: 300px; max-width: 100%; margin: 36px 0 0; }
 .pd-auth__art img { display: block; width: 100%; height: auto; }
 
 /* Form panel */

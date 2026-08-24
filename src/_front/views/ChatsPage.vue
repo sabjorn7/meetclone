@@ -82,7 +82,7 @@
                             <form class="pd-thread__input" @submit.prevent="send">
                                 <textarea
                                     ref="inputEl" v-model="text" rows="1" placeholder="Написать сообщение…" aria-label="Сообщение"
-                                    :disabled="sending" @keydown.enter.exact.prevent="send" @input="autogrow"
+                                    :disabled="sending" @keydown.enter.exact="onEnter" @input="autogrow"
                                 ></textarea>
                                 <button class="pd-send" type="submit" :disabled="sending || !text.trim()" aria-label="Отправить">
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 16-3-6-7-2z"/></svg>
@@ -130,6 +130,11 @@ function autogrow() {
     el.style.height = Math.min(el.scrollHeight, 132) + 'px';
 }
 function resetInputHeight() { const el = inputEl.value; if (el) el.style.height = 'auto'; }
+
+// On desktop, Enter sends (and prevents the newline). On touch devices Enter must insert a newline
+// (send is the button) — so don't hijack it there.
+const isTouch = (typeof window !== 'undefined') && (window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window);
+function onEnter(e) { if (isTouch) return; e.preventDefault(); send(); }
 
 let sb = null;
 let msgChannel = null;   // per-active-chat messages stream
@@ -297,7 +302,15 @@ function patchChat(id, patch) {
 function reorderChats() {
     myChats.value = [...myChats.value].sort((a, b) => new Date(b.sort_date || 0) - new Date(a.sort_date || 0));
 }
-function scrollBottom() { nextTick(() => { const el = threadEl.value; if (el) el.scrollTop = el.scrollHeight; }); }
+function scrollBottom() {
+    nextTick(() => {
+        const el = threadEl.value;
+        if (!el) return;
+        el.scrollTop = el.scrollHeight;
+        // second pass after layout/images settle so opening a chat lands on the last message
+        requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+    });
+}
 
 onMounted(() => { ensureFonts(); load(); });
 onBeforeUnmount(() => {
@@ -392,7 +405,8 @@ function ensureFonts() {
 @media (max-width: 860px) {
     .pd-wrap { padding-inline: 22px; }
     .pd-chat { grid-template-columns: 1fr; height: auto; }
-    .pd-chat__side { max-height: 320px; }
-    .pd-chat__main { min-height: 480px; }
+    .pd-chat__side { max-height: 300px; }
+    /* bounded height with internal scroll so the thread doesn't stretch the whole page down */
+    .pd-chat__main { height: 70dvh; min-height: 400px; }
 }
 </style>

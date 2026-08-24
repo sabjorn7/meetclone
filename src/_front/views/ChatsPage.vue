@@ -80,7 +80,10 @@
                                 </div>
                             </div>
                             <form class="pd-thread__input" @submit.prevent="send">
-                                <input v-model="text" type="text" placeholder="Написать сообщение…" aria-label="Сообщение" :disabled="sending" />
+                                <textarea
+                                    ref="inputEl" v-model="text" rows="1" placeholder="Написать сообщение…" aria-label="Сообщение"
+                                    :disabled="sending" @keydown.enter.exact.prevent="send" @input="autogrow"
+                                ></textarea>
                                 <button class="pd-send" type="submit" :disabled="sending || !text.trim()" aria-label="Отправить">
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 16-3-6-7-2z"/></svg>
                                 </button>
@@ -117,6 +120,16 @@ const searching = ref(false);
 const loading = ref(true);
 const ready = ref(false);
 const threadEl = ref(null);
+const inputEl = ref(null);
+
+// grow the textarea with its content (Shift+Enter newlines), capped at ~5 rows
+function autogrow() {
+    const el = inputEl.value;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 132) + 'px';
+}
+function resetInputHeight() { const el = inputEl.value; if (el) el.style.height = 'auto'; }
 
 let sb = null;
 let msgChannel = null;   // per-active-chat messages stream
@@ -236,6 +249,7 @@ async function send() {
     if (!t || !activeChat.value || sending.value) return;
     sending.value = true;
     text.value = '';
+    resetInputHeight();
     try {
         const { data } = await sb.from('messages')
             .insert({ chat: activeChat.value.id, text: t, creator: myId.value })
@@ -363,9 +377,9 @@ function ensureFonts() {
 .pd-msg__time { display: block; margin-top: 3px; text-align: right; font-size: 0.72rem; color: var(--ink-3); }
 .pd-msg.is-mine .pd-msg__time { color: rgba(255, 255, 255, 0.75); }
 
-.pd-thread__input { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); flex: none; }
-.pd-thread__input input { flex: 1; border: 1px solid var(--line); outline: none; background: var(--bg-tint); border-radius: var(--r-pill); padding: 12px 18px; font-family: inherit; font-size: 15px; color: var(--ink); min-width: 0; }
-.pd-thread__input input:focus { border-color: var(--blue-soft); background: var(--surface); }
+.pd-thread__input { display: flex; align-items: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); flex: none; }
+.pd-thread__input textarea { flex: 1; border: 1px solid var(--line); outline: none; background: var(--bg-tint); border-radius: 20px; padding: 11px 18px; font-family: inherit; font-size: 15px; line-height: 1.4; color: var(--ink); min-width: 0; resize: none; max-height: 132px; overflow-y: auto; display: block; }
+.pd-thread__input textarea:focus { border-color: var(--blue-soft); background: var(--surface); }
 .pd-send { width: 46px; height: 46px; flex: none; border: none; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; cursor: pointer; transition: background 0.16s var(--ease-out), transform 0.16s var(--ease-out); }
 .pd-send svg { width: 22px; height: 22px; fill: currentColor; }
 .pd-send:disabled { opacity: 0.5; cursor: default; }

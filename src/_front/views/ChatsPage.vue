@@ -146,10 +146,8 @@ async function load() {
         .order('sort_date', { ascending: false, nullsFirst: false });
     myChats.value = (chats || []).filter((c) => c.is_group !== true);
 
-    // resolve the other participant of each chat (names/photos), one batched query
+    // resolve the other participant of each chat (names/photos), chunked
     await ensureUsers(myChats.value.map((c) => otherId(c)));
-    // last message preview per chat, one batched query
-    await loadPreviews();
 
     subscribeChats();
     loading.value = false;
@@ -162,19 +160,13 @@ async function load() {
 async function ensureUsers(ids) {
     const need = [...new Set(ids.filter((id) => id && !usersById.value[id]))];
     if (!need.length) return;
-    const { data } = await sb.from('users').select('id, "Name", "Photo"').in('id', need);
     const next = { ...usersById.value };
-    for (const u of data || []) next[u.id] = u;
+    // chunk the .in() — a single request with 100+ uuids overflows the request URL and fails silently
+    for (let i = 0; i < need.length; i += 40) {
+        const { data } = await sb.from('users').select('id, "Name", "Photo"').in('id', need.slice(i, i + 40));
+        for (const u of data || []) next[u.id] = u;
+    }
     usersById.value = next;
-}
-
-async function loadPreviews() {
-    const ids = myChats.value.map((c) => c.id);
-    if (!ids.length) return;
-    const { data } = await sb.from('messages').select('chat, text, created_at').in('chat', ids).order('created_at', { ascending: false });
-    const seen = {};
-    for (const m of data || []) if (!seen[m.chat]) seen[m.chat] = m.text;
-    myChats.value = myChats.value.map((c) => ({ ...c, preview: seen[c.id] || '' }));
 }
 
 function onSearch() {

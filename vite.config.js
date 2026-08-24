@@ -148,6 +148,23 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Hand-added standalone page: the /clubs-demo promo-styled clubs catalog (DEMO; see
+// src/_front/views/ClubsPage.vue). Physical dist/clubs-demo/index.html for direct hits.
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['clubs-demo-en'] = {
+            ..._tpl,
+            outputDir: './clubs-demo',
+            title: 'Клубы и подписки — МитГуру',
+            meta: [
+                { name: 'title', content: 'Клубы и подписки — МитГуру' },
+                { name: 'description', content: 'Закрытые клубы экспертов по кинезиологии и остеопатии на платформе МитГуру.' },
+            ],
+        };
+    }
+}
+
 // Read the main HTML template
 const template = fs.readFileSync(path.resolve(__dirname, 'template.html'), 'utf-8');
 const compiledTemplate = handlebars.compile(template);

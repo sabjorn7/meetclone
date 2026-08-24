@@ -198,8 +198,9 @@ async function openChat(xId) {
         chat = found?.[0];
         if (!chat) {
             const now = new Date().toISOString();
+            // is_group is a GENERATED column — must NOT be set on insert (it's derived server-side).
             const { data: created } = await sb.from('chats')
-                .insert({ user_1: myId.value, user_2: xId, is_group: false, read: [myId.value, xId], mod_date: now, sort_date: now })
+                .insert({ user_1: myId.value, user_2: xId, read: [myId.value, xId], mod_date: now, sort_date: now })
                 .select('id, user_1, user_2, read, sort_date, is_group').limit(1);
             chat = created?.[0];
         }

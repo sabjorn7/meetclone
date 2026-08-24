@@ -165,6 +165,20 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Hand-added standalone page: the /chats-demo promo-styled chats (STAGE 1; see
+// src/_front/views/ChatsPage.vue). Physical dist/chats-demo/index.html for direct hits.
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['chats-demo-en'] = {
+            ..._tpl,
+            outputDir: './chats-demo',
+            title: 'Чаты — МитГуру',
+            meta: [ { name: 'title', content: 'Чаты — МитГуру' }, { name: 'description', content: 'Личные сообщения на платформе МитГуру.' } ],
+        };
+    }
+}
+
 // Read the main HTML template
 const template = fs.readFileSync(path.resolve(__dirname, 'template.html'), 'utf-8');
 const compiledTemplate = handlebars.compile(template);

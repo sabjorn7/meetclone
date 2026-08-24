@@ -8,6 +8,7 @@ import AllCoursesPage from './views/AllCoursesPage.vue';
 import HomePage from './views/HomePage.vue';
 import AboutPage from './views/AboutPage.vue';
 import ClubsPage from './views/ClubsPage.vue';
+import ChatsPage from './views/ChatsPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -307,6 +308,13 @@ routes.push({
     path: '/clubs-demo',
     name: 'clubs-demo',
     component: ClubsPage,
+});
+
+// DEMO: promo-styled chats — stage 1, 1-on-1 (/chats-demo; see src/_front/views/ChatsPage.vue).
+routes.push({
+    path: '/chats-demo',
+    name: 'chats-demo',
+    component: ChatsPage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

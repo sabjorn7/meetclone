@@ -10,6 +10,7 @@ import AboutPage from './views/AboutPage.vue';
 import ClubsPage from './views/ClubsPage.vue';
 import ChatsPage from './views/ChatsPage.vue';
 import LoginPage from './views/LoginPage.vue';
+import ArticlePage from './views/ArticlePage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -333,6 +334,15 @@ routes.push({
     path: '/login-demo',
     name: 'login-demo',
     component: LoginPage,
+});
+
+// DEMO: promo-styled article detail (/article-demo?slug=<slug|uuid>; see src/_front/views/ArticlePage.vue).
+// Reproduces the WeWeb article page (marked body, PeerTube video, rating, threaded comments) + adds
+// per-article SEO and a rating dedupe gate.
+routes.push({
+    path: '/article-demo',
+    name: 'article-demo',
+    component: ArticlePage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

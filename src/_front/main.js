@@ -13,6 +13,7 @@ import App from '@/_front/App.vue';
 import router from '@/_front/router.js';
 import { initProfileFollowButton } from '@/_front/profileFollowButton.js';
 import { initMySubscriptions } from '@/_front/mySubscriptions.js';
+import { initProfileCity } from '@/_front/profileCity.js';
 import { initMyFinanseSales } from '@/_front/myFinanseSales.js';
 import { initCoursesManageStyle } from '@/_front/coursesManageStyle.js';
 import { initArticlesStyle } from '@/_front/articlesStyle.js';
@@ -117,6 +118,7 @@ const init = async function () {
     initHeaderMenuOutsideClick();
     initProfileFollowButton(router);
     initMySubscriptions(router);
+    initProfileCity(router);
     initMyFinanseSales(router);
     initCoursesManageStyle(router);
     initArticlesStyle(router);

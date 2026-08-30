@@ -24,10 +24,16 @@
         <section class="pd-section">
             <div class="pd-wrap">
                 <div class="pd-filters" data-reveal>
-                    <label class="pd-search">
-                        <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-                        <input v-model="q" type="search" placeholder="Имя пользователя" aria-label="Поиск по имени" @input="onSearch" />
-                    </label>
+                    <div class="pd-searchrow">
+                        <label class="pd-search">
+                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                            <input v-model="q" type="search" placeholder="Имя пользователя" aria-label="Поиск по имени" @input="onSearch" />
+                        </label>
+                        <label class="pd-search">
+                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 21s7-6 7-11a7 7 0 0 0-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                            <input v-model="cityQ" type="search" placeholder="Город" aria-label="Поиск по городу" @input="onSearch" />
+                        </label>
+                    </div>
                     <div class="pd-chips">
                         <button
                             v-for="c in CHIPS" :key="c.key" type="button"
@@ -51,6 +57,10 @@
                                 <div class="pd-ucard__id">
                                     <b class="pd-ucard__name">{{ u.Name || 'Специалист' }}</b>
                                     <span v-if="roleLabel(u.role)" class="pd-ucard__role">{{ roleLabel(u.role) }}</span>
+                                    <span v-if="u.city" class="pd-ucard__city">
+                                        <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 21s7-6 7-11a7 7 0 0 0-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                                        {{ u.city }}
+                                    </span>
                                 </div>
                             </div>
                             <p v-if="bioOf(u)" class="pd-ucard__bio">{{ bioOf(u) }}</p>
@@ -91,7 +101,7 @@ const CHIPS = [
     { key: 'Учебное заведение', label: 'Учебное заведение' },
     { key: 'Ученик', label: 'Специалист' },
 ];
-const USER_COLS = 'id, "Name", "Photo", role, "Description", courses';
+const USER_COLS = 'id, "Name", "Photo", role, "Description", courses, city';
 
 let sb = null;
 let searchTimer = null;
@@ -102,6 +112,7 @@ const allUsers = ref([]);   // full filtered + sorted set (paginated client-side
 const page = ref(1);
 const roleKey = ref('all');
 const q = ref('');
+const cityQ = ref('');
 
 // Sort: by Name (RU, case-insensitive), with unnamed / "Новый пользователь" users pushed to the very end.
 function isUnnamed(u) { const n = (u.Name || '').trim(); return !n || n === DEFAULT_NAME; }
@@ -145,6 +156,8 @@ function buildQuery() {
     if (roleKey.value !== 'all') query = query.eq('role', roleKey.value);
     const needle = q.value.trim();
     if (needle) query = query.ilike('Name', `%${needle}%`);
+    const cityNeedle = cityQ.value.trim();
+    if (cityNeedle) query = query.ilike('city', `%${cityNeedle}%`);
     return query;
 }
 
@@ -231,7 +244,8 @@ function ensureFonts() {
 .pd-section { padding: 8px 0 80px; }
 
 .pd-filters { display: flex; flex-direction: column; gap: 14px; margin-bottom: 28px; }
-.pd-search { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 0 18px; height: 50px; max-width: 420px; }
+.pd-searchrow { display: flex; flex-wrap: wrap; gap: 12px; }
+.pd-search { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 0 18px; height: 50px; flex: 1 1 260px; min-width: 200px; max-width: 420px; }
 .pd-search:focus-within { border-color: var(--blue-soft); box-shadow: 0 0 0 4px var(--blue-tint); }
 .pd-search .pd-ic { width: 18px; height: 18px; color: var(--ink-3); flex: none; }
 .pd-search input { flex: 1; border: none; outline: none; background: transparent; font-family: inherit; font-size: 15px; color: var(--ink); min-width: 0; }
@@ -251,6 +265,8 @@ function ensureFonts() {
 .pd-ucard__id { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .pd-ucard__name { font-weight: 700; font-size: 1.08rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pd-ucard__role { align-self: flex-start; max-width: 100%; background: var(--blue-tint); color: var(--blue-ink); border-radius: var(--r-pill); padding: 3px 11px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pd-ucard__city { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-3); font-size: 0.82rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-ucard__city .pd-ic { width: 14px; height: 14px; flex: none; }
 .pd-ucard__bio { margin: 14px 0 0; color: var(--ink-2); font-size: 0.92rem; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .pd-ucard__spacer { flex: 1; min-height: 16px; }
 .pd-ucard__foot { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }

@@ -18,6 +18,10 @@
                             <span class="pd-badge__dot" aria-hidden="true"></span>{{ user.role }}
                         </span>
                         <h1 class="pd-hero__title" data-reveal>{{ user.Name }}</h1>
+                        <p v-if="user.city" class="pd-hero__city" data-reveal>
+                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 21s7-6 7-11a7 7 0 0 0-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                            {{ user.city }}
+                        </p>
                         <p v-if="hook" class="pd-hero__hook" data-reveal>{{ hook }}</p>
                         <div class="pd-hero__cta" data-reveal>
                             <a v-if="user.booking_url" class="pd-btn pd-btn--lg" :href="user.booking_url" target="_blank" rel="noopener noreferrer">
@@ -300,7 +304,7 @@ async function load() {
     const sb = getSupabase();
     if (!uid || !sb) { loading.value = false; return; }
     const { data } = await sb.from('users')
-        .select('id, "Name", "Photo", role, "Description", email, vk_url, youtube_url, telegram_url, whatsapp_url, website_url, booking_url, courses, articles, hide')
+        .select('id, "Name", "Photo", role, "Description", email, vk_url, youtube_url, telegram_url, whatsapp_url, website_url, booking_url, courses, articles, hide, city')
         .eq('id', uid).limit(1);
     user.value = data?.[0] || null;
     if (user.value?.Name) document.title = `${user.value.Name} — МитГуру`;
@@ -409,6 +413,8 @@ function ensureFonts() {
 .pd-badge { display: inline-flex; align-items: center; gap: 9px; padding: 8px 16px; border-radius: var(--r-pill); background: var(--blue-tint); color: var(--blue-ink); font-weight: 600; font-size: 14px; }
 .pd-badge__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 4px rgba(240, 145, 87, 0.22); }
 .pd-hero__title { margin: 22px 0 0; font-weight: 700; font-size: clamp(2.2rem, 5.2vw, 4rem); line-height: 1.02; letter-spacing: -0.025em; }
+.pd-hero__city { display: inline-flex; align-items: center; gap: 6px; margin: 12px 0 0; color: var(--ink-2); font-size: 1rem; font-weight: 500; }
+.pd-hero__city .pd-ic { width: 18px; height: 18px; color: var(--blue); }
 .pd-hero__hook { margin: 22px 0 0; max-width: 52ch; font-size: 1.14rem; color: var(--ink-2); }
 /* margin-top keeps a gap above the CTA whether or not the bio hook is present (short/no-bio profiles
    otherwise let the button ride up against the name). */

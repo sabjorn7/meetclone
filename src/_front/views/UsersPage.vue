@@ -26,7 +26,7 @@
                 <div class="pd-filters" data-reveal>
                     <label class="pd-search">
                         <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-                        <input v-model="q" type="search" placeholder="Имя специалиста" aria-label="Поиск по имени" @input="onSearch" />
+                        <input v-model="q" type="search" placeholder="Имя пользователя" aria-label="Поиск по имени" @input="onSearch" />
                     </label>
                     <div class="pd-chips">
                         <button
@@ -83,12 +83,13 @@ import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js
 
 const PER_PAGE = 50;
 const DEFAULT_NAME = 'Новый пользователь';   // unnamed users — pushed to the end of the list
-const SPECIALIST_ROLES = ['Спикер', 'Учебное заведение'];
+// Role chips match the WeWeb original: "Специалист" is the DB role "Ученик" (practicing members),
+// NOT speakers/institutions. Default "Все" shows everyone (name-sorted, unnamed last).
 const CHIPS = [
-    { key: 'specialists', label: 'Специалисты' },
+    { key: 'all', label: 'Все' },
     { key: 'Спикер', label: 'Спикер' },
     { key: 'Учебное заведение', label: 'Учебное заведение' },
-    { key: 'all', label: 'Все' },
+    { key: 'Ученик', label: 'Специалист' },
 ];
 const USER_COLS = 'id, "Name", "Photo", role, "Description", courses';
 
@@ -99,7 +100,7 @@ const loading = ref(true);
 const ready = ref(false);
 const allUsers = ref([]);   // full filtered + sorted set (paginated client-side)
 const page = ref(1);
-const roleKey = ref('specialists');
+const roleKey = ref('all');
 const q = ref('');
 
 // Sort: by Name (RU, case-insensitive), with unnamed / "Новый пользователь" users pushed to the very end.
@@ -122,6 +123,7 @@ function initials(name) {
 function roleLabel(role) {
     if (role === 'Спикер') return 'Спикер';
     if (role === 'Учебное заведение') return 'Учебное заведение';
+    if (role === 'Ученик') return 'Специалист';
     return '';
 }
 function bioOf(u) {
@@ -140,8 +142,7 @@ function writeTo(id) { window.location.href = `/chats?user=${id}`; }   // live c
 
 function buildQuery() {
     let query = sb.from('users').select(USER_COLS);
-    if (roleKey.value === 'specialists') query = query.in('role', SPECIALIST_ROLES);
-    else if (roleKey.value !== 'all') query = query.eq('role', roleKey.value);
+    if (roleKey.value !== 'all') query = query.eq('role', roleKey.value);
     const needle = q.value.trim();
     if (needle) query = query.ilike('Name', `%${needle}%`);
     return query;

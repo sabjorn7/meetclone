@@ -241,15 +241,15 @@ function ensureFonts() {
 
 .pd-empty { padding: 60px 0; text-align: center; color: var(--ink-3); }
 
-.pd-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-.pd-ucard { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 20px; text-decoration: none; color: inherit; transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease-out); }
+.pd-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.pd-ucard { display: flex; flex-direction: column; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 20px; text-decoration: none; color: inherit; transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease-out); }
 @media (hover: hover) and (pointer: fine) { .pd-ucard:hover { transform: translateY(-4px); box-shadow: var(--shadow-hov); border-color: transparent; } }
-.pd-ucard__top { display: flex; align-items: center; gap: 14px; }
+.pd-ucard__top { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .pd-ucard__ava { width: 62px; height: 62px; border-radius: 50%; object-fit: cover; flex: none; }
 .pd-ucard__ava--i { display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-weight: 700; font-size: 1.1rem; }
 .pd-ucard__id { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .pd-ucard__name { font-weight: 700; font-size: 1.08rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pd-ucard__role { align-self: flex-start; background: var(--blue-tint); color: var(--blue-ink); border-radius: var(--r-pill); padding: 3px 11px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+.pd-ucard__role { align-self: flex-start; max-width: 100%; background: var(--blue-tint); color: var(--blue-ink); border-radius: var(--r-pill); padding: 3px 11px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pd-ucard__bio { margin: 14px 0 0; color: var(--ink-2); font-size: 0.92rem; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .pd-ucard__spacer { flex: 1; min-height: 16px; }
 .pd-ucard__foot { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }

@@ -261,6 +261,9 @@ const PAGE_OVERRIDES = [
     // Users: promo-styled specialist directory (name/city search, role chips, city on cards) replaces
     // the WeWeb `users` list. /users-demo stays as the rollback.
     { path: '/users', name: 'users', component: UsersPage, wwPath: 'users' },
+    // Account settings: promo-styled ProfileEditPage replaces the WeWeb `profile` edit page. Also removed
+    // from App.vue CHROME_EXCLUDE so it gets the shared AppHeader/AppFooter. /profile-edit-demo is the rollback.
+    { path: '/profile', name: 'profile', component: ProfileEditPage, wwPath: 'profile' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

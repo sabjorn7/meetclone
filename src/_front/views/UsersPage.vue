@@ -78,10 +78,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
 
 const PER_PAGE = 50;
+const DEFAULT_NAME = 'Новый пользователь';   // unnamed users — pushed to the end of the list
 const SPECIALIST_ROLES = ['Спикер', 'Учебное заведение'];
 const CHIPS = [
     { key: 'specialists', label: 'Специалисты' },
@@ -96,11 +97,23 @@ let searchTimer = null;
 const myId = ref(null);
 const loading = ref(true);
 const ready = ref(false);
-const users = ref([]);
-const totalPages = ref(1);
+const allUsers = ref([]);   // full filtered + sorted set (paginated client-side)
 const page = ref(1);
 const roleKey = ref('specialists');
 const q = ref('');
+
+// Sort: by Name (RU, case-insensitive), with unnamed / "Новый пользователь" users pushed to the very end.
+function isUnnamed(u) { const n = (u.Name || '').trim(); return !n || n === DEFAULT_NAME; }
+function sortUsers(list) {
+    return [...list].sort((a, b) => {
+        const au = isUnnamed(a), bu = isUnnamed(b);
+        if (au !== bu) return au ? 1 : -1;
+        return (a.Name || '').trim().localeCompare((b.Name || '').trim(), 'ru', { sensitivity: 'base' });
+    });
+}
+
+const totalPages = computed(() => Math.max(1, Math.ceil(allUsers.value.length / PER_PAGE)));
+const users = computed(() => allUsers.value.slice((page.value - 1) * PER_PAGE, page.value * PER_PAGE));
 
 function initials(name) {
     const p = (name || '').split(/\s+/).filter(Boolean);
@@ -125,33 +138,42 @@ function plural(n, one, few, many) {
 
 function writeTo(id) { window.location.href = `/chats?user=${id}`; }   // live chats deep-link (opens/creates the 1-on-1)
 
+function buildQuery() {
+    let query = sb.from('users').select(USER_COLS);
+    if (roleKey.value === 'specialists') query = query.in('role', SPECIALIST_ROLES);
+    else if (roleKey.value !== 'all') query = query.eq('role', roleKey.value);
+    const needle = q.value.trim();
+    if (needle) query = query.ilike('Name', `%${needle}%`);
+    return query;
+}
+
+// Fetch the WHOLE filtered set (chunked to survive any PostgREST max-rows cap), then sort client-side so
+// "Новый пользователь"/unnamed always land last and pagination stays correct across the full ordering.
 async function fetchUsers() {
     if (!sb) return;
     loading.value = true;
-    const from = (page.value - 1) * PER_PAGE;
-    let query = sb.from('users').select(USER_COLS, { count: 'exact' });
-
-    if (roleKey.value === 'specialists') query = query.in('role', SPECIALIST_ROLES);
-    else if (roleKey.value !== 'all') query = query.eq('role', roleKey.value);
-
-    const needle = q.value.trim();
-    if (needle) query = query.ilike('Name', `%${needle}%`);
-
-    const { data, count } = await query.order('created_at', { ascending: false }).range(from, from + PER_PAGE - 1);
-    users.value = data || [];
-    totalPages.value = Math.max(1, Math.ceil((count || 0) / PER_PAGE));
+    const all = [];
+    let start = 0;
+    for (;;) {
+        const { data } = await buildQuery().order('created_at', { ascending: false }).range(start, start + 999);
+        if (!data || !data.length) break;
+        all.push(...data);
+        start += data.length;
+        if (data.length < 1000) break;   // advancing by the real count survives a server cap < 1000
+    }
+    allUsers.value = sortUsers(all);
+    page.value = 1;
     loading.value = false;
 }
 
-function pickRole(key) { if (roleKey.value === key) return; roleKey.value = key; page.value = 1; fetchUsers(); }
+function pickRole(key) { if (roleKey.value === key) return; roleKey.value = key; fetchUsers(); }
 function onSearch() {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => { page.value = 1; fetchUsers(); }, 300);
+    searchTimer = setTimeout(fetchUsers, 300);
 }
 function goPage(p) {
     if (p < 1 || p > totalPages.value) return;
     page.value = p;
-    fetchUsers();
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 

@@ -13,6 +13,7 @@ import LoginPage from './views/LoginPage.vue';
 import ArticlePage from './views/ArticlePage.vue';
 import ArticlesPage from './views/ArticlesPage.vue';
 import UsersPage from './views/UsersPage.vue';
+import ProfileEditPage from './views/ProfileEditPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -369,6 +370,13 @@ routes.push({
     path: '/users-demo',
     name: 'users-demo',
     component: UsersPage,
+});
+
+// DEMO: promo-styled account-edit page (/profile-edit-demo; see src/_front/views/ProfileEditPage.vue).
+routes.push({
+    path: '/profile-edit-demo',
+    name: 'profile-edit-demo',
+    component: ProfileEditPage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

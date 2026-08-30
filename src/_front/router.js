@@ -257,6 +257,9 @@ const PAGE_OVERRIDES = [
     // Article list: promo-styled ArticlesPage replaces the WeWeb `articles` list. /articles-demo stays
     // as the rollback/preview. (The detail /articles/:slug is the entry above.)
     { path: '/articles', name: 'articles', component: ArticlesPage, wwPath: 'articles' },
+    // Users: promo-styled specialist directory (name/city search, role chips, city on cards) replaces
+    // the WeWeb `users` list. /users-demo stays as the rollback.
+    { path: '/users', name: 'users', component: UsersPage, wwPath: 'users' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

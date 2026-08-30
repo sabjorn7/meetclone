@@ -253,6 +253,9 @@ const PAGE_OVERRIDES = [
     // Reproduces the marked body, PeerTube video, rating + threaded comments; adds per-article SEO + rating
     // dedupe. Reads slug from route.params. /article-demo stays as the rollback/preview.
     { path: '/articles/:slug', name: 'article', component: ArticlePage, wwPath: 'articles/{{slug|}}' },
+    // Article list: promo-styled ArticlesPage replaces the WeWeb `articles` list. /articles-demo stays
+    // as the rollback/preview. (The detail /articles/:slug is the entry above.)
+    { path: '/articles', name: 'articles', component: ArticlesPage, wwPath: 'articles' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

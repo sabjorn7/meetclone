@@ -12,6 +12,7 @@ import ChatsPage from './views/ChatsPage.vue';
 import LoginPage from './views/LoginPage.vue';
 import ArticlePage from './views/ArticlePage.vue';
 import ArticlesPage from './views/ArticlesPage.vue';
+import UsersPage from './views/UsersPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -358,6 +359,13 @@ routes.push({
     path: '/articles-demo',
     name: 'articles-demo',
     component: ArticlesPage,
+});
+
+// DEMO: promo-styled specialist directory (/users-demo; see src/_front/views/UsersPage.vue).
+routes.push({
+    path: '/users-demo',
+    name: 'users-demo',
+    component: UsersPage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

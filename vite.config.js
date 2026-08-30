@@ -219,6 +219,19 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// DEMO entry: promo-styled specialist directory (/users-demo; see src/_front/views/UsersPage.vue).
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['users-demo-en'] = {
+            ..._tpl,
+            outputDir: './users-demo',
+            title: 'Сообщество кинезиологов — МитГуру',
+            meta: [ { name: 'title', content: 'Сообщество кинезиологов — МитГуру' }, { name: 'description', content: 'Специалисты и участники сообщества кинезиологов МитГуру.' } ],
+        };
+    }
+}
+
 // Read the main HTML template
 const template = fs.readFileSync(path.resolve(__dirname, 'template.html'), 'utf-8');
 const compiledTemplate = handlebars.compile(template);

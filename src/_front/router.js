@@ -11,6 +11,7 @@ import ClubsPage from './views/ClubsPage.vue';
 import ChatsPage from './views/ChatsPage.vue';
 import LoginPage from './views/LoginPage.vue';
 import ArticlePage from './views/ArticlePage.vue';
+import ArticlesPage from './views/ArticlesPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -347,6 +348,13 @@ routes.push({
     path: '/article-demo',
     name: 'article-demo',
     component: ArticlePage,
+});
+
+// DEMO: promo-styled article LIST (/articles-demo; see src/_front/views/ArticlesPage.vue).
+routes.push({
+    path: '/articles-demo',
+    name: 'articles-demo',
+    component: ArticlesPage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

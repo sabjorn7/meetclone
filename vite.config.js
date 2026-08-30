@@ -206,6 +206,19 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// DEMO entry: promo-styled article LIST (/articles-demo; see src/_front/views/ArticlesPage.vue).
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['articles-demo-en'] = {
+            ..._tpl,
+            outputDir: './articles-demo',
+            title: 'Статьи о кинезиологии — МитГуру',
+            meta: [ { name: 'title', content: 'Статьи о кинезиологии — МитГуру' }, { name: 'description', content: 'Полезные статьи и материалы по прикладной кинезиологии.' } ],
+        };
+    }
+}
+
 // Read the main HTML template
 const template = fs.readFileSync(path.resolve(__dirname, 'template.html'), 'utf-8');
 const compiledTemplate = handlebars.compile(template);

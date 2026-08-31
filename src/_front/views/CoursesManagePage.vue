@@ -18,7 +18,7 @@
     <main class="pd" :class="{ 'is-ready': ready }">
         <div v-if="loading" class="pd-wrap pd-load">Загрузка…</div>
 
-        <section v-else class="pd-section">
+        <section v-else class="pd-section" :class="{ 'has-salebar': discountMode }">
             <div class="pd-wrap">
                 <header class="pd-head" data-reveal>
                     <div class="pd-head__row">
@@ -1384,6 +1384,7 @@ function ensureFonts() {
 @media (prefers-reduced-motion: reduce) { [data-reveal] { opacity: 1; transform: none; transition: none; } }
 
 .pd-section { padding: 34px 0 90px; }
+.pd-section.has-salebar { padding-bottom: 130px; }
 .pd-load { padding: 90px 24px; text-align: center; color: var(--ink-2); }
 
 .pd-head { margin-bottom: 22px; }
@@ -1455,7 +1456,7 @@ function ensureFonts() {
 .pd-check-box.is-on svg { opacity: 1; }
 .pd-card.is-sel { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
 .pd-card.is-free { opacity: 0.5; cursor: default; }
-.pd-salebar { position: sticky; bottom: 0; z-index: 60; background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -8px 24px -16px rgba(9, 23, 71, 0.3); padding: 14px 0; margin-top: 24px; }
+.pd-salebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 200; background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -8px 24px -16px rgba(9, 23, 71, 0.3); padding: 14px 0; }
 .pd-salebar__in { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .pd-salebar__sel { display: inline-flex; align-items: center; gap: 12px; font-size: 0.95rem; flex-wrap: wrap; }
 .pd-salebar__act { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }

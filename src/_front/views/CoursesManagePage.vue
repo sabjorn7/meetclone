@@ -131,7 +131,7 @@
                     <p v-if="discountError" class="pd-formerr pd-formerr--inline">{{ discountError }}</p>
                 </div>
 
-                <div v-if="discountConfirm" class="pd-confirm">
+                <div v-if="discountConfirm" class="pd-modal" @click.self="discountConfirm = null">
                     <div class="pd-confirm__box">
                         <p class="pd-confirm__t">{{ discountConfirm === 'apply' ? `Скидка ${discountPercent}% на ${selected.size} курс(ов)?` : `Убрать скидку с ${selected.size} курс(ов)?` }}</p>
                         <p class="pd-confirm__d">Меняется цена (и «старая цена») выбранных курсов, в том числе опубликованных. Действие сразу отражается в каталоге.</p>

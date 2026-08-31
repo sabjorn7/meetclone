@@ -205,7 +205,38 @@
                         </template>
                     </div>
 
-                    <!-- lessons (existing courses only; video upload is Phase 4) -->
+                    <!-- course teaser video (existing courses only) -->
+                    <div v-if="!editing.isCreate" class="pd-teaser">
+                        <span class="pd-money__h">Тизер курса</span>
+                        <div v-if="videoUploading && videoTarget === 'course'" class="pd-vprog">
+                            <div class="pd-vprog__bar"><span :style="{ transform: `scaleX(${videoProgress / 100})` }"></span></div>
+                            <span class="pd-vprog__t">Загрузка… {{ videoProgress }}%</span>
+                        </div>
+                        <template v-else-if="editing.video_id">
+                            <div class="pd-vframe"><iframe :src="embedUrl(editing.video_id, { autoplay: false })" title="Тизер курса" frameborder="0" allowfullscreen allow="fullscreen; picture-in-picture"></iframe></div>
+                            <div class="pd-vactions">
+                                <label class="pd-btn pd-btn--ghost pd-btn--sm pd-upl">
+                                    <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Заменить
+                                    <input type="file" accept="video/*" class="pd-hidden-file" :disabled="videoUploading" @change="onCourseVideo" />
+                                </label>
+                                <button type="button" class="pd-btn pd-btn--dangerghost pd-btn--sm" :disabled="videoBusy" @click="removeCourseVideo">{{ videoBusy ? 'Удаляем…' : 'Удалить' }}</button>
+                            </div>
+                        </template>
+                        <div v-else-if="editing.resume_video_id" class="pd-vresume">
+                            <p class="pd-hint">Загрузка «{{ editing.resume_name || 'видео' }}» не завершена. Выберите тот же файл, чтобы продолжить.</p>
+                            <label class="pd-btn pd-btn--sm pd-upl">
+                                <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Продолжить загрузку
+                                <input type="file" accept="video/*" class="pd-hidden-file" @change="onCourseVideo" />
+                            </label>
+                        </div>
+                        <label v-else class="pd-btn pd-btn--ghost pd-btn--sm pd-upl">
+                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Загрузить тизер
+                            <input type="file" accept="video/*" class="pd-hidden-file" @change="onCourseVideo" />
+                        </label>
+                        <p v-if="videoError && videoTarget === 'course'" class="pd-formerr pd-formerr--inline">{{ videoError }}</p>
+                    </div>
+
+                    <!-- lessons (existing courses only) -->
                     <div v-if="!editing.isCreate" class="pd-lessons">
                         <div class="pd-lessons__head">
                             <span class="pd-money__h">Уроки курса</span>
@@ -294,9 +325,37 @@
                         </label>
                     </div>
 
-                    <p class="pd-hint">Видео урока — на следующем этапе.</p>
+                    <div class="pd-field">
+                        <span class="pd-field__lb">Видео урока</span>
+                        <div v-if="videoUploading && videoTarget === 'lesson'" class="pd-vprog">
+                            <div class="pd-vprog__bar"><span :style="{ transform: `scaleX(${videoProgress / 100})` }"></span></div>
+                            <span class="pd-vprog__t">Загрузка… {{ videoProgress }}%</span>
+                        </div>
+                        <template v-else-if="lessonEditing.video_id">
+                            <div class="pd-vframe"><iframe :src="embedUrl(lessonEditing.video_id, { autoplay: false })" title="Видео урока" frameborder="0" allowfullscreen allow="fullscreen; picture-in-picture"></iframe></div>
+                            <div class="pd-vactions">
+                                <label class="pd-btn pd-btn--ghost pd-btn--sm pd-upl">
+                                    <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Заменить
+                                    <input type="file" accept="video/*" class="pd-hidden-file" :disabled="videoUploading" @change="onLessonVideo" />
+                                </label>
+                                <button type="button" class="pd-btn pd-btn--dangerghost pd-btn--sm" :disabled="videoBusy" @click="removeLessonVideo">{{ videoBusy ? 'Удаляем…' : 'Удалить' }}</button>
+                            </div>
+                        </template>
+                        <div v-else-if="lessonEditing.resume_video_id" class="pd-vresume">
+                            <p class="pd-hint">Загрузка «{{ lessonEditing.resume_name || 'видео' }}» не завершена. Выберите тот же файл, чтобы продолжить.</p>
+                            <label class="pd-btn pd-btn--sm pd-upl">
+                                <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Продолжить загрузку
+                                <input type="file" accept="video/*" class="pd-hidden-file" @change="onLessonVideo" />
+                            </label>
+                        </div>
+                        <label v-else class="pd-btn pd-btn--ghost pd-btn--sm pd-upl">
+                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Загрузить видео
+                            <input type="file" accept="video/*" class="pd-hidden-file" @change="onLessonVideo" />
+                        </label>
+                    </div>
                 </div>
                 <p v-if="lessonError" class="pd-formerr">{{ lessonError }}</p>
+                <p v-if="videoError && videoTarget !== 'course'" class="pd-formerr">{{ videoError }}</p>
                 <div class="pd-dialog__foot">
                     <span class="pd-spacer"></span>
                     <button type="button" class="pd-btn pd-btn--ghost" @click="closeLessonEdit">Закрыть</button>
@@ -337,6 +396,8 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { getSupabase, readStoredSession, authCookieUser, loadUser } from '@/_front/chrome/headerAccount.js';
+import { getUploadToken, uploadVideo, fetchVideoSize, PEERTUBE_ORIGIN } from '@/_front/streams/peertubeUpload.js';
+import { deleteLive, embedUrl } from '@/_front/streams/peertubeLive.js';
 
 const CREATORS = ['Спикер', 'Учебное заведение', 'admin'];
 
@@ -374,6 +435,13 @@ const lessonSaving = ref(false);
 const materialBusy = ref(false);
 const lessonError = ref('');
 const lessonBusyId = ref(null);    // row-level spinner (reorder/delete)
+
+// ── Phase 4: PeerTube video (lesson video + course teaser) ──
+const videoUploading = ref(false); // true while a chunked upload runs (blocks a second one)
+const videoProgress = ref(0);
+const videoTarget = ref(null);     // 'lesson' | 'course' — which surface the progress bar belongs to
+const videoBusy = ref(false);      // delete/replace
+const videoError = ref('');
 
 const STATUS = {
     'Опубликовано': { label: 'Опубликовано', cls: 'live' },
@@ -443,6 +511,10 @@ async function load() {
     const me = await loadUser(sb);
     if (!me || !CREATORS.includes(me.role)) { window.location.href = '/'; return; }
 
+    // Heal the shared PeerTube token on open — this page is the platform's token bootstrap (streams
+    // depend on it; the token has expired in practice). Fire-and-forget; upload also heals lazily.
+    getUploadToken(sb).catch(() => { /* healed lazily on first upload otherwise */ });
+
     const [{ data: cs }, { data: fs }] = await Promise.all([
         sb.from('course').select(COLS).eq('owner', myId.value).order('created_at', { ascending: false }).limit(2000),
         sb.from('course_folders').select('id, title, priority').eq('creator', myId.value).order('priority', { ascending: true }),
@@ -500,9 +572,12 @@ async function openEdit(c) {
     formLoading.value = true;
     try {
         const { data } = await sb.from('course')
-            .select('"Title", "Category", "Decription", "WhatTeach", "For", folder, "Free", "Price", old_price, "DurationLong", "DurationPrice", "Buy"')
+            .select('"Title", "Category", "Decription", "WhatTeach", "For", folder, "Free", "Price", old_price, "DurationLong", "DurationPrice", "Buy", video_id, video_size, resume_video_id, resume_chunk, resume_name')
             .eq('id', c.id).limit(1);
         const full = data?.[0] || {};
+        // merge the teaser video + resume state onto `editing` so the course-teaser section can read them
+        editing.value = { ...editing.value, video_id: full.video_id, video_size: full.video_size,
+            resume_video_id: full.resume_video_id, resume_chunk: full.resume_chunk, resume_name: full.resume_name };
         form.value = {
             Title: full.Title ?? c.Title ?? '', Category: full.Category || CATEGORIES[0],
             Decription: full.Decription || '', WhatTeach: full.WhatTeach || '', For: full.For || '', folder: full.folder || null,
@@ -675,7 +750,7 @@ async function loadLessons(c) {
     try {
         const ids = Array.isArray(c.Less_Id) ? c.Less_Id : [];
         if (!ids.length) { lessons.value = []; return; }
-        const { data } = await sb.from('lessons').select('id, "Title", "Descr", "File", video_id').in('id', ids);
+        const { data } = await sb.from('lessons').select('id, "Title", "Descr", "File", video_id, video_size, resume_video_id, resume_chunk, resume_name').in('id', ids);
         const byId = Object.fromEntries((data || []).map((l) => [l.id, l]));
         lessons.value = ids.map((id) => byId[id]).filter(Boolean); // keep Less_Id order
     } catch (e) { lessonError.value = 'Не удалось загрузить уроки.'; }
@@ -772,6 +847,72 @@ async function removeMaterial(lesson) {
     finally { materialBusy.value = false; }
 }
 function materialName(url) { return url ? decodeURIComponent(url.split('/').pop() || 'файл') : ''; }
+
+// ── video (lessons.video_id / course.video_id via the shared PeerTube system account) ──────────
+function patchLesson(id, p) {
+    lessons.value = lessons.value.map((l) => (l.id === id ? { ...l, ...p } : l));
+    if (lessonEditing.value?.id === id) lessonEditing.value = { ...lessonEditing.value, ...p };
+}
+function patchCourse(id, p) {
+    courses.value = courses.value.map((c) => (c.id === id ? { ...c, ...p } : c));
+    if (editing.value?.id === id) editing.value = { ...editing.value, ...p };
+}
+// Chunked resumable upload; resume checkpoints are persisted to the row's resume_* columns (parity with
+// the WeWeb uploader) so an interrupted upload can pick up where it stopped.
+async function runVideoUpload(table, row, file, patch, which) {
+    if (videoUploading.value) return;
+    videoUploading.value = true; videoProgress.value = 0; videoTarget.value = which; videoError.value = '';
+    try {
+        const token = await getUploadToken(sb);
+        await sb.from(table).update({ resume_name: file.name }).eq('id', row.id);
+        const result = await uploadVideo({
+            token, file,
+            resumeUploadId: row.resume_video_id || null,
+            resumeStart: row.resume_video_id ? Number(row.resume_chunk || 0) : 0,
+            onInit: (uid) => sb.from(table).update({ resume_video_id: uid }).eq('id', row.id),
+            onChunk: (pos) => sb.from(table).update({ resume_chunk: String(pos) }).eq('id', row.id),
+            onProgress: (p) => { videoProgress.value = p; },
+        });
+        const size = await fetchVideoSize(result.uuid);
+        const done = { video_id: result.uuid, video_size: size, resume_video_id: null, resume_chunk: null, resume_name: null };
+        await sb.from(table).update(done).eq('id', row.id);
+        patch(done);
+    } catch (e) {
+        if (e?.message !== 'cancelled') videoError.value = `Не удалось загрузить видео: ${e?.message || 'ошибка'}`;
+    } finally {
+        videoUploading.value = false; videoTarget.value = null;
+    }
+}
+async function runVideoDelete(table, row, patch) {
+    if (videoBusy.value) return;
+    videoBusy.value = true; videoError.value = '';
+    try {
+        if (row.video_id) { try { await deleteLive(sb, row.video_id); } catch (_) { /* already gone */ } }
+        const done = { video_id: null, video_size: null, resume_video_id: null, resume_chunk: null, resume_name: null };
+        await sb.from(table).update(done).eq('id', row.id);
+        patch(done);
+    } catch (e) { videoError.value = 'Не удалось удалить видео.'; }
+    finally { videoBusy.value = false; }
+}
+function onLessonVideo(e) {
+    const f = e.target.files?.[0]; e.target.value = '';
+    const l = lessonEditing.value;
+    if (f && l) runVideoUpload('lessons', l, f, (p) => patchLesson(l.id, p), 'lesson');
+}
+function removeLessonVideo() {
+    const l = lessonEditing.value;
+    if (l) runVideoDelete('lessons', l, (p) => patchLesson(l.id, p));
+}
+function onCourseVideo(e) {
+    const f = e.target.files?.[0]; e.target.value = '';
+    const c = editing.value;
+    if (f && c && !c.isCreate) runVideoUpload('course', c, f, (p) => patchCourse(c.id, p), 'course');
+}
+function removeCourseVideo() {
+    const c = editing.value;
+    if (c && !c.isCreate) runVideoDelete('course', c, (p) => patchCourse(c.id, p));
+}
+function videoEmbed(uuid) { return embedUrl(uuid, { autoplay: true }); }
 
 onMounted(() => { ensureFonts(); load(); });
 
@@ -952,6 +1093,17 @@ function ensureFonts() {
 @media (hover: hover) and (pointer: fine) { .pd-matrow__link:hover { text-decoration: underline; } }
 .pd-upl { position: relative; align-self: flex-start; overflow: hidden; }
 .pd-hidden-file { position: absolute; inset: 0; opacity: 0; cursor: pointer; font-size: 0; }
+
+/* video (teaser + lesson) */
+.pd-teaser { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 16px; }
+.pd-vprog { display: flex; flex-direction: column; gap: 6px; }
+.pd-vprog__bar { height: 8px; border-radius: var(--r-pill); background: var(--bg-tint); overflow: hidden; }
+.pd-vprog__bar span { display: block; height: 100%; width: 100%; background: var(--blue); border-radius: var(--r-pill); transform-origin: left; transition: transform 0.2s var(--ease-out); }
+.pd-vprog__t { font-size: 0.86rem; font-weight: 600; color: var(--ink-2); }
+.pd-vframe { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--r-md); overflow: hidden; background: #0b1e52; }
+.pd-vframe iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.pd-vactions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pd-vresume { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .pd-formerr { margin: 0; padding: 10px 22px; background: var(--red-tint); color: var(--red); font-size: 0.88rem; font-weight: 600; border-top: 1px solid var(--line); }
 
 /* delete-confirm overlay (inside the dialog) */

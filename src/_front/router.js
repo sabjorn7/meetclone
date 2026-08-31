@@ -233,8 +233,13 @@ const PAGE_OVERRIDES = [
     // Public profile: promo-styled ProfilePage replaces the WeWeb /profile_page (reads ?user=<uuid>).
     { path: '/profile_page', name: 'profile-page', component: ProfilePage, wwPath: 'profile_page' },
     // Course landing: promo-styled CoursePage replaces the WeWeb `course_info` (paths course/{{slug|}}).
-    // Buyers still watch lessons on /my_courses — this page is the sales landing only (verified empirically).
+    // This is the sales landing only; buyers watch the lessons on /my_courses (the override just below).
     { path: '/course/:slug', name: 'course', component: CoursePage, wwPath: 'course/{{slug|}}' },
+    // Purchased-course viewer: promo-styled MyCoursePage replaces the WeWeb `my_courses` page. Adds the
+    // missing ownership access gate (guest→login, paid-not-owned/expired→/course), lesson player, materials,
+    // and the review form (rating+comment). Also removed from App.vue CHROME_EXCLUDE (gets shared chrome).
+    // /my-course-demo is the rollback.
+    { path: '/my_courses', name: 'my_courses', component: MyCoursePage, wwPath: 'my_courses' },
     // Course catalog: promo-styled AllCoursesPage replaces the WeWeb `all_course` page.
     { path: '/all_course', name: 'all-course', component: AllCoursesPage, wwPath: 'all_course' },
     // Logged-in home ("/"): promo-styled HomePage replaces the WeWeb Home (paths.default 'home').

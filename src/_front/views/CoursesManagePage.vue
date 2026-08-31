@@ -26,10 +26,16 @@
                             <h1 class="pd-head__title">Управление курсами</h1>
                             <p class="pd-head__descr">Ваши курсы, статусы модерации и материалы. Нажмите на курс, чтобы отредактировать.</p>
                         </div>
-                        <button type="button" class="pd-btn" @click="openCreate">
-                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                            Добавить курс
-                        </button>
+                        <div class="pd-head__btns">
+                            <button type="button" class="pd-btn pd-btn--ghost" :class="{ 'is-on': discountMode }" @click="discountMode ? exitDiscountMode() : enterDiscountMode()">
+                                <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M9 9h.01M15 15h.01M16 8L8 16M3 5a2 2 0 0 1 2-2h6l10 10-8 8L3 11z"/></svg>
+                                {{ discountMode ? 'Выйти из скидок' : 'Скидки' }}
+                            </button>
+                            <button type="button" class="pd-btn" :disabled="discountMode" @click="openCreate">
+                                <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                                Добавить курс
+                            </button>
+                        </div>
                     </div>
                 </header>
 
@@ -56,14 +62,24 @@
                 <p class="pd-count" data-reveal>{{ visible.length }} {{ plural(visible.length, ['курс', 'курса', 'курсов']) }}</p>
 
                 <ul v-if="visible.length" class="pd-grid" data-reveal>
-                    <li v-for="c in visible" :key="c.id" class="pd-card pd-card--btn" tabindex="0" role="button" @click="openEdit(c)" @keydown.enter="openEdit(c)">
+                    <li
+                        v-for="c in visible" :key="c.id"
+                        class="pd-card pd-card--btn"
+                        :class="{ 'is-sel': discountMode && selected.has(c.id), 'is-free': discountMode && c.Free }"
+                        tabindex="0" role="button"
+                        @click="discountMode ? (!c.Free && toggleSelect(c.id)) : openEdit(c)"
+                        @keydown.enter="discountMode ? (!c.Free && toggleSelect(c.id)) : openEdit(c)"
+                    >
                         <div class="pd-card__top">
+                            <span v-if="discountMode && !c.Free" class="pd-check-box" :class="{ 'is-on': selected.has(c.id) }" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 6"/></svg>
+                            </span>
                             <span class="pd-badge" :class="`pd-badge--${statusMeta(c.ModStatus).cls}`">{{ statusMeta(c.ModStatus).label }}</span>
                             <span v-if="hasDiscount(c)" class="pd-badge pd-badge--sale">Скидка</span>
                         </div>
                         <h2 class="pd-card__title">{{ c.Title || 'Без названия' }}</h2>
                         <div class="pd-card__meta">
-                            <span class="pd-price">{{ priceLabel(c) }}</span>
+                            <span class="pd-price">{{ priceLabel(c) }}<s v-if="hasDiscount(c)" class="pd-oldprice">{{ num(c.old_price).toLocaleString('ru-RU') }} ₽</s></span>
                             <span class="pd-dot" aria-hidden="true">·</span>
                             <span class="pd-meta-i">
                                 <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
@@ -96,6 +112,35 @@
                     </li>
                 </ul>
                 <p v-else class="pd-empty" data-reveal>Ничего не найдено.</p>
+            </div>
+
+            <!-- bulk-discount action bar (sticky) -->
+            <div v-if="discountMode" class="pd-salebar">
+                <div class="pd-wrap pd-salebar__in">
+                    <div class="pd-salebar__sel">
+                        <b>Выбрано: {{ selected.size }}</b>
+                        <button type="button" class="pd-link" @click="selectAllVisible">Все</button>
+                        <button type="button" class="pd-link" @click="selectDiscounted">Со скидкой</button>
+                        <button v-if="selected.size" type="button" class="pd-link" @click="clearSelection">Снять</button>
+                    </div>
+                    <div class="pd-salebar__act">
+                        <label class="pd-salebar__pct">Скидка <input v-model.number="discountPercent" type="number" min="1" max="99" /> %</label>
+                        <button type="button" class="pd-btn pd-btn--sm" :disabled="!selected.size || discountBusy" @click="discountConfirm = 'apply'">Применить</button>
+                        <button type="button" class="pd-btn pd-btn--sm pd-btn--ghost" :disabled="!selected.size || discountBusy" @click="discountConfirm = 'remove'">Убрать скидку</button>
+                    </div>
+                    <p v-if="discountError" class="pd-formerr pd-formerr--inline">{{ discountError }}</p>
+                </div>
+
+                <div v-if="discountConfirm" class="pd-confirm">
+                    <div class="pd-confirm__box">
+                        <p class="pd-confirm__t">{{ discountConfirm === 'apply' ? `Скидка ${discountPercent}% на ${selected.size} курс(ов)?` : `Убрать скидку с ${selected.size} курс(ов)?` }}</p>
+                        <p class="pd-confirm__d">Меняется цена (и «старая цена») выбранных курсов, в том числе опубликованных. Действие сразу отражается в каталоге.</p>
+                        <div class="pd-confirm__foot">
+                            <button type="button" class="pd-btn pd-btn--ghost" @click="discountConfirm = null">Отмена</button>
+                            <button type="button" class="pd-btn" :disabled="discountBusy" @click="runBulk(discountConfirm)">{{ discountBusy ? 'Применяем…' : 'Подтвердить' }}</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -518,6 +563,15 @@ const courses = ref([]);
 const folders = ref([]);
 const search = ref('');
 const filter = ref('all'); // 'all' | 'discount' | 'fix' | <folder id>
+
+// ── bulk discounts (sales): select paid courses, apply/remove a % off via Price/old_price. Works on
+// published courses too (separate from the per-course edit-lock — a sale doesn't require unpublishing). ──
+const discountMode = ref(false);
+const selected = ref(new Set());
+const discountPercent = ref(20);
+const discountBusy = ref(false);
+const discountError = ref('');
+const discountConfirm = ref(null); // 'apply' | 'remove' | null
 
 // ── Phase 1: metadata create / edit / delete (no money) ──────────────────────
 const CATEGORIES = ['Запись семинара', 'Онлайн-курс'];
@@ -1242,6 +1296,58 @@ async function unbanUser(u) {
     finally { banBusyId.value = null; }
 }
 
+// ── bulk discounts ───────────────────────────────────────────────────────────
+function enterDiscountMode() { discountMode.value = true; selected.value = new Set(); discountError.value = ''; }
+function exitDiscountMode() { discountMode.value = false; selected.value = new Set(); discountConfirm.value = null; }
+function toggleSelect(id) {
+    const s = new Set(selected.value);
+    if (s.has(id)) s.delete(id); else s.add(id);
+    selected.value = s;
+}
+// only PAID courses can be discounted (free courses have no price)
+const discountable = computed(() => visible.value.filter((c) => !c.Free));
+function selectAllVisible() { selected.value = new Set(discountable.value.map((c) => c.id)); }
+function selectDiscounted() { selected.value = new Set(discountable.value.filter(hasDiscount).map((c) => c.id)); }
+function clearSelection() { selected.value = new Set(); }
+
+async function runBulk(mode) {
+    if (discountBusy.value || !selected.value.size) return;
+    const pct = Math.max(0, Math.min(99, num(discountPercent.value)));
+    if (mode === 'apply' && pct <= 0) { discountError.value = 'Укажите процент скидки (1–99).'; return; }
+    discountBusy.value = true; discountError.value = '';
+    try {
+        const ids = [...selected.value];
+        const byId = Object.fromEntries(courses.value.map((c) => [c.id, c]));
+        const jobs = ids.map((id) => {
+            const c = byId[id];
+            if (!c || c.Free) return null;
+            let patch;
+            if (mode === 'apply') {
+                const base = num(c.old_price) > 0 ? num(c.old_price) : num(c.Price); // re-discount from the original
+                if (base <= 0) return null;
+                patch = { old_price: base, Price: Math.round(base * (1 - pct / 100)) };
+            } else { // remove
+                if (num(c.old_price) <= 0) return null; // nothing to restore
+                patch = { Price: num(c.old_price), old_price: null };
+            }
+            return { id, patch };
+        }).filter(Boolean);
+        // apply in small concurrent batches
+        for (let i = 0; i < jobs.length; i += 8) {
+            const batch = jobs.slice(i, i + 8);
+            // eslint-disable-next-line no-await-in-loop
+            await Promise.all(batch.map((j) => sb.from('course').update(j.patch).eq('id', j.id)));
+            batch.forEach((j) => patchCourse(j.id, j.patch));
+        }
+        discountConfirm.value = null;
+        exitDiscountMode();
+    } catch (e) {
+        discountError.value = `Не удалось применить: ${e?.message || 'ошибка'}`;
+    } finally {
+        discountBusy.value = false;
+    }
+}
+
 onMounted(() => { ensureFonts(); load(); });
 
 function ensureFonts() {
@@ -1338,6 +1444,26 @@ function ensureFonts() {
 @media (hover: hover) and (pointer: fine) { .pd-card__link:hover { text-decoration: underline; } }
 
 .pd-empty { color: var(--ink-3); text-align: center; padding: 50px 0; }
+
+/* bulk discounts */
+.pd-head__btns { display: inline-flex; gap: 10px; flex-wrap: wrap; }
+.pd-btn--ghost.is-on { background: var(--gold); color: #4a2c00; border-color: var(--gold); }
+.pd-oldprice { margin-left: 7px; color: var(--ink-3); font-weight: 500; font-size: 0.85em; }
+.pd-check-box { width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--line); display: grid; place-items: center; margin-right: auto; }
+.pd-check-box svg { width: 13px; height: 13px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.pd-check-box.is-on { background: var(--blue); border-color: var(--blue); }
+.pd-check-box.is-on svg { opacity: 1; }
+.pd-card.is-sel { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+.pd-card.is-free { opacity: 0.5; cursor: default; }
+.pd-salebar { position: sticky; bottom: 0; z-index: 60; background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -8px 24px -16px rgba(9, 23, 71, 0.3); padding: 14px 0; margin-top: 24px; }
+.pd-salebar__in { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.pd-salebar__sel { display: inline-flex; align-items: center; gap: 12px; font-size: 0.95rem; flex-wrap: wrap; }
+.pd-salebar__act { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pd-salebar__pct { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.95rem; }
+.pd-salebar__pct input { width: 60px; border: 1px solid var(--line); border-radius: var(--r-md); padding: 7px 10px; font-family: inherit; font-size: 0.96rem; text-align: center; }
+.pd-salebar__pct input:focus { outline: none; border-color: var(--blue-soft); box-shadow: 0 0 0 3px var(--blue-tint); }
+.pd-link { border: 0; background: none; padding: 0; cursor: pointer; color: var(--blue-ink); font-weight: 600; font-size: 0.9rem; font-family: inherit; }
+@media (hover: hover) and (pointer: fine) { .pd-link:hover { text-decoration: underline; } }
 
 .pd-card--btn { cursor: pointer; text-align: left; font: inherit; color: inherit; }
 .pd-card--btn:focus-visible { outline: 2px solid var(--blue-soft); outline-offset: 2px; }

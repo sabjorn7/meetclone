@@ -52,6 +52,9 @@
             <p class="mgc__pre mgc__pre--2">успешно прошёл(а) курс</p>
             <p class="mgc__course">«{{ course || 'Курс' }}»</p>
 
+            <span class="mgc__dots mgc__dots--2"></span>
+            <p class="mgc__desc">Документ подтверждает успешное прохождение курса на образовательной платформе МитГуру.</p>
+
             <footer class="mgc__foot">
                 <div class="mgc__sig">
                     <span class="mgc__circle" aria-hidden="true"></span>
@@ -114,15 +117,17 @@ defineExpose({ root });
 
 .mgc__pre { margin: 30px 0 0; font-style: italic; font-weight: 700; font-size: 12.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-2); }
 .mgc__pre--2 { margin-top: 26px; }
-.mgc__name { margin: 12px 0 0; font-weight: 800; font-size: 38px; line-height: 1.12; letter-spacing: 0.02em; color: var(--ink); text-transform: uppercase; }
+.mgc__name { margin: 12px 0 0; font-weight: 800; font-size: 38px; line-height: 1.12; letter-spacing: 0.02em; color: var(--ink); text-transform: uppercase; overflow-wrap: anywhere; }
 .mgc__hl { background-image: linear-gradient(transparent 54%, var(--orange-hl) 54%, var(--orange-hl) 92%, transparent 92%); padding: 0 6px 0 2px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 
-.mgc__course { margin: 10px 0 0; font-weight: 800; font-size: 23px; line-height: 1.3; color: var(--blue); border-bottom: 2px solid var(--ink); padding-bottom: 8px; max-width: 540px; }
+.mgc__course { margin: 10px 0 0; font-weight: 800; font-size: 23px; line-height: 1.3; color: var(--blue); border-bottom: 2px solid var(--ink); padding-bottom: 8px; max-width: 540px; overflow-wrap: anywhere; }
+.mgc__dots--2 { margin-top: 24px; }
+.mgc__desc { margin: 16px 0 0; font-size: 13.5px; line-height: 1.62; color: var(--ink-2); max-width: 430px; }
 
 /* footer: author signature (left) + date/number (right) */
 .mgc__foot { margin-top: auto; display: flex; align-items: flex-end; gap: 40px; }
 .mgc__sig { position: relative; display: flex; flex-direction: column; align-items: flex-start; width: 250px; }
-.mgc__circle { position: absolute; left: 4px; top: -6px; width: 66px; height: 66px; border-radius: 50%; background: var(--orange); opacity: 0.9; }
+.mgc__circle { position: absolute; left: 6px; top: -10px; width: 52px; height: 52px; border-radius: 50%; background: var(--orange); opacity: 0.9; }
 .mgc__scribble { position: relative; width: 150px; height: 36px; }
 .mgc__fline { display: block; width: 100%; height: 0; border-bottom: 2px solid var(--ink); margin-top: 2px; }
 .mgc__flb { margin-top: 7px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.16em; color: var(--ink-2); }

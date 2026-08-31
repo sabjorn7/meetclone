@@ -14,6 +14,7 @@ import ArticlePage from './views/ArticlePage.vue';
 import ArticlesPage from './views/ArticlesPage.vue';
 import UsersPage from './views/UsersPage.vue';
 import ProfileEditPage from './views/ProfileEditPage.vue';
+import MyCoursePage from './views/MyCoursePage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -380,6 +381,13 @@ routes.push({
     path: '/profile-edit-demo',
     name: 'profile-edit-demo',
     component: ProfileEditPage,
+});
+
+// DEMO: promo-styled purchased-course viewer (/my-course-demo?course=<id>; see src/_front/views/MyCoursePage.vue).
+routes.push({
+    path: '/my-course-demo',
+    name: 'my-course-demo',
+    component: MyCoursePage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

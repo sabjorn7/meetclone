@@ -67,6 +67,13 @@
                                 <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
                                 {{ lessonCount(c) }} {{ plural(lessonCount(c), ['урок', 'урока', 'уроков']) }}
                             </span>
+                            <template v-if="durationLabel(c)">
+                                <span class="pd-dot" aria-hidden="true">·</span>
+                                <span class="pd-meta-i">
+                                    <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2.5"/></svg>
+                                    {{ durationLabel(c) }}
+                                </span>
+                            </template>
                             <span v-if="c.video_id" class="pd-dot" aria-hidden="true">·</span>
                             <span v-if="c.video_id" class="pd-meta-i pd-meta-i--ok">
                                 <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 5h16v14H4zM10 9l5 3-5 3z"/></svg>
@@ -133,6 +140,13 @@ function priceLabel(c) {
     if (c.Free) return 'Бесплатно';
     const p = num(c.Price);
     return p ? `${p.toLocaleString('ru-RU')} ₽` : 'Цена не указана';
+}
+// Access duration (DurationLong is in MONTHS; 0 = lifetime). Only meaningful for paid courses —
+// free courses are always accessible, so we don't show a period for them.
+function durationLabel(c) {
+    if (c.Free) return '';
+    const d = num(c.DurationLong);
+    return d ? `${d} мес.` : 'Бессрочный';
 }
 function folderTitle(id) { return id ? (folders.value.find((f) => f.id === id)?.title || '') : ''; }
 function folderCount(id) { return courses.value.filter((c) => c.folder === id).length; }

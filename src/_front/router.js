@@ -15,6 +15,7 @@ import ArticlesPage from './views/ArticlesPage.vue';
 import UsersPage from './views/UsersPage.vue';
 import ProfileEditPage from './views/ProfileEditPage.vue';
 import MyCoursePage from './views/MyCoursePage.vue';
+import CoursesManagePage from './views/CoursesManagePage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -393,6 +394,14 @@ routes.push({
     path: '/my-course-demo',
     name: 'my-course-demo',
     component: MyCoursePage,
+});
+
+// DEMO: promo-styled creator course management (/courses-manage-demo; see views/CoursesManagePage.vue).
+// Phased rebuild — Phase 0 is a read-only course list. Live /courses_manage stays on WeWeb until go-live.
+routes.push({
+    path: '/courses-manage-demo',
+    name: 'courses-manage-demo',
+    component: CoursesManagePage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

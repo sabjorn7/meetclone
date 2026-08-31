@@ -258,6 +258,19 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// DEMO entry: promo-styled creator course management (/courses-manage-demo; see views/CoursesManagePage.vue).
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['courses-manage-demo-en'] = {
+            ..._tpl,
+            outputDir: './courses-manage-demo',
+            title: 'Управление курсами — МитГуру',
+            meta: [ { name: 'title', content: 'Управление курсами — МитГуру' }, { name: 'description', content: 'Управление курсами для авторов на платформе МитГуру.' } ],
+        };
+    }
+}
+
 // Read the main HTML template
 const template = fs.readFileSync(path.resolve(__dirname, 'template.html'), 'utf-8');
 const compiledTemplate = handlebars.compile(template);

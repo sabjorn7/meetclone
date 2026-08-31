@@ -204,6 +204,36 @@
                             </label>
                         </template>
                     </div>
+
+                    <!-- lessons (existing courses only; video upload is Phase 4) -->
+                    <div v-if="!editing.isCreate" class="pd-lessons">
+                        <div class="pd-lessons__head">
+                            <span class="pd-money__h">Уроки курса</span>
+                            <button type="button" class="pd-btn pd-btn--sm" @click="addLesson">
+                                <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                                Добавить урок
+                            </button>
+                        </div>
+                        <p v-if="lessonsLoading" class="pd-hint">Загрузка уроков…</p>
+                        <ul v-else-if="lessons.length" class="pd-llist">
+                            <li v-for="(l, i) in lessons" :key="l.id" class="pd-lrow">
+                                <span class="pd-lrow__n">{{ i + 1 }}</span>
+                                <span class="pd-lrow__t">
+                                    {{ l.Title || 'Без названия' }}
+                                    <svg v-if="l.File" viewBox="0 0 24 24" class="pd-ic pd-lrow__ic" aria-hidden="true"><path d="M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+                                    <svg v-if="l.video_id" viewBox="0 0 24 24" class="pd-ic pd-lrow__ic pd-lrow__ic--v" aria-hidden="true"><path d="M4 5h16v14H4zM10 9l5 3-5 3z"/></svg>
+                                </span>
+                                <span class="pd-lrow__act">
+                                    <button type="button" class="pd-iconbtn" :disabled="i === 0 || lessonBusyId" aria-label="Выше" @click="moveLesson(i, -1)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></button>
+                                    <button type="button" class="pd-iconbtn" :disabled="i === lessons.length - 1 || lessonBusyId" aria-label="Ниже" @click="moveLesson(i, 1)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+                                    <button type="button" class="pd-iconbtn" aria-label="Изменить" @click="openLessonEdit(l)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+                                    <button type="button" class="pd-iconbtn pd-iconbtn--del" :disabled="lessonBusyId === l.id" aria-label="Удалить" @click="deleteLesson(l)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg></button>
+                                </span>
+                            </li>
+                        </ul>
+                        <p v-else class="pd-hint">Уроков пока нет. Нажмите «Добавить урок».</p>
+                        <p v-if="lessonError" class="pd-formerr pd-formerr--inline">{{ lessonError }}</p>
+                    </div>
                 </div>
 
                 <p v-if="editing && form && formError" class="pd-formerr">{{ formError }}</p>
@@ -225,6 +255,52 @@
                             <button type="button" class="pd-btn pd-btn--danger" :disabled="deleting" @click="deleteCourse">{{ deleting ? 'Удаляем…' : 'Удалить' }}</button>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- lesson editor (nested; title / description / material — video is Phase 4) -->
+        <div v-if="lessonEditing && lessonForm" class="pd-modal pd-modal--top" @click.self="closeLessonEdit">
+            <div class="pd-dialog pd-dialog--sm" role="dialog" aria-modal="true">
+                <div class="pd-dialog__head">
+                    <h2 class="pd-dialog__title">Урок</h2>
+                    <button type="button" class="pd-x" aria-label="Закрыть" @click="closeLessonEdit">
+                        <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                    </button>
+                </div>
+                <div class="pd-dialog__body">
+                    <label class="pd-field">
+                        <span class="pd-field__lb">Название урока</span>
+                        <input v-model="lessonForm.Title" type="text" class="pd-input" placeholder="Название урока" maxlength="300" />
+                    </label>
+                    <label class="pd-field">
+                        <span class="pd-field__lb">Описание</span>
+                        <textarea v-model="lessonForm.Descr" class="pd-input pd-textarea" rows="3" placeholder="Что в этом уроке" maxlength="4000"></textarea>
+                    </label>
+
+                    <div class="pd-field">
+                        <span class="pd-field__lb">Материал <em class="pd-opt">pdf, docx, pptx…</em></span>
+                        <div v-if="lessonEditing.File" class="pd-matrow">
+                            <a class="pd-matrow__link" :href="lessonEditing.File" target="_blank" rel="noopener noreferrer">
+                                <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+                                {{ materialName(lessonEditing.File) }}
+                            </a>
+                            <button type="button" class="pd-iconbtn pd-iconbtn--del" :disabled="materialBusy" aria-label="Удалить материал" @click="removeMaterial(lessonEditing)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg></button>
+                        </div>
+                        <label class="pd-btn pd-btn--ghost pd-btn--sm pd-upl">
+                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg>
+                            {{ materialBusy ? 'Загрузка…' : (lessonEditing.File ? 'Заменить файл' : 'Загрузить файл') }}
+                            <input type="file" class="pd-hidden-file" :disabled="materialBusy" @change="uploadMaterial($event, lessonEditing)" />
+                        </label>
+                    </div>
+
+                    <p class="pd-hint">Видео урока — на следующем этапе.</p>
+                </div>
+                <p v-if="lessonError" class="pd-formerr">{{ lessonError }}</p>
+                <div class="pd-dialog__foot">
+                    <span class="pd-spacer"></span>
+                    <button type="button" class="pd-btn pd-btn--ghost" @click="closeLessonEdit">Закрыть</button>
+                    <button type="button" class="pd-btn" :disabled="lessonSaving" @click="saveLessonMeta">{{ lessonSaving ? 'Сохраняем…' : 'Сохранить' }}</button>
                 </div>
             </div>
         </div>
@@ -286,6 +362,18 @@ const formError = ref('');
 const foldersOpen = ref(false);    // folders-management modal
 const newFolder = ref('');
 const folderBusy = ref(false);
+
+// ── Phase 3: lessons (title / description / material file; video is Phase 4) ──
+const BUCKET = 'profile';
+const STORAGE_URL = 'https://sb.meetgu.ru/storage/v1/object/public/profile//';
+const lessons = ref([]);           // lessons of the course being edited, in Less_Id order
+const lessonsLoading = ref(false);
+const lessonEditing = ref(null);   // the lesson open in the nested editor, or { isNew: true }
+const lessonForm = ref(null);      // { Title, Descr }
+const lessonSaving = ref(false);
+const materialBusy = ref(false);
+const lessonError = ref('');
+const lessonBusyId = ref(null);    // row-level spinner (reorder/delete)
 
 const STATUS = {
     'Опубликовано': { label: 'Опубликовано', cls: 'live' },
@@ -405,6 +493,8 @@ function openCreate() {
 async function openEdit(c) {
     editing.value = c;
     form.value = null; confirmDelete.value = false; formError.value = '';
+    lessons.value = []; lessonEditing.value = null; lessonError.value = '';
+    loadLessons(c);
     // the list rows are lightweight (COLS) and don't carry the long text fields — fetch them fresh
     // so the editor shows the true Category/Decription/WhatTeach/For and can't blank them on save.
     formLoading.value = true;
@@ -572,6 +662,117 @@ async function deleteFolder(id) {
     finally { folderBusy.value = false; }
 }
 
+// ── lessons ──────────────────────────────────────────────────────────────────
+// Sync a course's lesson order everywhere: the course.Less_Id column + the list card + the open editor.
+async function writeLessId(courseId, ids) {
+    await sb.from('course').update({ Less_Id: ids }).eq('id', courseId);
+    courses.value = courses.value.map((c) => (c.id === courseId ? { ...c, Less_Id: ids } : c));
+    if (editing.value && editing.value.id === courseId) editing.value = { ...editing.value, Less_Id: ids };
+}
+async function loadLessons(c) {
+    if (!c || c.isCreate) return;
+    lessonsLoading.value = true;
+    try {
+        const ids = Array.isArray(c.Less_Id) ? c.Less_Id : [];
+        if (!ids.length) { lessons.value = []; return; }
+        const { data } = await sb.from('lessons').select('id, "Title", "Descr", "File", video_id').in('id', ids);
+        const byId = Object.fromEntries((data || []).map((l) => [l.id, l]));
+        lessons.value = ids.map((id) => byId[id]).filter(Boolean); // keep Less_Id order
+    } catch (e) { lessonError.value = 'Не удалось загрузить уроки.'; }
+    finally { lessonsLoading.value = false; }
+}
+async function addLesson() {
+    if (!editing.value || editing.value.isCreate || lessonSaving.value) return;
+    lessonError.value = '';
+    try {
+        const n = lessons.value.length + 1;
+        const { data, error } = await sb.from('lessons')
+            .insert({ Title: `Новый урок ${n}`, Course: editing.value.id }).select('id, "Title", "Descr", "File", video_id');
+        if (error) throw error;
+        const row = data?.[0];
+        if (!row) return;
+        lessons.value = [...lessons.value, row];
+        await writeLessId(editing.value.id, lessons.value.map((l) => l.id));
+        openLessonEdit(row);
+    } catch (e) { lessonError.value = `Не удалось добавить урок: ${e?.message || 'ошибка'}`; }
+}
+function openLessonEdit(lesson) {
+    lessonEditing.value = lesson;
+    lessonForm.value = { Title: lesson.Title || '', Descr: lesson.Descr || '' };
+    lessonError.value = '';
+}
+function closeLessonEdit() { lessonEditing.value = null; lessonForm.value = null; }
+async function saveLessonMeta() {
+    if (!lessonEditing.value || lessonSaving.value || !lessonForm.value) return;
+    lessonSaving.value = true; lessonError.value = '';
+    try {
+        const id = lessonEditing.value.id;
+        const fields = { Title: lessonForm.value.Title.trim() || 'Без названия', Descr: lessonForm.value.Descr.trim() };
+        const { data, error } = await sb.from('lessons').update(fields).eq('id', id).select('id, "Title", "Descr", "File", video_id'); // no .limit (PGRST109)
+        if (error) throw error;
+        const row = data?.[0];
+        if (row) lessons.value = lessons.value.map((l) => (l.id === id ? row : l));
+        closeLessonEdit();
+    } catch (e) { lessonError.value = `Не удалось сохранить урок: ${e?.message || 'ошибка'}`; }
+    finally { lessonSaving.value = false; }
+}
+async function deleteLesson(lesson) {
+    if (lessonBusyId.value) return;
+    lessonBusyId.value = lesson.id; lessonError.value = '';
+    try {
+        // remove the material object too, if any (best-effort)
+        if (lesson.File) { try { await sb.storage.from(BUCKET).remove([lesson.File.split('/').pop()]); } catch (_) { /* ignore */ } }
+        const { error } = await sb.from('lessons').delete().eq('id', lesson.id);
+        if (error) throw error;
+        lessons.value = lessons.value.filter((l) => l.id !== lesson.id);
+        await writeLessId(editing.value.id, lessons.value.map((l) => l.id));
+        if (lessonEditing.value?.id === lesson.id) closeLessonEdit();
+    } catch (e) { lessonError.value = `Не удалось удалить урок: ${e?.message || 'ошибка'}`; }
+    finally { lessonBusyId.value = null; }
+}
+async function moveLesson(idx, dir) {
+    const j = idx + dir;
+    if (j < 0 || j >= lessons.value.length || lessonBusyId.value) return;
+    const arr = lessons.value.slice();
+    [arr[idx], arr[j]] = [arr[j], arr[idx]];
+    lessons.value = arr;
+    lessonBusyId.value = arr[j].id;
+    try { await writeLessId(editing.value.id, arr.map((l) => l.id)); }
+    finally { lessonBusyId.value = null; }
+}
+async function uploadMaterial(e, lesson) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || materialBusy.value) return;
+    materialBusy.value = true; lessonError.value = '';
+    try {
+        if (lesson.File) { try { await sb.storage.from(BUCKET).remove([lesson.File.split('/').pop()]); } catch (_) { /* ignore */ } }
+        const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
+        const key = `${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await sb.storage.from(BUCKET).upload(key, file, { upsert: false });
+        if (upErr) throw upErr;
+        const url = STORAGE_URL + key;
+        const { error } = await sb.from('lessons').update({ File: url }).eq('id', lesson.id);
+        if (error) throw error;
+        lessons.value = lessons.value.map((l) => (l.id === lesson.id ? { ...l, File: url } : l));
+        if (lessonEditing.value?.id === lesson.id) lessonEditing.value = { ...lessonEditing.value, File: url };
+    } catch (e2) { lessonError.value = 'Не удалось загрузить материал.'; }
+    finally { materialBusy.value = false; }
+}
+async function removeMaterial(lesson) {
+    if (materialBusy.value || !lesson.File) return;
+    materialBusy.value = true; lessonError.value = '';
+    try {
+        try { await sb.storage.from(BUCKET).remove([lesson.File.split('/').pop()]); } catch (_) { /* ignore */ }
+        const { error } = await sb.from('lessons').update({ File: '' }).eq('id', lesson.id);
+        if (error) throw error;
+        lessons.value = lessons.value.map((l) => (l.id === lesson.id ? { ...l, File: '' } : l));
+        if (lessonEditing.value?.id === lesson.id) lessonEditing.value = { ...lessonEditing.value, File: '' };
+    } catch (e) { lessonError.value = 'Не удалось удалить материал.'; }
+    finally { materialBusy.value = false; }
+}
+function materialName(url) { return url ? decodeURIComponent(url.split('/').pop() || 'файл') : ''; }
+
 onMounted(() => { ensureFonts(); load(); });
 
 function ensureFonts() {
@@ -727,6 +928,30 @@ function ensureFonts() {
 .pd-opt { font-style: normal; font-weight: 400; color: var(--ink-3); font-size: 0.82rem; }
 .pd-check { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; font-size: 0.95rem; font-weight: 600; color: var(--ink); user-select: none; }
 .pd-check input { width: 18px; height: 18px; accent-color: var(--blue); cursor: pointer; flex: none; }
+
+/* lessons */
+.pd-lessons { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--line); padding-top: 16px; }
+.pd-lessons__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pd-llist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pd-lrow { display: flex; align-items: center; gap: 10px; background: var(--bg-tint); border-radius: var(--r-md); padding: 8px 10px 8px 12px; }
+.pd-lrow__n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center; font-size: 0.76rem; font-weight: 700; color: var(--ink-2); }
+.pd-lrow__t { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; font-size: 0.92rem; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-lrow__ic { width: 15px; height: 15px; color: var(--ink-3); flex: none; }
+.pd-lrow__ic--v { color: var(--green); }
+.pd-lrow__act { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.pd-iconbtn { border: 0; background: none; padding: 5px; cursor: pointer; color: var(--ink-3); border-radius: 7px; line-height: 0; }
+.pd-iconbtn .pd-ic { width: 17px; height: 17px; }
+.pd-iconbtn:disabled { opacity: 0.35; cursor: default; }
+@media (hover: hover) and (pointer: fine) { .pd-iconbtn:not(:disabled):hover { background: #e2e9f6; color: var(--ink); } .pd-iconbtn--del:not(:disabled):hover { background: var(--red-tint); color: var(--red); } }
+
+.pd-modal--top { z-index: 1100; background: rgba(9, 23, 71, 0.3); }
+.pd-formerr--inline { margin: 0; padding: 8px 11px; border-top: 0; border-radius: var(--r-md); }
+.pd-matrow { display: flex; align-items: center; gap: 8px; }
+.pd-matrow__link { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 7px; color: var(--blue-ink); font-weight: 600; font-size: 0.9rem; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-matrow__link .pd-ic { width: 16px; height: 16px; flex: none; }
+@media (hover: hover) and (pointer: fine) { .pd-matrow__link:hover { text-decoration: underline; } }
+.pd-upl { position: relative; align-self: flex-start; overflow: hidden; }
+.pd-hidden-file { position: absolute; inset: 0; opacity: 0; cursor: pointer; font-size: 0; }
 .pd-formerr { margin: 0; padding: 10px 22px; background: var(--red-tint); color: var(--red); font-size: 0.88rem; font-weight: 600; border-top: 1px solid var(--line); }
 
 /* delete-confirm overlay (inside the dialog) */

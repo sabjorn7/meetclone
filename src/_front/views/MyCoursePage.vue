@@ -81,6 +81,49 @@
                     </a>
                 </div>
 
+                <!-- reviews: write a rating + optional comment, then existing reviews -->
+                <section class="pd-reviews" data-reveal>
+                    <h2 class="pd-reviews__title">{{ myRating ? 'Ваш отзыв о курсе' : 'Оставьте отзыв о курсе' }}</h2>
+                    <div class="pd-rform">
+                        <div class="pd-stars" role="radiogroup" aria-label="Ваша оценка">
+                            <button
+                                v-for="n in 5" :key="n" type="button" class="pd-stars__b"
+                                :class="{ on: n <= (hoverRating || formRating) }"
+                                role="radio" :aria-checked="n === formRating" :aria-label="`${n} из 5`"
+                                @click="formRating = n" @mouseenter="hoverRating = n" @mouseleave="hoverRating = 0">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 6.5 7 .9-5 4.8 1.3 7L12 18l-6.6 3.2L6.7 14l-5-4.8 7-.9z"/></svg>
+                            </button>
+                        </div>
+                        <textarea
+                            v-model="formText" class="pd-rform__text" rows="3" maxlength="1500"
+                            placeholder="Поделитесь впечатлением о курсе (необязательно)"></textarea>
+                        <div class="pd-rform__foot">
+                            <button type="button" class="pd-btn" :disabled="!formRating || submitting" @click="submitReview">
+                                {{ submitting ? 'Сохраняем…' : (myRating ? 'Обновить отзыв' : 'Отправить отзыв') }}
+                            </button>
+                            <span v-if="justSaved" class="pd-rform__ok">Спасибо! Отзыв сохранён.</span>
+                            <span v-if="reviewError" class="pd-rform__err">{{ reviewError }}</span>
+                        </div>
+                    </div>
+
+                    <ul v-if="reviews.length" class="pd-rlist">
+                        <li v-for="(r, i) in reviews" :key="i" class="pd-rev">
+                            <img v-if="r.photo" :src="r.photo" :alt="r.name" class="pd-rev__ph" />
+                            <span v-else class="pd-rev__ph pd-rev__ph--i">{{ initials(r.name) }}</span>
+                            <div class="pd-rev__body">
+                                <div class="pd-rev__top">
+                                    <b class="pd-rev__name">{{ r.name || 'Новый пользователь' }}</b>
+                                    <span v-if="ratingByUser[r.user_id]" class="pd-rev__stars" :aria-label="`Оценка ${ratingByUser[r.user_id]} из 5`">
+                                        <svg v-for="n in 5" :key="n" viewBox="0 0 24 24" :class="{ on: n <= ratingByUser[r.user_id] }" aria-hidden="true"><path d="M12 2l3 6.5 7 .9-5 4.8 1.3 7L12 18l-6.6 3.2L6.7 14l-5-4.8 7-.9z"/></svg>
+                                    </span>
+                                    <time v-if="r.date" class="pd-rev__date">{{ fmtDate(r.date) }}</time>
+                                </div>
+                                <p class="pd-rev__text">{{ r.comment }}</p>
+                            </div>
+                        </li>
+                    </ul>
+                </section>
+
                 <div class="pd-foot" data-reveal>
                     <a href="/" class="pd-btn pd-btn--ghost">Вернуться</a>
                     <a v-if="author && myId && author.id !== myId" class="pd-btn" :href="`/chats?user=${author.id}`">Написать куратору</a>
@@ -102,6 +145,7 @@ const route = useRoute();
 let sb = null;
 
 const myId = ref(null);
+const me = ref(null);
 const loading = ref(true);
 const ready = ref(false);
 const course = ref(null);
@@ -110,6 +154,14 @@ const lessons = ref([]);
 const currentLessonId = ref(null);
 const videoStarted = ref(false);
 const posterUrl = ref('');
+
+// review form
+const formRating = ref(0);
+const hoverRating = ref(0);
+const formText = ref('');
+const submitting = ref(false);
+const justSaved = ref(false);
+const reviewError = ref('');
 
 const currentLesson = computed(() => lessons.value.find((l) => l.id === currentLessonId.value) || null);
 const videoUrl = computed(() => (currentLesson.value?.video_id ? embedUrl(currentLesson.value.video_id, { autoplay: true }) : ''));
@@ -122,11 +174,66 @@ const ratingAvg = computed(() => {
     return (Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100).toString().replace('.', ',');
 });
 
+// the current user's own rating (rating is one-per-user, upsert), 0 if not rated yet
+const myRating = computed(() => {
+    const r = course.value?.rating;
+    if (!Array.isArray(r)) return 0;
+    const mine = r.find((x) => x?.user_id === myId.value);
+    return mine ? Number(mine.rating) || 0 : 0;
+});
+// existing comments, newest first
+const reviews = computed(() => {
+    const c = course.value?.comment;
+    if (!Array.isArray(c)) return [];
+    return c.filter((x) => x && x.comment).slice().sort((a, b) => new Date(b?.date || 0) - new Date(a?.date || 0));
+});
+// star grade per author (matched by user_id) so a review card can show its rating
+const ratingByUser = computed(() => {
+    const m = {};
+    for (const r of (course.value?.rating || [])) if (r?.user_id != null) m[r.user_id] = Number(r.rating ?? 0);
+    return m;
+});
+
 function initials(name) {
     const p = (name || '').split(/\s+/).filter(Boolean);
     return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || '·';
 }
 function courseHref() { return `/course/${course.value.slug || course.value.id}`; }
+function fmtDate(d) {
+    try { return new Date(d).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }); }
+    catch (e) { return ''; }
+}
+
+// Submit a review: rating is upserted per user (one entry), a non-empty comment is appended.
+// Mirrors the WeWeb original's shape; re-reads the arrays right before writing to shrink the
+// read-modify-write window (RLS is off, so there's no server-side merge).
+async function submitReview() {
+    if (!formRating.value || submitting.value || !sb || !course.value) return;
+    submitting.value = true; reviewError.value = ''; justSaved.value = false;
+    try {
+        const { data: fresh, error: readErr } = await sb.from('course').select('rating, comment').eq('id', course.value.id).limit(1);
+        if (readErr) throw readErr;
+        const cur = fresh?.[0] || {};
+        const rating = Array.isArray(cur.rating) ? cur.rating.slice() : [];
+        const comment = Array.isArray(cur.comment) ? cur.comment.slice() : [];
+        const now = new Date().toISOString();
+        const rEntry = { user_id: myId.value, rating: formRating.value, date: now };
+        const ri = rating.findIndex((x) => x?.user_id === myId.value);
+        if (ri >= 0) rating[ri] = rEntry; else rating.push(rEntry);
+        const text = formText.value.trim();
+        if (text) comment.push({ user_id: myId.value, name: me.value?.Name || 'Новый пользователь', photo: me.value?.Photo || null, comment: text, date: now });
+        const { error } = await sb.from('course').update({ rating, comment }).eq('id', course.value.id);
+        if (error) throw error;
+        course.value = { ...course.value, rating, comment };
+        formText.value = '';
+        justSaved.value = true;
+        setTimeout(() => { justSaved.value = false; }, 4000);
+    } catch (e) {
+        reviewError.value = 'Не удалось сохранить отзыв. Попробуйте ещё раз.';
+    } finally {
+        submitting.value = false;
+    }
+}
 
 // day-granularity compare (mirrors the WeWeb gate's formatDate(...,"DD.MM.YY") equality test)
 function sameDay(a, b) { const x = new Date(a), y = new Date(b); return x.toDateString() === y.toDateString(); }
@@ -141,7 +248,7 @@ async function load() {
     if (!sb || !courseId) { loading.value = false; return; }
 
     const { data } = await sb.from('course')
-        .select('id, "Title", "Decription", "Less_Id", "Free", "DurationLong", owner, slug, rating, video_id')
+        .select('id, "Title", "Decription", "Less_Id", "Free", "DurationLong", owner, slug, rating, comment, video_id')
         .eq('id', courseId).limit(1);
     course.value = data?.[0] || null;
     if (!course.value) { loading.value = false; return; }
@@ -160,6 +267,11 @@ async function load() {
 
     document.title = `${course.value.Title} — МитГуру`;
     sb.from('users').update({ last_open: course.value.id }).eq('id', myId.value);   // parity with WeWeb (fire-and-forget)
+
+    // current user (name/photo stamped into a comment) + prefill the star input with their existing grade
+    const { data: meRow } = await sb.from('users').select('"Name", "Photo"').eq('id', myId.value).limit(1);
+    me.value = meRow?.[0] || null;
+    if (myRating.value) formRating.value = myRating.value;
 
     // author + lessons (in the course's Less_Id order)
     if (course.value.owner) {
@@ -271,6 +383,36 @@ function ensureFonts() {
 
 .pd-lessoninfo { margin-top: 22px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
 .pd-lessoninfo__descr { margin: 0; color: var(--ink-2); font-size: 1rem; line-height: 1.6; max-width: 72ch; white-space: pre-wrap; }
+
+/* reviews */
+.pd-reviews { margin-top: 40px; padding-top: 30px; border-top: 1px solid var(--line); }
+.pd-reviews__title { margin: 0 0 16px; font-weight: 800; font-size: 1.3rem; letter-spacing: -0.02em; }
+.pd-rform { background: var(--bg-tint); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 20px; }
+.pd-stars { display: inline-flex; gap: 4px; }
+.pd-stars__b { border: 0; background: none; padding: 2px; cursor: pointer; line-height: 0; }
+.pd-stars__b svg { width: 30px; height: 30px; fill: #d7deea; transition: fill 0.12s var(--ease-out), transform 0.12s var(--ease-out); }
+.pd-stars__b.on svg { fill: var(--gold); }
+@media (hover: hover) and (pointer: fine) { .pd-stars__b:hover svg { transform: scale(1.12); } }
+.pd-rform__text { display: block; width: 100%; margin-top: 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 12px 14px; font-family: inherit; font-size: 0.98rem; color: var(--ink); resize: vertical; min-height: 68px; }
+.pd-rform__text:focus { outline: none; border-color: var(--blue-soft); box-shadow: 0 0 0 3px var(--blue-tint); }
+.pd-rform__text::placeholder { color: var(--ink-3); }
+.pd-rform__foot { display: flex; align-items: center; gap: 14px; margin-top: 14px; flex-wrap: wrap; }
+.pd-btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+.pd-rform__ok { color: var(--blue-ink); font-weight: 600; font-size: 0.92rem; }
+.pd-rform__err { color: #de0030; font-weight: 600; font-size: 0.92rem; }
+
+.pd-rlist { list-style: none; margin: 24px 0 0; padding: 0; display: flex; flex-direction: column; gap: 18px; }
+.pd-rev { display: flex; gap: 13px; }
+.pd-rev__ph { flex: none; width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
+.pd-rev__ph--i { display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-weight: 700; font-size: 0.9rem; }
+.pd-rev__body { flex: 1; min-width: 0; }
+.pd-rev__top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pd-rev__name { font-weight: 700; font-size: 0.98rem; }
+.pd-rev__stars { display: inline-flex; gap: 1px; }
+.pd-rev__stars svg { width: 15px; height: 15px; fill: #d7deea; }
+.pd-rev__stars svg.on { fill: var(--gold); }
+.pd-rev__date { color: var(--ink-3); font-size: 0.84rem; }
+.pd-rev__text { margin: 5px 0 0; color: var(--ink-2); font-size: 0.98rem; line-height: 1.55; white-space: pre-wrap; }
 
 .pd-foot { display: flex; align-items: center; gap: 12px; margin-top: 30px; flex-wrap: wrap; }
 .pd-btn { display: inline-flex; align-items: center; gap: 8px; border: none; border-radius: var(--r-pill); background: var(--blue); color: #fff; font-family: inherit; font-weight: 700; font-size: 0.96rem; padding: 12px 24px; cursor: pointer; text-decoration: none; transition: background 0.15s var(--ease-out), transform 0.15s var(--ease-out); }

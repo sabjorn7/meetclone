@@ -116,7 +116,10 @@ const videoUrl = computed(() => (currentLesson.value?.video_id ? embedUrl(curren
 const ratingAvg = computed(() => {
     const r = course.value?.rating;
     if (!Array.isArray(r) || !r.length) return '';
-    return (Math.round((r.reduce((a, b) => a + Number(b || 0), 0) / r.length) * 100) / 100).toString().replace('.', ',');
+    // rating entries are {user_id, rating} objects (same shape CoursePage reads), not bare numbers.
+    const vals = r.map((it) => Number(it?.rating ?? it?.value ?? it ?? 0)).filter((n) => Number.isFinite(n) && n > 0);
+    if (!vals.length) return '';
+    return (Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100).toString().replace('.', ',');
 });
 
 function initials(name) {

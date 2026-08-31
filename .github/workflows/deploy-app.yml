@@ -30,7 +30,25 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy to server
+      # Atomic-ish two-phase deploy to avoid the cache-poisoning race: a single `rsync --delete` has a
+      # window where the new index.html is live but its new hashed chunk (assets/main-<hash>.js) hasn't
+      # uploaded yet — a browser loading in that window caches an empty chunk and white-screens until a
+      # hard refresh. So we upload ALL non-HTML first (new chunks/data appear alongside the old ones, no
+      # --delete), THEN upload the HTML and prune stale files. New HTML always resolves to a chunk that is
+      # already on disk; in-flight old HTML still resolves to its old chunk (kept until phase 2's --delete).
+      - name: Deploy assets first (chunks/data/css — no delete)
+        uses: easingthemes/ssh-deploy@v6
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}
+          REMOTE_USER: ${{ secrets.DEPLOY_USER }}
+          REMOTE_PORT: ${{ secrets.DEPLOY_PORT }}
+          SOURCE: "dist/"
+          TARGET: "/home/arseny/www-app/"
+          ARGS: "-rlgoDzvc -i"
+          EXCLUDE: "*.html"
+
+      - name: Deploy HTML + prune stale (delete)
         uses: easingthemes/ssh-deploy@v6
         with:
           SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}

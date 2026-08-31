@@ -285,6 +285,46 @@
                         <p v-else class="pd-hint">Уроков пока нет. Нажмите «Добавить урок».</p>
                         <p v-if="lessonError" class="pd-formerr pd-formerr--inline">{{ lessonError }}</p>
                     </div>
+
+                    <!-- manual access grants (existing courses only) -->
+                    <div v-if="!editing.isCreate" class="pd-grant">
+                        <span class="pd-money__h">Доступ ученикам</span>
+                        <p class="pd-hint">Откройте курс любому пользователю бесплатно (например, для поддержки или промо).</p>
+                        <div class="pd-grant__search">
+                            <div class="pd-search pd-search--full">
+                                <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                                <input v-model="grantSearch" type="search" placeholder="Найти пользователя по имени или email" @input="searchGrantUsers" />
+                            </div>
+                            <ul v-if="grantResults.length" class="pd-grant__res">
+                                <li v-for="u in grantResults" :key="u.id">
+                                    <span class="pd-grant__u">
+                                        <img v-if="u.Photo" :src="u.Photo" :alt="u.Name" class="pd-grant__ava" />
+                                        <span v-else class="pd-grant__ava pd-grant__ava--i">{{ initials(u.Name) }}</span>
+                                        <span class="pd-grant__name">{{ u.Name || 'Без имени' }}<em>{{ u.email }}</em></span>
+                                    </span>
+                                    <button type="button" class="pd-btn pd-btn--sm" :disabled="grantBusyId === u.id" @click="grantAccess(u)">{{ grantBusyId === u.id ? '…' : 'Выдать' }}</button>
+                                </li>
+                            </ul>
+                            <p v-else-if="grantSearch.trim().length >= 2 && !grantSearching" class="pd-hint">Никого не найдено.</p>
+                        </div>
+
+                        <p v-if="granteesLoading" class="pd-hint">Загрузка…</p>
+                        <ul v-else-if="grantees.length" class="pd-grant__list">
+                            <li v-for="g in grantees" :key="g.ucId" class="pd-grant__row">
+                                <span class="pd-grant__u">
+                                    <img v-if="g.Photo" :src="g.Photo" :alt="g.Name" class="pd-grant__ava" />
+                                    <span v-else class="pd-grant__ava pd-grant__ava--i">{{ initials(g.Name) }}</span>
+                                    <span class="pd-grant__name">{{ g.Name || 'Пользователь' }}<em>{{ g.end_period ? 'до ' + fmtDate(g.end_period) : 'бессрочно' }}</em></span>
+                                </span>
+                                <span class="pd-grant__act">
+                                    <a class="pd-iconbtn" :href="`/chats?user=${g.id}`" target="_blank" rel="noopener noreferrer" aria-label="Написать"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></a>
+                                    <button type="button" class="pd-iconbtn pd-iconbtn--del" :disabled="grantBusyId === g.id" aria-label="Отозвать доступ" @click="revokeAccess(g)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg></button>
+                                </span>
+                            </li>
+                        </ul>
+                        <p v-else class="pd-hint">Пока никому не выдан бесплатный доступ.</p>
+                        <p v-if="grantError" class="pd-formerr pd-formerr--inline">{{ grantError }}</p>
+                    </div>
                 </div>
 
                 <p v-if="editing && form && formError" class="pd-formerr">{{ formError }}</p>
@@ -372,6 +412,41 @@
                             <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Загрузить видео
                             <input type="file" accept="video/*" class="pd-hidden-file" @change="onLessonVideo" />
                         </label>
+                    </div>
+
+                    <!-- per-lesson ban: users here are hidden from this lesson in the viewer -->
+                    <div class="pd-grant">
+                        <span class="pd-field__lb">Забаненные ученики</span>
+                        <p class="pd-hint">Забаненный не увидит этот урок (доступ к остальным сохраняется).</p>
+                        <div class="pd-grant__search">
+                            <div class="pd-search pd-search--full">
+                                <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                                <input v-model="banSearch" type="search" placeholder="Найти пользователя по имени или email" @input="searchBanUsers" />
+                            </div>
+                            <ul v-if="banResults.length" class="pd-grant__res">
+                                <li v-for="u in banResults" :key="u.id">
+                                    <span class="pd-grant__u">
+                                        <img v-if="u.Photo" :src="u.Photo" :alt="u.Name" class="pd-grant__ava" />
+                                        <span v-else class="pd-grant__ava pd-grant__ava--i">{{ initials(u.Name) }}</span>
+                                        <span class="pd-grant__name">{{ u.Name || 'Без имени' }}<em>{{ u.email }}</em></span>
+                                    </span>
+                                    <button type="button" class="pd-btn pd-btn--sm pd-btn--dangerghost" :disabled="banBusyId === u.id" @click="banUser(u)">{{ banBusyId === u.id ? '…' : 'Забанить' }}</button>
+                                </li>
+                            </ul>
+                            <p v-else-if="banSearch.trim().length >= 2 && !banSearching" class="pd-hint">Никого не найдено.</p>
+                        </div>
+                        <p v-if="bannedLoading" class="pd-hint">Загрузка…</p>
+                        <ul v-else-if="banned.length" class="pd-grant__list">
+                            <li v-for="b in banned" :key="b.id" class="pd-grant__row">
+                                <span class="pd-grant__u">
+                                    <img v-if="b.Photo" :src="b.Photo" :alt="b.Name" class="pd-grant__ava" />
+                                    <span v-else class="pd-grant__ava pd-grant__ava--i">{{ initials(b.Name) }}</span>
+                                    <span class="pd-grant__name">{{ b.Name || 'Пользователь' }}<em>{{ b.email }}</em></span>
+                                </span>
+                                <button type="button" class="pd-btn pd-btn--ghost pd-btn--sm" :disabled="banBusyId === b.id" @click="unbanUser(b)">{{ banBusyId === b.id ? '…' : 'Разбанить' }}</button>
+                            </li>
+                        </ul>
+                        <p v-if="banError" class="pd-formerr pd-formerr--inline">{{ banError }}</p>
                     </div>
                 </div>
                 <p v-if="lessonError" class="pd-formerr">{{ lessonError }}</p>
@@ -463,6 +538,24 @@ const videoTarget = ref(null);     // 'lesson' | 'course' — which surface the 
 const videoBusy = ref(false);      // delete/replace
 const videoError = ref('');
 const coverBusy = ref(false);      // course cover image upload/remove
+
+// ── Phase 5: manual access grant (Ученики курса) ──
+const grantees = ref([]);          // students with a manual (Free) grant to the course being edited
+const granteesLoading = ref(false);
+const grantSearch = ref('');
+const grantResults = ref([]);
+const grantSearching = ref(false);
+const grantBusyId = ref(null);     // per-row spinner (grant/revoke)
+const grantError = ref('');
+
+// ── Phase 5: per-lesson ban (lessons.ban_list; enforced by the redesigned MyCoursePage viewer) ──
+const banned = ref([]);            // resolved users banned from the lesson being edited
+const bannedLoading = ref(false);
+const banSearch = ref('');
+const banResults = ref([]);
+const banSearching = ref(false);
+const banBusyId = ref(null);
+const banError = ref('');
 
 const STATUS = {
     'Опубликовано': { label: 'Опубликовано', cls: 'live' },
@@ -587,7 +680,9 @@ async function openEdit(c) {
     editing.value = c;
     form.value = null; confirmDelete.value = false; formError.value = '';
     lessons.value = []; lessonEditing.value = null; lessonError.value = '';
+    grantees.value = []; grantResults.value = []; grantSearch.value = ''; grantError.value = '';
     loadLessons(c);
+    loadGrantees(c);
     // the list rows are lightweight (COLS) and don't carry the long text fields — fetch them fresh
     // so the editor shows the true Category/Decription/WhatTeach/For and can't blank them on save.
     formLoading.value = true;
@@ -771,7 +866,7 @@ async function loadLessons(c) {
     try {
         const ids = Array.isArray(c.Less_Id) ? c.Less_Id : [];
         if (!ids.length) { lessons.value = []; return; }
-        const { data } = await sb.from('lessons').select('id, "Title", "Descr", "File", video_id, video_size, resume_video_id, resume_chunk, resume_name').in('id', ids);
+        const { data } = await sb.from('lessons').select('id, "Title", "Descr", "File", video_id, video_size, resume_video_id, resume_chunk, resume_name, ban_list').in('id', ids);
         const byId = Object.fromEntries((data || []).map((l) => [l.id, l]));
         lessons.value = ids.map((id) => byId[id]).filter(Boolean); // keep Less_Id order
     } catch (e) { lessonError.value = 'Не удалось загрузить уроки.'; }
@@ -796,8 +891,9 @@ function openLessonEdit(lesson) {
     lessonEditing.value = lesson;
     lessonForm.value = { Title: lesson.Title || '', Descr: lesson.Descr || '' };
     lessonError.value = '';
+    loadLessonBans(lesson);
 }
-function closeLessonEdit() { lessonEditing.value = null; lessonForm.value = null; }
+function closeLessonEdit() { lessonEditing.value = null; lessonForm.value = null; banned.value = []; banResults.value = []; banSearch.value = ''; }
 async function saveLessonMeta() {
     if (!lessonEditing.value || lessonSaving.value || !lessonForm.value) return;
     lessonSaving.value = true; lessonError.value = '';
@@ -965,6 +1061,146 @@ async function removeCover() {
         patchCourse(c.id, { cover: null });
     } catch (e) { videoError.value = 'Не удалось удалить обложку.'; }
     finally { coverBusy.value = false; }
+}
+
+// ── manual access grants (teacher opens their course to a specific student) ──────────────────────
+// A grant is a FREE user_course row (mirrors coursesApi.enrollFree) + the student's buied_courses arrays,
+// with end_period set for time-limited courses. No payment / sales / order — it's a comp.
+function addMonthsIso(months) {
+    const d = new Date();
+    d.setMonth(d.getMonth() + Number(months || 0));
+    return d.toISOString();
+}
+async function loadGrantees(c) {
+    if (!c || c.isCreate) { grantees.value = []; return; }
+    granteesLoading.value = true; grantError.value = '';
+    try {
+        const { data: rows } = await sb.from('user_course')
+            .select('id, "user", end_period').eq('course', c.id).eq('Free', true).limit(500);
+        const list = rows || [];
+        const ids = [...new Set(list.map((r) => r.user).filter(Boolean))];
+        let byId = {};
+        if (ids.length) {
+            const { data: us } = await sb.from('users').select('id, "Name", email, "Photo"').in('id', ids);
+            byId = Object.fromEntries((us || []).map((u) => [u.id, u]));
+        }
+        grantees.value = list.map((r) => ({ ucId: r.id, end_period: r.end_period, ...(byId[r.user] || { id: r.user, Name: 'Пользователь' }) }));
+    } catch (e) { grantError.value = 'Не удалось загрузить список.'; }
+    finally { granteesLoading.value = false; }
+}
+let grantSearchSeq = 0;
+async function searchGrantUsers() {
+    const q = grantSearch.value.trim();
+    grantResults.value = [];
+    if (q.length < 2) return;
+    const seq = ++grantSearchSeq;
+    grantSearching.value = true;
+    try {
+        const { data } = await sb.from('users')
+            .select('id, "Name", email, "Photo"')
+            .or(`Name.ilike.%${q}%,email.ilike.%${q}%`).limit(8);
+        if (seq !== grantSearchSeq) return; // a newer search superseded this one
+        const grantedIds = new Set(grantees.value.map((g) => g.id));
+        grantResults.value = (data || []).filter((u) => u.id !== myId.value && !grantedIds.has(u.id));
+    } catch (e) { /* keep silent; the list just stays empty */ }
+    finally { if (seq === grantSearchSeq) grantSearching.value = false; }
+}
+async function grantAccess(student) {
+    if (!editing.value || editing.value.isCreate || grantBusyId.value) return;
+    grantBusyId.value = student.id; grantError.value = '';
+    try {
+        const c = editing.value;
+        const dur = num(c.DurationLong);
+        const end_period = dur > 0 ? addMonthsIso(dur) : null;
+        const { data: ins, error } = await sb.from('user_course')
+            .insert({ user: student.id, course: c.id, Free: true, end_period }).select('id');
+        if (error) throw error;
+        const ucId = ins?.[0]?.id;
+        // append to the student's library arrays (verbatim with enrollFree)
+        const { data: su } = await sb.from('users').select('buied_courses, buied_course_orig').eq('id', student.id).limit(1);
+        const bc = Array.isArray(su?.[0]?.buied_courses) ? su[0].buied_courses : [];
+        const bco = Array.isArray(su?.[0]?.buied_course_orig) ? su[0].buied_course_orig : [];
+        await sb.from('users').update({ buied_courses: [...bc, ucId], buied_course_orig: [...bco, c.id] }).eq('id', student.id);
+        grantees.value = [{ ucId, end_period, ...student }, ...grantees.value];
+        grantSearch.value = ''; grantResults.value = [];
+    } catch (e) { grantError.value = `Не удалось выдать доступ: ${e?.message || 'ошибка'}`; }
+    finally { grantBusyId.value = null; }
+}
+async function revokeAccess(g) {
+    if (grantBusyId.value) return;
+    grantBusyId.value = g.id; grantError.value = '';
+    try {
+        const c = editing.value;
+        const { error } = await sb.from('user_course').delete().eq('id', g.ucId);
+        if (error) throw error;
+        // pull the ids back out of the student's library arrays
+        const { data: su } = await sb.from('users').select('buied_courses, buied_course_orig').eq('id', g.id).limit(1);
+        const bc = (su?.[0]?.buied_courses || []).filter((x) => x !== g.ucId);
+        const bco = (su?.[0]?.buied_course_orig || []);
+        const idx = bco.indexOf(c.id);
+        if (idx >= 0) bco.splice(idx, 1); // remove one occurrence of this course
+        await sb.from('users').update({ buied_courses: bc, buied_course_orig: bco }).eq('id', g.id);
+        grantees.value = grantees.value.filter((x) => x.ucId !== g.ucId);
+    } catch (e) { grantError.value = `Не удалось отозвать доступ: ${e?.message || 'ошибка'}`; }
+    finally { grantBusyId.value = null; }
+}
+
+// ── per-lesson ban (writes lessons.ban_list; the viewer hides banned users' lessons) ──────────────
+async function loadLessonBans(lesson) {
+    banned.value = []; banResults.value = []; banSearch.value = ''; banError.value = '';
+    const ids = Array.isArray(lesson?.ban_list) ? lesson.ban_list.filter(Boolean) : [];
+    if (!ids.length) return;
+    bannedLoading.value = true;
+    try {
+        const { data } = await sb.from('users').select('id, "Name", email, "Photo"').in('id', ids);
+        const byId = Object.fromEntries((data || []).map((u) => [u.id, u]));
+        banned.value = ids.map((id) => byId[id] || { id, Name: 'Пользователь' });
+    } catch (e) { banError.value = 'Не удалось загрузить список.'; }
+    finally { bannedLoading.value = false; }
+}
+let banSearchSeq = 0;
+async function searchBanUsers() {
+    const q = banSearch.value.trim();
+    banResults.value = [];
+    if (q.length < 2) return;
+    const seq = ++banSearchSeq;
+    banSearching.value = true;
+    try {
+        const { data } = await sb.from('users').select('id, "Name", email, "Photo"').or(`Name.ilike.%${q}%,email.ilike.%${q}%`).limit(8);
+        if (seq !== banSearchSeq) return;
+        const bannedIds = new Set(banned.value.map((b) => b.id));
+        banResults.value = (data || []).filter((u) => u.id !== myId.value && !bannedIds.has(u.id));
+    } catch (e) { /* silent */ }
+    finally { if (seq === banSearchSeq) banSearching.value = false; }
+}
+async function banUser(student) {
+    const l = lessonEditing.value;
+    if (!l || banBusyId.value) return;
+    banBusyId.value = student.id; banError.value = '';
+    try {
+        const cur = Array.isArray(l.ban_list) ? l.ban_list.filter(Boolean) : [];
+        if (cur.includes(student.id)) return;
+        const next = [...cur, student.id];
+        const { error } = await sb.from('lessons').update({ ban_list: next }).eq('id', l.id);
+        if (error) throw error;
+        patchLesson(l.id, { ban_list: next });
+        banned.value = [student, ...banned.value];
+        banSearch.value = ''; banResults.value = [];
+    } catch (e) { banError.value = `Не удалось забанить: ${e?.message || 'ошибка'}`; }
+    finally { banBusyId.value = null; }
+}
+async function unbanUser(u) {
+    const l = lessonEditing.value;
+    if (!l || banBusyId.value) return;
+    banBusyId.value = u.id; banError.value = '';
+    try {
+        const next = (Array.isArray(l.ban_list) ? l.ban_list : []).filter((x) => x !== u.id);
+        const { error } = await sb.from('lessons').update({ ban_list: next }).eq('id', l.id);
+        if (error) throw error;
+        patchLesson(l.id, { ban_list: next });
+        banned.value = banned.value.filter((x) => x.id !== u.id);
+    } catch (e) { banError.value = `Не удалось разбанить: ${e?.message || 'ошибка'}`; }
+    finally { banBusyId.value = null; }
 }
 
 onMounted(() => { ensureFonts(); load(); });
@@ -1151,6 +1387,20 @@ function ensureFonts() {
 .pd-teaser { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 16px; }
 .pd-cover { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .pd-cover__img { width: 100%; max-height: 240px; border-radius: var(--r-md); object-fit: cover; border: 1px solid var(--line); }
+
+/* manual access grants */
+.pd-grant { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 16px; }
+.pd-search--full { max-width: none; }
+.pd-grant__search { position: relative; display: flex; flex-direction: column; gap: 8px; }
+.pd-grant__res, .pd-grant__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pd-grant__res li, .pd-grant__row { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--bg-tint); border-radius: var(--r-md); padding: 8px 10px 8px 12px; }
+.pd-grant__u { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
+.pd-grant__ava { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; }
+.pd-grant__ava--i { display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-weight: 700; font-size: 0.75rem; }
+.pd-grant__name { display: flex; flex-direction: column; min-width: 0; font-size: 0.92rem; font-weight: 600; color: var(--ink); line-height: 1.2; }
+.pd-grant__name em { font-style: normal; font-weight: 400; font-size: 0.8rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-grant__act { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.pd-iconbtn { text-decoration: none; }
 .pd-vprog { display: flex; flex-direction: column; gap: 6px; }
 .pd-vprog__bar { height: 8px; border-radius: var(--r-pill); background: var(--bg-tint); overflow: hidden; }
 .pd-vprog__bar span { display: block; height: 100%; width: 100%; background: var(--blue); border-radius: var(--r-pill); transform-origin: left; transition: transform 0.2s var(--ease-out); }

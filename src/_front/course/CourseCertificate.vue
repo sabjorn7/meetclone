@@ -12,30 +12,9 @@
 -->
 <template>
     <div ref="root" class="mgc">
-        <!-- left decorative panel: every Memphis shape lives here so the text side stays clean -->
+        <!-- left decorative panel: abstract "graduate" illustration -->
         <div class="mgc__panel">
-            <svg class="mgc__art" viewBox="0 0 300 659" preserveAspectRatio="none" aria-hidden="true">
-                <!-- top hatch -->
-                <g stroke="#0e1630" stroke-width="2" stroke-linecap="round"><path d="M42 92l46 46"/><path d="M50 86l46 46"/><path d="M58 80l46 46"/><path d="M66 74l46 46"/><path d="M74 68l46 46"/></g>
-                <!-- blue edge bar, orange + blue vertical bars -->
-                <rect x="-10" y="188" width="86" height="32" rx="6" fill="#2e70dd"/>
-                <rect x="150" y="24" width="44" height="196" rx="22" fill="#f09157"/>
-                <rect x="206" y="42" width="26" height="118" rx="13" fill="#5495f3"/>
-                <rect x="150" y="244" width="74" height="26" rx="6" fill="#cfe0fb"/>
-                <!-- outline circle + filled tint circle -->
-                <circle cx="112" cy="336" r="46" fill="none" stroke="#0e1630" stroke-width="2"/>
-                <circle cx="150" cy="356" r="32" fill="#bcd4f7"/>
-                <!-- blue hook (mid) -->
-                <path d="M58 470V408q0-26 26-26h60" fill="none" stroke="#5495f3" stroke-width="38" stroke-linecap="round"/>
-                <!-- orange hook (bottom) -->
-                <path d="M46 632V556q0-32 34-32h74" fill="none" stroke="#f09157" stroke-width="48" stroke-linecap="round"/>
-                <!-- accents: small blue circle, tint bar, orange rect, vertical lines, bottom hatch -->
-                <circle cx="244" cy="452" r="15" fill="#2e70dd"/>
-                <rect x="-10" y="548" width="74" height="28" rx="6" fill="#cfe0fb"/>
-                <rect x="196" y="596" width="58" height="44" rx="6" fill="#ff7a1a"/>
-                <g stroke="#0e1630" stroke-width="2" stroke-linecap="round"><path d="M28 582v70"/><path d="M38 582v70"/></g>
-                <g stroke="#0e1630" stroke-width="2" stroke-linecap="round"><path d="M150 540l40 40"/><path d="M158 534l40 40"/><path d="M166 528l40 40"/><path d="M174 522l40 40"/></g>
-            </svg>
+            <img class="mgc__illus" src="/images/cert-graduate.png" alt="" crossorigin="anonymous" />
         </div>
 
         <!-- content -->
@@ -56,15 +35,13 @@
             <p class="mgc__desc">Документ подтверждает успешное прохождение курса на образовательной платформе МитГуру.</p>
 
             <footer class="mgc__foot">
-                <div class="mgc__sig">
-                    <span class="mgc__circle" aria-hidden="true"></span>
-                    <svg class="mgc__scribble" viewBox="0 0 190 44" aria-hidden="true">
-                        <path d="M6 28c12-26 22-26 25-4 2 15 8 16 13 2 4-11 11-11 14 3 3 13 7 13 12-1 3-9 10-10 15 2 2 9 6 10 12 5 6-7 14-14 25-11 9 3 15 10 26 6"
-                              fill="none" stroke="#0e1630" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    <span class="mgc__fline"></span>
-                    <span class="mgc__flb">АВТОР КУРСА</span>
-                    <span class="mgc__flv">{{ issuer || 'МитГуру' }}</span>
+                <div class="mgc__author">
+                    <span v-if="issuerLogo" class="mgc__logo"><img :src="issuerLogo" alt="" crossorigin="anonymous" /></span>
+                    <span v-else class="mgc__logo mgc__logo--txt">{{ initials }}</span>
+                    <span class="mgc__atext">
+                        <span class="mgc__flb">АВТОР КУРСА</span>
+                        <span class="mgc__flv">{{ issuer || 'МитГуру' }}</span>
+                    </span>
                 </div>
                 <div class="mgc__meta">
                     <span class="mgc__date">{{ date }}</span>
@@ -78,15 +55,20 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 
-defineProps({
+const props = defineProps({
     name: { type: String, default: '' },
     course: { type: String, default: '' },
     issuer: { type: String, default: '' },
     issuerLogo: { type: String, default: '' },
     date: { type: String, default: '' },
     certNo: { type: String, default: '' },
+});
+const initials = computed(() => {
+    const parts = String(props.issuer || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return 'МГ';
+    return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
 });
 const root = ref(null);
 defineExpose({ root });
@@ -103,8 +85,8 @@ defineExpose({ root });
 .mgc *, .mgc *::before, .mgc *::after { box-sizing: border-box; }
 
 /* left panel */
-.mgc__panel { position: absolute; left: 0; top: 0; bottom: 0; width: 306px; background: #f6efe3; border-right: 2px solid var(--ink); overflow: hidden; }
-.mgc__art { position: absolute; inset: 0; width: 100%; height: 100%; }
+.mgc__panel { position: absolute; left: 0; top: 0; bottom: 0; width: 306px; background: #f6efe3; border-right: 2px solid var(--ink); overflow: hidden; display: grid; place-items: center; }
+.mgc__illus { width: 92%; height: auto; object-fit: contain; }
 
 /* content */
 .mgc__body { position: absolute; left: 306px; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column; padding: 52px 56px 46px 54px; text-align: left; }
@@ -124,15 +106,18 @@ defineExpose({ root });
 .mgc__dots--2 { margin-top: 24px; }
 .mgc__desc { margin: 16px 0 0; font-size: 13.5px; line-height: 1.62; color: var(--ink-2); max-width: 430px; }
 
-/* footer: author signature (left) + date/number (right) */
-.mgc__foot { margin-top: auto; display: flex; align-items: flex-end; gap: 40px; }
-.mgc__sig { position: relative; display: flex; flex-direction: column; align-items: flex-start; width: 250px; }
-.mgc__circle { position: absolute; left: 6px; top: -10px; width: 52px; height: 52px; border-radius: 50%; background: var(--orange); opacity: 0.9; }
-.mgc__scribble { position: relative; width: 150px; height: 36px; }
+/* footer: author (logo + name, left) + date/number (right) */
+.mgc__foot { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; gap: 30px; }
+.mgc__author { display: flex; align-items: center; gap: 12px; width: 260px; }
+.mgc__logo { width: 48px; height: 48px; border-radius: 50%; overflow: hidden; flex: none; border: 1px solid #e0d8c8; background: #fff; display: grid; place-items: center; }
+.mgc__logo img { width: 100%; height: 100%; object-fit: cover; }
+.mgc__logo--txt { font-weight: 800; font-size: 16px; color: var(--blue); }
+.mgc__atext { display: flex; flex-direction: column; }
 .mgc__fline { display: block; width: 100%; height: 0; border-bottom: 2px solid var(--ink); margin-top: 2px; }
-.mgc__flb { margin-top: 7px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.16em; color: var(--ink-2); }
-.mgc__flv { margin-top: 3px; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.25; max-width: 250px; }
+.mgc__flb { margin-top: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.16em; color: var(--ink-2); }
+.mgc__atext .mgc__flb { margin-top: 0; }
+.mgc__flv { margin-top: 3px; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.25; max-width: 210px; }
 .mgc__meta { display: flex; flex-direction: column; align-items: flex-start; width: 190px; }
 .mgc__date { font-weight: 800; font-size: 17px; color: var(--ink); padding-bottom: 8px; }
-.mgc__flv--no { color: var(--orange); }
+.mgc__flv--no { color: var(--orange); margin-top: 7px; }
 </style>

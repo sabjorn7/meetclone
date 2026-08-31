@@ -131,36 +131,41 @@
                         </p>
                     </div>
 
+                    <div v-if="!editable" class="pd-lock">
+                        <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M6 10V8a6 6 0 0 1 12 0v2M5 10h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/></svg>
+                        <span>Курс {{ editing.ModStatus === 'Опубликовано' ? 'опубликован' : 'на модерации' }} — текст, цену, уроки и видео нельзя менять. Чтобы отредактировать, снимите его с публикации (кнопка выше).</span>
+                    </div>
+
                     <label class="pd-field">
                         <span class="pd-field__lb">Название<b class="pd-req">*</b></span>
-                        <input v-model="form.Title" type="text" class="pd-input" placeholder="Название курса" maxlength="200" />
+                        <input v-model="form.Title" type="text" class="pd-input" placeholder="Название курса" maxlength="200" :readonly="!editable" />
                     </label>
 
                     <div class="pd-field">
                         <span class="pd-field__lb">Тип</span>
                         <div class="pd-seg">
-                            <button v-for="cat in CATEGORIES" :key="cat" type="button" class="pd-seg__b" :class="{ 'is-on': form.Category === cat }" @click="form.Category = cat">{{ cat }}</button>
+                            <button v-for="cat in CATEGORIES" :key="cat" type="button" class="pd-seg__b" :class="{ 'is-on': form.Category === cat }" :disabled="!editable" @click="form.Category = cat">{{ cat }}</button>
                         </div>
                     </div>
 
                     <label class="pd-field">
                         <span class="pd-field__lb">Описание</span>
-                        <textarea v-model="form.Decription" class="pd-input pd-textarea" rows="3" placeholder="О чём этот курс" maxlength="4000"></textarea>
+                        <textarea v-model="form.Decription" class="pd-input pd-textarea" rows="3" placeholder="О чём этот курс" maxlength="4000" :readonly="!editable"></textarea>
                     </label>
 
                     <label class="pd-field">
                         <span class="pd-field__lb">Чему научит</span>
-                        <textarea v-model="form.WhatTeach" class="pd-input pd-textarea" rows="3" placeholder="Программа, навыки, результат" maxlength="8000"></textarea>
+                        <textarea v-model="form.WhatTeach" class="pd-input pd-textarea" rows="3" placeholder="Программа, навыки, результат" maxlength="8000" :readonly="!editable"></textarea>
                     </label>
 
                     <label class="pd-field">
                         <span class="pd-field__lb">Для кого курс</span>
-                        <textarea v-model="form.For" class="pd-input pd-textarea" rows="2" placeholder="Целевая аудитория" maxlength="2000"></textarea>
+                        <textarea v-model="form.For" class="pd-input pd-textarea" rows="2" placeholder="Целевая аудитория" maxlength="2000" :readonly="!editable"></textarea>
                     </label>
 
                     <label class="pd-field">
                         <span class="pd-field__lb">Папка</span>
-                        <select v-model="form.folder" class="pd-input pd-select">
+                        <select v-model="form.folder" class="pd-input pd-select" :disabled="!editable">
                             <option :value="null">Без папки</option>
                             <option v-for="f in folders" :key="f.id" :value="f.id">{{ f.title }}</option>
                         </select>
@@ -170,7 +175,7 @@
                     <div class="pd-money">
                         <span class="pd-money__h">Доступ и цена</span>
                         <label class="pd-check">
-                            <input v-model="form.Free" type="checkbox" />
+                            <input v-model="form.Free" type="checkbox" :disabled="!editable" />
                             <span>Бесплатный курс</span>
                         </label>
 
@@ -178,28 +183,28 @@
                             <div class="pd-row2">
                                 <label class="pd-field">
                                     <span class="pd-field__lb">Цена, ₽</span>
-                                    <input v-model.number="form.Price" type="number" min="0" step="100" class="pd-input" placeholder="0" />
+                                    <input v-model.number="form.Price" type="number" min="0" step="100" class="pd-input" :readonly="!editable" placeholder="0" />
                                 </label>
                                 <label class="pd-field">
                                     <span class="pd-field__lb">Старая цена, ₽ <em class="pd-opt">для скидки</em></span>
-                                    <input v-model.number="form.old_price" type="number" min="0" step="100" class="pd-input" placeholder="—" />
+                                    <input v-model.number="form.old_price" type="number" min="0" step="100" class="pd-input" :readonly="!editable" placeholder="—" />
                                 </label>
                             </div>
 
                             <div class="pd-field">
                                 <span class="pd-field__lb">Срок доступа</span>
                                 <div class="pd-seg">
-                                    <button v-for="d in DURATIONS" :key="d.v" type="button" class="pd-seg__b" :class="{ 'is-on': form.DurationLong === d.v }" @click="form.DurationLong = d.v">{{ d.label }}</button>
+                                    <button v-for="d in DURATIONS" :key="d.v" type="button" class="pd-seg__b" :class="{ 'is-on': form.DurationLong === d.v }" :disabled="!editable" @click="form.DurationLong = d.v">{{ d.label }}</button>
                                 </div>
                             </div>
 
                             <label v-if="form.DurationLong !== 0" class="pd-field">
                                 <span class="pd-field__lb">Цена продления, ₽ <em class="pd-opt">после окончания срока</em></span>
-                                <input v-model.number="form.DurationPrice" type="number" min="0" step="100" class="pd-input" placeholder="0" />
+                                <input v-model.number="form.DurationPrice" type="number" min="0" step="100" class="pd-input" :readonly="!editable" placeholder="0" />
                             </label>
 
                             <label class="pd-check">
-                                <input v-model="form.Buy" type="checkbox" />
+                                <input v-model="form.Buy" type="checkbox" :disabled="!editable" />
                                 <span>Доступен к покупке</span>
                             </label>
                         </template>
@@ -260,7 +265,7 @@
                     <div v-if="!editing.isCreate" class="pd-lessons">
                         <div class="pd-lessons__head">
                             <span class="pd-money__h">Уроки курса</span>
-                            <button type="button" class="pd-btn pd-btn--sm" @click="addLesson">
+                            <button type="button" class="pd-btn pd-btn--sm" :disabled="!editable" @click="addLesson">
                                 <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                                 Добавить урок
                             </button>
@@ -275,10 +280,10 @@
                                     <svg v-if="l.video_id" viewBox="0 0 24 24" class="pd-ic pd-lrow__ic pd-lrow__ic--v" aria-hidden="true"><path d="M4 5h16v14H4zM10 9l5 3-5 3z"/></svg>
                                 </span>
                                 <span class="pd-lrow__act">
-                                    <button type="button" class="pd-iconbtn" :disabled="i === 0 || lessonBusyId" aria-label="Выше" @click="moveLesson(i, -1)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></button>
-                                    <button type="button" class="pd-iconbtn" :disabled="i === lessons.length - 1 || lessonBusyId" aria-label="Ниже" @click="moveLesson(i, 1)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
-                                    <button type="button" class="pd-iconbtn" aria-label="Изменить" @click="openLessonEdit(l)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
-                                    <button type="button" class="pd-iconbtn pd-iconbtn--del" :disabled="lessonBusyId === l.id" aria-label="Удалить" @click="deleteLesson(l)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg></button>
+                                    <button type="button" class="pd-iconbtn" :disabled="i === 0 || lessonBusyId || !editable" aria-label="Выше" @click="moveLesson(i, -1)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></button>
+                                    <button type="button" class="pd-iconbtn" :disabled="i === lessons.length - 1 || lessonBusyId || !editable" aria-label="Ниже" @click="moveLesson(i, 1)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+                                    <button type="button" class="pd-iconbtn" aria-label="Изменить" :disabled="!editable" @click="openLessonEdit(l)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+                                    <button type="button" class="pd-iconbtn pd-iconbtn--del" :disabled="lessonBusyId === l.id || !editable" aria-label="Удалить" @click="deleteLesson(l)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg></button>
                                 </span>
                             </li>
                         </ul>
@@ -342,7 +347,7 @@
                     <button v-if="!editing.isCreate" type="button" class="pd-btn pd-btn--danger" :disabled="!form" @click="confirmDelete = true">Удалить курс</button>
                     <span class="pd-spacer"></span>
                     <button type="button" class="pd-btn pd-btn--ghost" @click="closeModal">Отменить</button>
-                    <button type="button" class="pd-btn" :disabled="saving || !form || !form.Title.trim()" @click="saveCourse">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
+                    <button type="button" class="pd-btn" :disabled="saving || !form || !form.Title.trim() || !editable" @click="saveCourse">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
                 </div>
 
                 <!-- delete confirm overlay -->
@@ -517,6 +522,9 @@ const filter = ref('all'); // 'all' | 'discount' | 'fix' | <folder id>
 // ── Phase 1: metadata create / edit / delete (no money) ──────────────────────
 const CATEGORIES = ['Запись семинара', 'Онлайн-курс'];
 const DURATIONS = [{ v: 0, label: 'Бессрочный' }, { v: 6, label: '6 мес.' }, { v: 12, label: '12 мес.' }];
+// A course's content (text, price, lessons, videos, materials, cover) is editable only in these statuses
+// (WeWeb's status.weigth == 'edit'). Опубликовано / На модерации lock editing — unpublish first to edit.
+const EDITABLE_STATUSES = ['Черновик', 'Отправлено на доработку', 'Снято с публикации'];
 const editing = ref(null);         // the course being edited, or { isCreate: true }
 const form = ref(null);            // { Title, Category, Decription, WhatTeach, For, folder }
 const formLoading = ref(false);
@@ -619,6 +627,8 @@ function plural(n, [one, few, many]) {
 
 const discountCount = computed(() => courses.value.filter(hasDiscount).length);
 const fixCount = computed(() => courses.value.filter(needsFix).length);
+// content editable? (new course, or a status with weigth=='edit'). Grants/bans/moderation stay allowed.
+const editable = computed(() => !!editing.value && (editing.value.isCreate || EDITABLE_STATUSES.includes(editing.value.ModStatus)));
 
 const visible = computed(() => {
     let list = courses.value;
@@ -728,7 +738,7 @@ async function openEdit(c) {
 function closeModal() { editing.value = null; form.value = null; }
 
 async function saveCourse() {
-    if (saving.value || !form.value) return;
+    if (saving.value || !form.value || !editable.value) return;
     const title = form.value.Title.trim();
     if (!title) { formError.value = 'Введите название курса.'; return; }
     saving.value = true; formError.value = '';
@@ -890,7 +900,7 @@ async function loadLessons(c) {
     finally { lessonsLoading.value = false; }
 }
 async function addLesson() {
-    if (!editing.value || editing.value.isCreate || lessonSaving.value) return;
+    if (!editing.value || editing.value.isCreate || lessonSaving.value || !editable.value) return;
     lessonError.value = '';
     try {
         const n = lessons.value.length + 1;
@@ -912,7 +922,7 @@ function openLessonEdit(lesson) {
 }
 function closeLessonEdit() { lessonEditing.value = null; lessonForm.value = null; banned.value = []; banResults.value = []; banSearch.value = ''; }
 async function saveLessonMeta() {
-    if (!lessonEditing.value || lessonSaving.value || !lessonForm.value) return;
+    if (!lessonEditing.value || lessonSaving.value || !lessonForm.value || !editable.value) return;
     lessonSaving.value = true; lessonError.value = '';
     try {
         const id = lessonEditing.value.id;
@@ -926,7 +936,7 @@ async function saveLessonMeta() {
     finally { lessonSaving.value = false; }
 }
 async function deleteLesson(lesson) {
-    if (lessonBusyId.value) return;
+    if (lessonBusyId.value || !editable.value) return;
     lessonBusyId.value = lesson.id; lessonError.value = '';
     try {
         // remove the material object too, if any (best-effort)
@@ -941,7 +951,7 @@ async function deleteLesson(lesson) {
 }
 async function moveLesson(idx, dir) {
     const j = idx + dir;
-    if (j < 0 || j >= lessons.value.length || lessonBusyId.value) return;
+    if (j < 0 || j >= lessons.value.length || lessonBusyId.value || !editable.value) return;
     const arr = lessons.value.slice();
     [arr[idx], arr[j]] = [arr[j], arr[idx]];
     lessons.value = arr;
@@ -952,7 +962,7 @@ async function moveLesson(idx, dir) {
 async function uploadMaterial(e, lesson) {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file || materialBusy.value) return;
+    if (!file || materialBusy.value || !editable.value) return;
     materialBusy.value = true; lessonError.value = '';
     try {
         if (lesson.File) { try { await sb.storage.from(BUCKET).remove([lesson.File.split('/').pop()]); } catch (_) { /* ignore */ } }
@@ -969,7 +979,7 @@ async function uploadMaterial(e, lesson) {
     finally { materialBusy.value = false; }
 }
 async function removeMaterial(lesson) {
-    if (materialBusy.value || !lesson.File) return;
+    if (materialBusy.value || !lesson.File || !editable.value) return;
     materialBusy.value = true; lessonError.value = '';
     try {
         try { await sb.storage.from(BUCKET).remove([lesson.File.split('/').pop()]); } catch (_) { /* ignore */ }
@@ -994,7 +1004,7 @@ function patchCourse(id, p) {
 // Chunked resumable upload; resume checkpoints are persisted to the row's resume_* columns (parity with
 // the WeWeb uploader) so an interrupted upload can pick up where it stopped.
 async function runVideoUpload(table, row, file, patch, which) {
-    if (videoUploading.value) return;
+    if (videoUploading.value || !editable.value) return;
     videoUploading.value = true; videoProgress.value = 0; videoTarget.value = which; videoError.value = '';
     try {
         const token = await getUploadToken(sb);
@@ -1018,7 +1028,7 @@ async function runVideoUpload(table, row, file, patch, which) {
     }
 }
 async function runVideoDelete(table, row, patch) {
-    if (videoBusy.value) return;
+    if (videoBusy.value || !editable.value) return;
     videoBusy.value = true; videoError.value = '';
     try {
         if (row.video_id) { try { await deleteLive(sb, row.video_id); } catch (_) { /* already gone */ } }
@@ -1052,7 +1062,7 @@ function videoEmbed(uuid) { return embedUrl(uuid, { autoplay: true }); }
 async function onCoverUpload(e) {
     const file = e.target.files?.[0]; e.target.value = '';
     const c = editing.value;
-    if (!file || !c || c.isCreate || coverBusy.value) return;
+    if (!file || !c || c.isCreate || coverBusy.value || !editable.value) return;
     coverBusy.value = true; videoError.value = '';
     try {
         if (c.cover) { try { await sb.storage.from(BUCKET).remove([c.cover.split('/').pop()]); } catch (_) { /* ignore */ } }
@@ -1069,7 +1079,7 @@ async function onCoverUpload(e) {
 }
 async function removeCover() {
     const c = editing.value;
-    if (!c || c.isCreate || coverBusy.value || !c.cover) return;
+    if (!c || c.isCreate || coverBusy.value || !c.cover || !editable.value) return;
     coverBusy.value = true; videoError.value = '';
     try {
         try { await sb.storage.from(BUCKET).remove([c.cover.split('/').pop()]); } catch (_) { /* ignore */ }
@@ -1374,6 +1384,8 @@ function ensureFonts() {
 .pd-modblock__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .pd-modblock__lb { font-size: 0.86rem; font-weight: 600; color: var(--ink-2); }
 .pd-modblock__hint { margin: 0; color: var(--ink-3); font-size: 0.83rem; }
+.pd-lock { display: flex; align-items: flex-start; gap: 9px; background: var(--orange-tint); color: var(--orange); border-radius: var(--r-md); padding: 12px 14px; font-size: 0.88rem; font-weight: 600; line-height: 1.45; }
+.pd-lock .pd-ic { width: 18px; height: 18px; flex: none; margin-top: 1px; }
 .pd-modblock__note { display: flex; align-items: flex-start; gap: 7px; margin: 0; color: var(--orange); font-size: 0.85rem; line-height: 1.4; }
 .pd-modblock__note .pd-ic { width: 15px; height: 15px; flex: none; margin-top: 2px; }
 .pd-btn--sm { padding: 7px 14px; font-size: 0.86rem; }

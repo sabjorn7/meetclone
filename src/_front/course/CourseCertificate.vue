@@ -35,19 +35,24 @@
             <p class="mgc__desc">Документ подтверждает успешное прохождение курса на образовательной платформе МитГуру.</p>
 
             <footer class="mgc__foot">
-                <div class="mgc__author">
-                    <span v-if="issuerLogo" class="mgc__logo"><img :src="issuerLogo" alt="" crossorigin="anonymous" /></span>
-                    <span v-else class="mgc__logo mgc__logo--txt">{{ initials }}</span>
-                    <span class="mgc__atext">
-                        <span class="mgc__flb">АВТОР КУРСА</span>
-                        <span class="mgc__flv">{{ issuer || 'МитГуру' }}</span>
-                    </span>
-                </div>
-                <div class="mgc__meta">
-                    <span class="mgc__date">{{ date }}</span>
-                    <span class="mgc__fline"></span>
-                    <span class="mgc__flb">ДАТА ВЫДАЧИ</span>
-                    <span class="mgc__flv mgc__flv--no">№&nbsp;{{ certNo }}</span>
+                <span class="mgc__footline"></span>
+                <div class="mgc__footrow">
+                    <div class="mgc__author">
+                        <span v-if="issuerLogo" class="mgc__logo"><img :src="issuerLogo" alt="" crossorigin="anonymous" /></span>
+                        <span v-else class="mgc__logo mgc__logo--txt">{{ initials }}</span>
+                        <span class="mgc__atext">
+                            <span class="mgc__flb">АВТОР КУРСА</span>
+                            <span class="mgc__flv">{{ issuer || 'МитГуру' }}</span>
+                        </span>
+                    </div>
+                    <div class="mgc__mcol">
+                        <span class="mgc__flb">ДАТА ВЫДАЧИ</span>
+                        <span class="mgc__flv">{{ date }}</span>
+                    </div>
+                    <div class="mgc__mcol">
+                        <span class="mgc__flb">СЕРТИФИКАТ №</span>
+                        <span class="mgc__flv mgc__flv--no">{{ certNo }}</span>
+                    </div>
                 </div>
             </footer>
         </div>
@@ -85,8 +90,8 @@ defineExpose({ root });
 .mgc *, .mgc *::before, .mgc *::after { box-sizing: border-box; }
 
 /* left panel */
-.mgc__panel { position: absolute; left: 0; top: 0; bottom: 0; width: 306px; background: #f6efe3; border-right: 2px solid var(--ink); overflow: hidden; display: grid; place-items: center; }
-.mgc__illus { width: 92%; height: auto; object-fit: contain; }
+.mgc__panel { position: absolute; left: 0; top: 0; bottom: 0; width: 306px; background: #ffffff; border-right: 2px solid var(--ink); overflow: hidden; display: grid; place-items: center; }
+.mgc__illus { width: 96%; height: auto; object-fit: contain; }
 
 /* content */
 .mgc__body { position: absolute; left: 306px; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column; padding: 52px 56px 46px 54px; text-align: left; }
@@ -106,18 +111,18 @@ defineExpose({ root });
 .mgc__dots--2 { margin-top: 24px; }
 .mgc__desc { margin: 16px 0 0; font-size: 13.5px; line-height: 1.62; color: var(--ink-2); max-width: 430px; }
 
-/* footer: author (logo + name, left) + date/number (right) */
-.mgc__foot { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; gap: 30px; }
-.mgc__author { display: flex; align-items: center; gap: 12px; width: 260px; }
-.mgc__logo { width: 48px; height: 48px; border-radius: 50%; overflow: hidden; flex: none; border: 1px solid #e0d8c8; background: #fff; display: grid; place-items: center; }
+/* footer: aligned grid — author (logo + name) · date · number, hung under a shared rule */
+.mgc__foot { margin-top: auto; }
+.mgc__footline { display: block; width: 100%; height: 0; border-top: 2px solid var(--ink); margin-bottom: 15px; }
+.mgc__footrow { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.mgc__author { display: flex; align-items: flex-start; gap: 11px; flex: 1; min-width: 0; }
+.mgc__logo { width: 42px; height: 42px; border-radius: 50%; overflow: hidden; flex: none; border: 1px solid var(--line, #e4e9f1); background: #fff; display: grid; place-items: center; }
 .mgc__logo img { width: 100%; height: 100%; object-fit: cover; }
-.mgc__logo--txt { font-weight: 800; font-size: 16px; color: var(--blue); }
-.mgc__atext { display: flex; flex-direction: column; }
-.mgc__fline { display: block; width: 100%; height: 0; border-bottom: 2px solid var(--ink); margin-top: 2px; }
-.mgc__flb { margin-top: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.16em; color: var(--ink-2); }
-.mgc__atext .mgc__flb { margin-top: 0; }
-.mgc__flv { margin-top: 3px; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.25; max-width: 210px; }
-.mgc__meta { display: flex; flex-direction: column; align-items: flex-start; width: 190px; }
-.mgc__date { font-weight: 800; font-size: 17px; color: var(--ink); padding-bottom: 8px; }
-.mgc__flv--no { color: var(--orange); margin-top: 7px; }
+.mgc__logo--txt { font-weight: 800; font-size: 15px; color: var(--blue); }
+.mgc__atext { display: flex; flex-direction: column; min-width: 0; }
+.mgc__mcol { display: flex; flex-direction: column; flex: none; }
+.mgc__flb { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: var(--ink-2); white-space: nowrap; }
+.mgc__flv { margin-top: 5px; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.3; }
+.mgc__author .mgc__flv { max-width: 220px; }
+.mgc__flv--no { color: var(--orange); }
 </style>

@@ -30,7 +30,6 @@
                         Мои курсы
                     </a>
                     <h1 class="pd-head__title">{{ course.Title }}</h1>
-                    <p v-if="course.Decription" class="pd-head__descr">{{ course.Decription }}</p>
                     <div class="pd-head__meta">
                         <a v-if="author" class="pd-author" :href="`/profile_page?user=${author.id}`">
                             <img v-if="author.Photo" :src="author.Photo" :alt="author.Name" /><span v-else class="pd-author__i">{{ initials(author.Name) }}</span>
@@ -96,7 +95,7 @@
                         </div>
                         <textarea
                             v-model="formText" class="pd-rform__text" rows="3" maxlength="1500"
-                            placeholder="Поделитесь впечатлением о курсе (необязательно)"></textarea>
+                            placeholder="Поделитесь впечатлением о курсе"></textarea>
                         <div class="pd-rform__foot">
                             <button type="button" class="pd-btn" :disabled="!formRating || submitting" @click="submitReview">
                                 {{ submitting ? 'Сохраняем…' : (myRating ? 'Обновить отзыв' : 'Отправить отзыв') }}
@@ -248,7 +247,7 @@ async function load() {
     if (!sb || !courseId) { loading.value = false; return; }
 
     const { data } = await sb.from('course')
-        .select('id, "Title", "Decription", "Less_Id", "Free", "DurationLong", owner, slug, rating, comment, video_id')
+        .select('id, "Title", "Less_Id", "Free", "DurationLong", owner, slug, rating, comment, video_id')
         .eq('id', courseId).limit(1);
     course.value = data?.[0] || null;
     if (!course.value) { loading.value = false; return; }
@@ -349,7 +348,6 @@ function ensureFonts() {
 .pd-back .pd-ic { width: 18px; height: 18px; }
 .pd-back:hover { color: var(--blue-ink); }
 .pd-head__title { margin: 14px 0 0; font-weight: 800; font-size: clamp(1.7rem, 3.6vw, 2.4rem); line-height: 1.1; letter-spacing: -0.025em; }
-.pd-head__descr { margin: 12px 0 0; color: var(--ink-2); font-size: 1.05rem; max-width: 70ch; }
 .pd-head__meta { display: flex; align-items: center; gap: 18px; margin-top: 16px; flex-wrap: wrap; }
 .pd-author { display: inline-flex; align-items: center; gap: 9px; text-decoration: none; color: var(--ink); }
 .pd-author img, .pd-author__i { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }

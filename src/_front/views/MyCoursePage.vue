@@ -279,9 +279,15 @@ async function load() {
     }
     const lids = course.value.Less_Id || [];
     if (lids.length) {
-        const { data: ls } = await sb.from('lessons').select('id, "Title", "Descr", "File", video_id').in('id', lids);
+        const { data: ls } = await sb.from('lessons').select('id, "Title", "Descr", "File", video_id, ban_list').in('id', lids);
         const byId = Object.fromEntries((ls || []).map((l) => [l.id, l]));
-        lessons.value = lids.map((lid) => byId[lid]).filter(Boolean);
+        // Enforce per-lesson bans: a user in a lesson's ban_list must NOT see it (the WeWeb viewer did
+        // `not(contains(ban_list, user.id))`). Skipping this was an access regression — banned users
+        // regained the content they'd been removed from.
+        lessons.value = lids
+            .map((lid) => byId[lid])
+            .filter(Boolean)
+            .filter((l) => !(Array.isArray(l.ban_list) && l.ban_list.includes(myId.value)));
     }
     if (lessons.value.length) selectLesson(lessons.value[0].id);
 

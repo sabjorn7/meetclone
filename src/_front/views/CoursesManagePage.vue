@@ -286,10 +286,10 @@
                         <p v-if="lessonError" class="pd-formerr pd-formerr--inline">{{ lessonError }}</p>
                     </div>
 
-                    <!-- manual access grants (existing courses only) -->
+                    <!-- course roster + manual grants (existing courses only) -->
                     <div v-if="!editing.isCreate" class="pd-grant">
-                        <span class="pd-money__h">Доступ ученикам</span>
-                        <p class="pd-hint">Откройте курс любому пользователю бесплатно (например, для поддержки или промо).</p>
+                        <span class="pd-money__h">Ученики курса</span>
+                        <p class="pd-hint">Кто имеет доступ (куплен / выдан / оформлен, но не оплачен). Ниже можно открыть курс любому бесплатно.</p>
                         <div class="pd-grant__search">
                             <div class="pd-search pd-search--full">
                                 <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -309,20 +309,29 @@
                         </div>
 
                         <p v-if="granteesLoading" class="pd-hint">Загрузка…</p>
-                        <ul v-else-if="grantees.length" class="pd-grant__list">
-                            <li v-for="g in grantees" :key="g.ucId" class="pd-grant__row">
-                                <span class="pd-grant__u">
-                                    <img v-if="g.Photo" :src="g.Photo" :alt="g.Name" class="pd-grant__ava" />
-                                    <span v-else class="pd-grant__ava pd-grant__ava--i">{{ initials(g.Name) }}</span>
-                                    <span class="pd-grant__name">{{ g.Name || 'Пользователь' }}<em>{{ g.end_period ? 'до ' + fmtDate(g.end_period) : 'бессрочно' }}</em></span>
-                                </span>
-                                <span class="pd-grant__act">
-                                    <a class="pd-iconbtn" :href="`/chats?user=${g.id}`" target="_blank" rel="noopener noreferrer" aria-label="Написать"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></a>
-                                    <button type="button" class="pd-iconbtn pd-iconbtn--del" :disabled="grantBusyId === g.id" aria-label="Отозвать доступ" @click="revokeAccess(g)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg></button>
-                                </span>
-                            </li>
-                        </ul>
-                        <p v-else class="pd-hint">Пока никому не выдан бесплатный доступ.</p>
+                        <template v-else-if="grantees.length">
+                            <p class="pd-hint">{{ granteesTotal }} {{ plural(granteesTotal, ['ученик', 'ученика', 'учеников']) }} с доступом<span v-if="granteesTotal > grantees.length"> · показаны первые {{ grantees.length }}</span></p>
+                            <ul class="pd-grant__list">
+                                <li v-for="g in grantees" :key="g.ucId" class="pd-grant__row">
+                                    <span class="pd-grant__u">
+                                        <img v-if="g.Photo" :src="g.Photo" :alt="g.Name" class="pd-grant__ava" />
+                                        <span v-else class="pd-grant__ava pd-grant__ava--i">{{ initials(g.Name) }}</span>
+                                        <span class="pd-grant__name">
+                                            {{ g.Name || 'Пользователь' }}
+                                            <em>
+                                                <span class="pd-grant__tag" :class="`pd-grant__tag--${g.kind}`">{{ g.kind === 'buy' ? 'Куплен' : (g.kind === 'free' ? 'Выдан' : 'Не оплачен') }}</span>
+                                                {{ g.end_period ? '· до ' + fmtDate(g.end_period) : '· бессрочно' }}
+                                            </em>
+                                        </span>
+                                    </span>
+                                    <span class="pd-grant__act">
+                                        <a class="pd-iconbtn" :href="`/chats?user=${g.id}`" target="_blank" rel="noopener noreferrer" aria-label="Написать"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></a>
+                                        <button v-if="g.kind !== 'buy'" type="button" class="pd-iconbtn pd-iconbtn--del" :disabled="grantBusyId === g.id" aria-label="Убрать доступ" @click="revokeAccess(g)"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg></button>
+                                    </span>
+                                </li>
+                            </ul>
+                        </template>
+                        <p v-else class="pd-hint">Пока ни у кого нет доступа к курсу.</p>
                         <p v-if="grantError" class="pd-formerr pd-formerr--inline">{{ grantError }}</p>
                     </div>
                 </div>
@@ -1079,12 +1088,18 @@ function addMonthsIso(months) {
     d.setMonth(d.getMonth() + Number(months || 0));
     return d.toISOString();
 }
+const granteesTotal = ref(0);
+const GRANTEES_LIMIT = 300;
 async function loadGrantees(c) {
-    if (!c || c.isCreate) { grantees.value = []; return; }
+    if (!c || c.isCreate) { grantees.value = []; granteesTotal.value = 0; return; }
     granteesLoading.value = true; grantError.value = '';
     try {
-        const { data: rows } = await sb.from('user_course')
-            .select('id, "user", end_period').eq('course', c.id).eq('Free', true).limit(500);
+        // The whole access roster (matches the WeWeb «Ученики курса», which filtered by course only):
+        // buyers (buy=true), free grants (Free=true), and buy-click-without-payment rows.
+        const { data: rows, count } = await sb.from('user_course')
+            .select('id, "user", "Free", buy, end_period', { count: 'exact' })
+            .eq('course', c.id).order('created_at', { ascending: false }).limit(GRANTEES_LIMIT);
+        granteesTotal.value = count ?? (rows?.length || 0);
         const list = rows || [];
         const ids = [...new Set(list.map((r) => r.user).filter(Boolean))];
         let byId = {};
@@ -1092,7 +1107,11 @@ async function loadGrantees(c) {
             const { data: us } = await sb.from('users').select('id, "Name", email, "Photo"').in('id', ids);
             byId = Object.fromEntries((us || []).map((u) => [u.id, u]));
         }
-        grantees.value = list.map((r) => ({ ucId: r.id, end_period: r.end_period, ...(byId[r.user] || { id: r.user, Name: 'Пользователь' }) }));
+        grantees.value = list.map((r) => ({
+            ucId: r.id, end_period: r.end_period,
+            kind: r.buy ? 'buy' : (r.Free ? 'free' : 'pending'),
+            ...(byId[r.user] || { id: r.user, Name: 'Пользователь' }),
+        }));
     } catch (e) { grantError.value = 'Не удалось загрузить список.'; }
     finally { granteesLoading.value = false; }
 }
@@ -1129,7 +1148,8 @@ async function grantAccess(student) {
         const bc = Array.isArray(su?.[0]?.buied_courses) ? su[0].buied_courses : [];
         const bco = Array.isArray(su?.[0]?.buied_course_orig) ? su[0].buied_course_orig : [];
         await sb.from('users').update({ buied_courses: [...bc, ucId], buied_course_orig: [...bco, c.id] }).eq('id', student.id);
-        grantees.value = [{ ucId, end_period, ...student }, ...grantees.value];
+        grantees.value = [{ ucId, end_period, kind: 'free', ...student }, ...grantees.value];
+        granteesTotal.value += 1;
         grantSearch.value = ''; grantResults.value = [];
     } catch (e) { grantError.value = `Не удалось выдать доступ: ${e?.message || 'ошибка'}`; }
     finally { grantBusyId.value = null; }
@@ -1149,6 +1169,7 @@ async function revokeAccess(g) {
         if (idx >= 0) bco.splice(idx, 1); // remove one occurrence of this course
         await sb.from('users').update({ buied_courses: bc, buied_course_orig: bco }).eq('id', g.id);
         grantees.value = grantees.value.filter((x) => x.ucId !== g.ucId);
+        granteesTotal.value = Math.max(0, granteesTotal.value - 1);
     } catch (e) { grantError.value = `Не удалось отозвать доступ: ${e?.message || 'ошибка'}`; }
     finally { grantBusyId.value = null; }
 }
@@ -1409,6 +1430,10 @@ function ensureFonts() {
 .pd-grant__name em { font-style: normal; font-weight: 400; font-size: 0.8rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pd-grant__act { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 .pd-iconbtn { text-decoration: none; }
+.pd-grant__tag { display: inline-block; padding: 1px 7px; border-radius: var(--r-pill); font-size: 0.72rem; font-weight: 700; }
+.pd-grant__tag--buy { background: var(--green-tint); color: var(--green); }
+.pd-grant__tag--free { background: var(--blue-tint); color: var(--blue-ink); }
+.pd-grant__tag--pending { background: var(--grey-tint); color: var(--ink-2); }
 .pd-vprog { display: flex; flex-direction: column; gap: 6px; }
 .pd-vprog__bar { height: 8px; border-radius: var(--r-pill); background: var(--bg-tint); overflow: hidden; }
 .pd-vprog__bar span { display: block; height: 100%; width: 100%; background: var(--blue); border-radius: var(--r-pill); transform-origin: left; transition: transform 0.2s var(--ease-out); }

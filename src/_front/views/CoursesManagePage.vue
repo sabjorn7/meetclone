@@ -567,6 +567,14 @@ const STATUS = {
 function statusMeta(s) { return STATUS[s] || { label: s || 'Черновик', cls: 'draft' }; }
 
 function num(v) { return Number(v || 0); }
+function initials(name) {
+    const p = (name || '').split(/\s+/).filter(Boolean);
+    return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || '·';
+}
+function fmtDate(d) {
+    try { return new Date(d).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }); }
+    catch (e) { return ''; }
+}
 function lessonCount(c) { return Array.isArray(c.Less_Id) ? c.Less_Id.length : 0; }
 function hasDiscount(c) { return !c.Free && num(c.old_price) > num(c.Price) && num(c.Price) > 0; }
 function needsFix(c) {

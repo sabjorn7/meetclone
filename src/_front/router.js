@@ -409,6 +409,14 @@ routes.push({
     component: CoursesManagePage,
 });
 
+// DEMO: course-completion certificate preview + PDF download (/cert-demo; see views/CertificatePage.vue).
+// Design proof before wiring the button into MyCoursePage + CoursePage. Not linked from anywhere.
+routes.push({
+    path: '/cert-demo',
+    name: 'cert-demo',
+    component: () => import('./views/CertificatePage.vue'),
+});
+
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');
 if (page404) {
     for (const lang of window.wwg_designInfo.langs) {

@@ -317,7 +317,7 @@
                                         <img v-if="g.Photo" :src="g.Photo" :alt="g.Name" class="pd-grant__ava" />
                                         <span v-else class="pd-grant__ava pd-grant__ava--i">{{ initials(g.Name) }}</span>
                                         <span class="pd-grant__name">
-                                            {{ g.Name || 'Пользователь' }}
+                                            {{ g.Name || g.email || 'Пользователь' }}
                                             <em>
                                                 <span class="pd-grant__tag" :class="`pd-grant__tag--${g.kind}`">{{ g.kind === 'buy' ? 'Куплен' : (g.kind === 'free' ? 'Выдан' : 'Не оплачен') }}</span>
                                                 {{ g.end_period ? '· до ' + fmtDate(g.end_period) : '· бессрочно' }}
@@ -450,7 +450,7 @@
                                 <span class="pd-grant__u">
                                     <img v-if="b.Photo" :src="b.Photo" :alt="b.Name" class="pd-grant__ava" />
                                     <span v-else class="pd-grant__ava pd-grant__ava--i">{{ initials(b.Name) }}</span>
-                                    <span class="pd-grant__name">{{ b.Name || 'Пользователь' }}<em>{{ b.email }}</em></span>
+                                    <span class="pd-grant__name">{{ b.Name || b.email || 'Пользователь' }}<em>{{ b.email }}</em></span>
                                 </span>
                                 <button type="button" class="pd-btn pd-btn--ghost pd-btn--sm" :disabled="banBusyId === b.id" @click="unbanUser(b)">{{ banBusyId === b.id ? '…' : 'Разбанить' }}</button>
                             </li>

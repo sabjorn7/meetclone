@@ -62,6 +62,7 @@
                         :style="{ '--i': Math.min(i, 7) }"
                         @click="openQuickView(c)"
                     >
+                        <span v-if="c.cover" class="pd-course__cover"><img :src="c.cover" :alt="c.Title" loading="lazy" /></span>
                         <span class="pd-course__cat">{{ c.Category || 'Курс' }}</span>
                         <h3 class="pd-course__t">{{ c.Title }}</h3>
                         <div class="pd-course__foot">
@@ -317,7 +318,7 @@ async function load() {
     if (!sb) { loading.value = false; return; }
     buyerId.value = readStoredSession()?.user?.id || null; // guest = null (no supabase call)
     const { data } = await sb.from('course')
-        .select('id, "Title", "Price", "Free", old_price, "Category", slug, owner, video_id, "Less_Id", comment, rating, created_at')
+        .select('id, "Title", "Price", "Free", old_price, "Category", slug, owner, video_id, cover, "Less_Id", comment, rating, created_at')
         .eq('ModStatus', 'Опубликовано')
         .order('created_at', { ascending: false });
     courses.value = data || [];
@@ -427,6 +428,8 @@ function ensureFonts() {
 .pd-cards--courses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
 .pd-course { display: flex; flex-direction: column; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 24px 24px 22px; text-decoration: none; color: inherit; transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out), border-color 0.22s var(--ease-out); }
 @media (hover: hover) and (pointer: fine) { .pd-course:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: rgba(46, 112, 221, 0.4); } }
+.pd-course__cover { margin: -24px -24px 0; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--r-md) var(--r-md) 0 0; background: var(--blue-tint); }
+.pd-course__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pd-course__cat { align-self: flex-start; padding: 5px 12px; border-radius: var(--r-pill); background: var(--blue-tint); color: var(--blue-ink); font-weight: 600; font-size: 12px; }
 .pd-course__t { margin: 0; font-weight: 600; font-size: 1.08rem; line-height: 1.28; letter-spacing: -0.01em; flex: 1; }
 .pd-course__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 2px; }

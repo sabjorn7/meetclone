@@ -205,6 +205,26 @@
                         </template>
                     </div>
 
+                    <!-- course cover image (existing courses only) — used where there's no teaser + as its poster -->
+                    <div v-if="!editing.isCreate" class="pd-teaser">
+                        <span class="pd-money__h">Обложка курса</span>
+                        <div v-if="editing.cover" class="pd-cover">
+                            <img :src="editing.cover" alt="Обложка курса" class="pd-cover__img" />
+                            <div class="pd-vactions">
+                                <label class="pd-btn pd-btn--ghost pd-btn--sm pd-upl">
+                                    <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Заменить
+                                    <input type="file" accept="image/*" class="pd-hidden-file" :disabled="coverBusy" @change="onCoverUpload" />
+                                </label>
+                                <button type="button" class="pd-btn pd-btn--dangerghost pd-btn--sm" :disabled="coverBusy" @click="removeCover">{{ coverBusy ? 'Удаляем…' : 'Удалить' }}</button>
+                            </div>
+                        </div>
+                        <label v-else class="pd-btn pd-btn--ghost pd-btn--sm pd-upl">
+                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> {{ coverBusy ? 'Загрузка…' : 'Загрузить обложку' }}
+                            <input type="file" accept="image/*" class="pd-hidden-file" :disabled="coverBusy" @change="onCoverUpload" />
+                        </label>
+                        <p class="pd-hint">Показывается в каталоге и на странице курса, где нет видео, и как заставка тизера.</p>
+                    </div>
+
                     <!-- course teaser video (existing courses only) -->
                     <div v-if="!editing.isCreate" class="pd-teaser">
                         <span class="pd-money__h">Тизер курса</span>
@@ -442,6 +462,7 @@ const videoProgress = ref(0);
 const videoTarget = ref(null);     // 'lesson' | 'course' — which surface the progress bar belongs to
 const videoBusy = ref(false);      // delete/replace
 const videoError = ref('');
+const coverBusy = ref(false);      // course cover image upload/remove
 
 const STATUS = {
     'Опубликовано': { label: 'Опубликовано', cls: 'live' },
@@ -572,12 +593,12 @@ async function openEdit(c) {
     formLoading.value = true;
     try {
         const { data } = await sb.from('course')
-            .select('"Title", "Category", "Decription", "WhatTeach", "For", folder, "Free", "Price", old_price, "DurationLong", "DurationPrice", "Buy", video_id, video_size, resume_video_id, resume_chunk, resume_name')
+            .select('"Title", "Category", "Decription", "WhatTeach", "For", folder, "Free", "Price", old_price, "DurationLong", "DurationPrice", "Buy", video_id, video_size, resume_video_id, resume_chunk, resume_name, cover')
             .eq('id', c.id).limit(1);
         const full = data?.[0] || {};
-        // merge the teaser video + resume state onto `editing` so the course-teaser section can read them
+        // merge the teaser video + resume state + cover onto `editing` so those sections can read them
         editing.value = { ...editing.value, video_id: full.video_id, video_size: full.video_size,
-            resume_video_id: full.resume_video_id, resume_chunk: full.resume_chunk, resume_name: full.resume_name };
+            resume_video_id: full.resume_video_id, resume_chunk: full.resume_chunk, resume_name: full.resume_name, cover: full.cover };
         form.value = {
             Title: full.Title ?? c.Title ?? '', Category: full.Category || CATEGORIES[0],
             Decription: full.Decription || '', WhatTeach: full.WhatTeach || '', For: full.For || '', folder: full.folder || null,
@@ -914,6 +935,38 @@ function removeCourseVideo() {
 }
 function videoEmbed(uuid) { return embedUrl(uuid, { autoplay: true }); }
 
+// ── course cover image (course.cover; shown where there's no teaser + as the teaser poster) ──────
+async function onCoverUpload(e) {
+    const file = e.target.files?.[0]; e.target.value = '';
+    const c = editing.value;
+    if (!file || !c || c.isCreate || coverBusy.value) return;
+    coverBusy.value = true; videoError.value = '';
+    try {
+        if (c.cover) { try { await sb.storage.from(BUCKET).remove([c.cover.split('/').pop()]); } catch (_) { /* ignore */ } }
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+        const key = `${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await sb.storage.from(BUCKET).upload(key, file, { upsert: false });
+        if (upErr) throw upErr;
+        const url = STORAGE_URL + key;
+        const { error } = await sb.from('course').update({ cover: url }).eq('id', c.id);
+        if (error) throw error;
+        patchCourse(c.id, { cover: url });
+    } catch (e2) { videoError.value = 'Не удалось загрузить обложку.'; }
+    finally { coverBusy.value = false; }
+}
+async function removeCover() {
+    const c = editing.value;
+    if (!c || c.isCreate || coverBusy.value || !c.cover) return;
+    coverBusy.value = true; videoError.value = '';
+    try {
+        try { await sb.storage.from(BUCKET).remove([c.cover.split('/').pop()]); } catch (_) { /* ignore */ }
+        const { error } = await sb.from('course').update({ cover: null }).eq('id', c.id);
+        if (error) throw error;
+        patchCourse(c.id, { cover: null });
+    } catch (e) { videoError.value = 'Не удалось удалить обложку.'; }
+    finally { coverBusy.value = false; }
+}
+
 onMounted(() => { ensureFonts(); load(); });
 
 function ensureFonts() {
@@ -1096,6 +1149,8 @@ function ensureFonts() {
 
 /* video (teaser + lesson) */
 .pd-teaser { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 16px; }
+.pd-cover { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.pd-cover__img { width: 100%; max-height: 240px; border-radius: var(--r-md); object-fit: cover; border: 1px solid var(--line); }
 .pd-vprog { display: flex; flex-direction: column; gap: 6px; }
 .pd-vprog__bar { height: 8px; border-radius: var(--r-pill); background: var(--bg-tint); overflow: hidden; }
 .pd-vprog__bar span { display: block; height: 100%; width: 100%; background: var(--blue); border-radius: var(--r-pill); transform-origin: left; transition: transform 0.2s var(--ease-out); }

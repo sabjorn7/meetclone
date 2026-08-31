@@ -27,9 +27,17 @@
                             <span class="pd-author-mini__text"><span class="muted">Курс от</span><b>{{ author.Name }}</b></span>
                         </a>
 
-                        <div v-if="videoEmbed" class="pd-video" data-reveal>
-                            <iframe :src="videoEmbed" title="Видео о курсе" frameborder="0"
-                                allow="fullscreen" allowfullscreen loading="lazy"></iframe>
+                        <!-- teaser: cover as the poster (click to play); a video-less course shows the cover alone -->
+                        <div v-if="course.video_id" class="pd-video" data-reveal>
+                            <iframe v-if="teaserStarted" :src="teaserEmbed" title="Видео о курсе" frameborder="0"
+                                allow="autoplay; fullscreen" allowfullscreen></iframe>
+                            <button v-else type="button" class="pd-video__poster" aria-label="Смотреть видео о курсе" @click="teaserStarted = true">
+                                <img v-if="course.cover" :src="course.cover" alt="" />
+                                <span class="pd-video__play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
+                            </button>
+                        </div>
+                        <div v-else-if="course.cover" class="pd-video pd-video--static" data-reveal>
+                            <img :src="course.cover" :alt="course.Title" />
                         </div>
                     </div>
 
@@ -275,7 +283,8 @@ const descrParagraphs = computed(() => (course.value?.Decription || '').split(/\
 const learnItems = computed(() => bullets(course.value?.WhatTeach));
 const forItems = computed(() => bullets(course.value?.For));
 const priceText = computed(() => (course.value?.Free ? 'Бесплатно' : `${money(course.value?.Price)} ₽`));
-const videoEmbed = computed(() => (course.value?.video_id ? embedUrl(course.value.video_id) : ''));
+const teaserStarted = ref(false);
+const teaserEmbed = computed(() => (course.value?.video_id ? embedUrl(course.value.video_id, { autoplay: true }) : ''));
 // CTA label for the NON-owner button: free enroll, in-cart, or buy.
 const ctaLabel = computed(() => {
     if (buying.value) return 'Секунду…';
@@ -362,7 +371,7 @@ async function load() {
     const sb = getSupabase();
     if (!sb || !key) { loading.value = false; return; }
     let q = sb.from('course')
-        .select('id, "Title", "Decription", "WhatTeach", "For", "Price", "Free", old_price, "Category", video_id, "Less_Id", "DurationLong", "DurationPrice", owner, slug, comment, rating');
+        .select('id, "Title", "Decription", "WhatTeach", "For", "Price", "Free", old_price, "Category", video_id, cover, "Less_Id", "DurationLong", "DurationPrice", owner, slug, comment, rating');
     q = UUID_RE.test(key) ? q.eq('id', key) : q.eq('slug', key);
     const { data } = await q.limit(1);
     course.value = data?.[0] || null;
@@ -497,6 +506,11 @@ button.pd-btn { font-family: inherit; }
 /* teaser video (in the main column, under the title; hidden entirely when there is none) */
 .pd-video { position: relative; width: 100%; aspect-ratio: 16 / 9; margin-top: 30px; border-radius: var(--r-lg); overflow: hidden; background: var(--ink); box-shadow: var(--shadow); border: 1px solid var(--line); }
 .pd-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pd-video--static img, .pd-video__poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.pd-video__poster { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; padding: 0; cursor: pointer; background: var(--ink); display: grid; place-items: center; }
+.pd-video__play { position: relative; width: 74px; height: 74px; border-radius: 50%; background: rgba(255, 255, 255, 0.92); display: grid; place-items: center; box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.5); transition: transform 0.16s var(--ease-out); }
+.pd-video__play svg { width: 32px; height: 32px; fill: var(--blue); margin-left: 3px; }
+@media (hover: hover) and (pointer: fine) { .pd-video__poster:hover .pd-video__play { transform: scale(1.08); } }
 
 /* buy / info card (sticky sidebar) */
 .pd-chero__side { min-width: 0; }

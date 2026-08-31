@@ -25,10 +25,11 @@ export async function downloadCertificatePdf(el, filename = 'Сертифика�
     ]);
     const JsPDF = jspdf.jsPDF || jspdf.default;
     const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
-    const img = canvas.toDataURL('image/png');
+    // JPEG q0.95 — visually identical on a mostly-white certificate but ~20× smaller than PNG (7.7MB → ~0.4MB)
+    const img = canvas.toDataURL('image/jpeg', 0.95);
     const pdf = new JsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     // fit the whole A4 landscape page (297×210 mm); the node keeps the same 297:210 ratio
-    pdf.addImage(img, 'PNG', 0, 0, 297, 210);
+    pdf.addImage(img, 'JPEG', 0, 0, 297, 210);
     pdf.save(filename.replace(/[\\/:*?"<>|]+/g, ' ').trim());
 }
 

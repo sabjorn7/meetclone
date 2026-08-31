@@ -109,7 +109,8 @@
                     </button>
                 </div>
 
-                <div class="pd-dialog__body">
+                <div v-if="!form" class="pd-dialog__body pd-dialog__body--load">Загрузка…</div>
+                <div v-else class="pd-dialog__body">
                     <label class="pd-field">
                         <span class="pd-field__lb">Название<b class="pd-req">*</b></span>
                         <input v-model="form.Title" type="text" class="pd-input" placeholder="Название курса" maxlength="200" />
@@ -150,10 +151,10 @@
                 </div>
 
                 <div class="pd-dialog__foot">
-                    <button v-if="!editing.isCreate" type="button" class="pd-btn pd-btn--danger" @click="confirmDelete = true">Удалить курс</button>
+                    <button v-if="!editing.isCreate" type="button" class="pd-btn pd-btn--danger" :disabled="!form" @click="confirmDelete = true">Удалить курс</button>
                     <span class="pd-spacer"></span>
                     <button type="button" class="pd-btn pd-btn--ghost" @click="closeModal">Отменить</button>
-                    <button type="button" class="pd-btn" :disabled="saving || !form.Title.trim()" @click="saveCourse">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
+                    <button type="button" class="pd-btn" :disabled="saving || !form || !form.Title.trim()" @click="saveCourse">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
                 </div>
 
                 <!-- delete confirm overlay -->
@@ -218,6 +219,7 @@ const filter = ref('all'); // 'all' | 'discount' | 'fix' | <folder id>
 const CATEGORIES = ['Запись семинара', 'Онлайн-курс'];
 const editing = ref(null);         // the course being edited, or { isCreate: true }
 const form = ref(null);            // { Title, Category, Decription, WhatTeach, For, folder }
+const formLoading = ref(false);
 const saving = ref(false);
 const deleting = ref(false);
 const confirmDelete = ref(false);
@@ -338,13 +340,25 @@ function openCreate() {
     form.value = { Title: '', Category: CATEGORIES[0], Decription: '', WhatTeach: '', For: '', folder: null };
     confirmDelete.value = false; formError.value = '';
 }
-function openEdit(c) {
+async function openEdit(c) {
     editing.value = c;
-    form.value = {
-        Title: c.Title || '', Category: c.Category || CATEGORIES[0],
-        Decription: c.Decription || '', WhatTeach: c.WhatTeach || '', For: c.For || '', folder: c.folder || null,
-    };
-    confirmDelete.value = false; formError.value = '';
+    form.value = null; confirmDelete.value = false; formError.value = '';
+    // the list rows are lightweight (COLS) and don't carry the long text fields — fetch them fresh
+    // so the editor shows the true Category/Decription/WhatTeach/For and can't blank them on save.
+    formLoading.value = true;
+    try {
+        const { data } = await sb.from('course').select('"Title", "Category", "Decription", "WhatTeach", "For", folder').eq('id', c.id).limit(1);
+        const full = data?.[0] || {};
+        form.value = {
+            Title: full.Title ?? c.Title ?? '', Category: full.Category || CATEGORIES[0],
+            Decription: full.Decription || '', WhatTeach: full.WhatTeach || '', For: full.For || '', folder: full.folder || null,
+        };
+    } catch (e) {
+        formError.value = 'Не удалось загрузить курс.';
+        form.value = { Title: c.Title || '', Category: CATEGORIES[0], Decription: '', WhatTeach: '', For: '', folder: c.folder || null };
+    } finally {
+        formLoading.value = false;
+    }
 }
 function closeModal() { editing.value = null; form.value = null; }
 
@@ -568,6 +582,7 @@ function ensureFonts() {
 .pd-x .pd-ic { width: 20px; height: 20px; }
 @media (hover: hover) and (pointer: fine) { .pd-x:hover { background: var(--bg-tint); color: var(--ink); } }
 .pd-dialog__body { padding: 18px 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+.pd-dialog__body--load { padding: 48px 22px; text-align: center; color: var(--ink-3); }
 .pd-dialog__foot { display: flex; align-items: center; gap: 10px; padding: 14px 22px 20px; border-top: 1px solid var(--line); }
 .pd-spacer { flex: 1; }
 

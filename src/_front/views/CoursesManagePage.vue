@@ -156,6 +156,12 @@
 
                 <div v-if="!form" class="pd-dialog__body pd-dialog__body--load">Загрузка…</div>
                 <div v-else class="pd-dialog__body">
+                    <!-- shown right after a course is created — the modal stays open in edit mode -->
+                    <div v-if="justCreated" class="pd-created">
+                        <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+                        <span>Курс создан — теперь добавьте уроки.</span>
+                    </div>
+
                     <!-- moderation / publication (existing courses only) -->
                     <div v-if="!editing.isCreate" class="pd-modblock">
                         <div class="pd-modblock__row">
@@ -210,7 +216,9 @@
 
                     <label class="pd-field">
                         <span class="pd-field__lb">Папка</span>
-                        <select v-model="form.folder" class="pd-input pd-select" :disabled="!editable">
+                        <!-- folder assignment is organizational metadata — always editable, even when the
+                             course is published/on moderation. Persists immediately (bypasses the edit-lock). -->
+                        <select v-model="form.folder" class="pd-input pd-select" @change="assignFolder">
                             <option :value="null">Без папки</option>
                             <option v-for="f in folders" :key="f.id" :value="f.id">{{ f.title }}</option>
                         </select>
@@ -582,6 +590,7 @@ const EDITABLE_STATUSES = ['Черновик', 'Отправлено на дор
 const editing = ref(null);         // the course being edited, or { isCreate: true }
 const form = ref(null);            // { Title, Category, Decription, WhatTeach, For, folder }
 const formLoading = ref(false);
+const justCreated = ref(false);    // show the "course created — now add lessons" hint after a create
 const saving = ref(false);
 const deleting = ref(false);
 const confirmDelete = ref(false);
@@ -755,11 +764,11 @@ function openCreate() {
         Title: '', Category: CATEGORIES[0], Decription: '', WhatTeach: '', For: '', folder: null,
         Free: false, Price: 0, old_price: 0, DurationLong: 0, DurationPrice: 0, Buy: true,
     };
-    confirmDelete.value = false; formError.value = '';
+    confirmDelete.value = false; formError.value = ''; justCreated.value = false;
 }
 async function openEdit(c) {
     editing.value = c;
-    form.value = null; confirmDelete.value = false; formError.value = '';
+    form.value = null; confirmDelete.value = false; formError.value = ''; justCreated.value = false;
     lessons.value = []; lessonEditing.value = null; lessonError.value = '';
     grantees.value = []; grantResults.value = []; grantSearch.value = ''; grantError.value = '';
     loadLessons(c);
@@ -789,7 +798,7 @@ async function openEdit(c) {
         formLoading.value = false;
     }
 }
-function closeModal() { editing.value = null; form.value = null; }
+function closeModal() { editing.value = null; form.value = null; justCreated.value = false; }
 
 async function saveCourse() {
     if (saving.value || !form.value || !editable.value) return;
@@ -826,6 +835,16 @@ async function saveCourse() {
             const row = data?.[0];
             if (row) courses.value = [row, ...courses.value];
             await appendUserCourse(row?.id);
+            // Don't close: re-open the freshly created course in EDIT mode so the author can add lessons
+            // right away (lessons need a course id, so they can't exist during the create step). openEdit
+            // resets justCreated, so raise the hint afterwards.
+            if (row) {
+                await openEdit(row);
+                justCreated.value = true;
+            } else {
+                closeModal();
+            }
+            return;
         } else {
             // NB: self-hosted PostgREST rejects UPDATE .select().limit() with no .order() (PGRST109)
             // and rolls the whole mutation back — so no .limit() here (eq('id') already matches one row).
@@ -905,6 +924,24 @@ async function removeUserCourse(courseId) {
 }
 
 // ── folders ──────────────────────────────────────────────────────────────────
+// Assigning a course to a folder is organizational metadata, NOT locked content: it stays editable in
+// every status (published / on moderation included). Persists just the `folder` column immediately,
+// bypassing the edit-lock (like bulk discounts do). For a not-yet-created course it's a no-op — the
+// folder rides along in the insert (saveCourse `fields`).
+async function assignFolder() {
+    if (!editing.value || editing.value.isCreate || !form.value) return;
+    const id = editing.value.id;
+    const folder = form.value.folder || null;
+    try {
+        // no .limit() — PGRST109 (see the note in saveCourse)
+        const { error } = await sb.from('course').update({ folder }).eq('id', id);
+        if (error) throw error;
+        courses.value = courses.value.map((c) => (c.id === id ? { ...c, folder } : c));
+        editing.value = { ...editing.value, folder };
+    } catch (e) {
+        formError.value = `Не удалось сменить папку: ${e?.message || 'ошибка'}`;
+    }
+}
 async function createFolder() {
     const title = newFolder.value.trim();
     if (!title || folderBusy.value) return;
@@ -1483,14 +1520,17 @@ function ensureFonts() {
 .pd-modal { position: fixed; inset: 0; z-index: 1000; background: rgba(9, 23, 71, 0.42); display: grid; place-items: center; padding: 20px; overflow-y: auto; }
 .pd-dialog { position: relative; width: 100%; max-width: 560px; background: var(--surface); border-radius: var(--r-lg); box-shadow: 0 30px 80px -30px rgba(9, 23, 71, 0.5); display: flex; flex-direction: column; max-height: calc(100vh - 40px); }
 .pd-dialog--sm { max-width: 420px; }
-.pd-dialog__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px 14px; border-bottom: 1px solid var(--line); }
+.pd-dialog__head { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px 14px; border-bottom: 1px solid var(--line); }
 .pd-dialog__title { margin: 0; font-weight: 800; font-size: 1.15rem; letter-spacing: -0.02em; }
 .pd-x { border: 0; background: none; padding: 4px; cursor: pointer; color: var(--ink-3); border-radius: 8px; }
 .pd-x .pd-ic { width: 20px; height: 20px; }
 @media (hover: hover) and (pointer: fine) { .pd-x:hover { background: var(--bg-tint); color: var(--ink); } }
-.pd-dialog__body { padding: 18px 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+/* flex:1 + min-height:0 make the body the SOLE internal scroll region; without min-height:0 the flex
+   child won't shrink below its min-content, the overlay scrolls instead, and scrolling a
+   grid/place-items:center overlay repaints the tint + shadow every frame → flicker. */
+.pd-dialog__body { flex: 1 1 auto; min-height: 0; padding: 18px 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
 .pd-dialog__body--load { padding: 48px 22px; text-align: center; color: var(--ink-3); }
-.pd-dialog__foot { display: flex; align-items: center; gap: 10px; padding: 14px 22px 20px; border-top: 1px solid var(--line); }
+.pd-dialog__foot { flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 14px 22px 20px; border-top: 1px solid var(--line); }
 .pd-spacer { flex: 1; }
 
 .pd-field { display: flex; flex-direction: column; gap: 6px; }
@@ -1513,6 +1553,8 @@ function ensureFonts() {
 .pd-modblock__hint { margin: 0; color: var(--ink-3); font-size: 0.83rem; }
 .pd-lock { display: flex; align-items: flex-start; gap: 9px; background: var(--orange-tint); color: var(--orange); border-radius: var(--r-md); padding: 12px 14px; font-size: 0.88rem; font-weight: 600; line-height: 1.45; }
 .pd-lock .pd-ic { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+.pd-created { display: flex; align-items: center; gap: 9px; background: var(--green-tint, #e7f7ed); color: var(--green, #1f9d57); border-radius: var(--r-md); padding: 11px 14px; font-size: 0.9rem; font-weight: 600; }
+.pd-created .pd-ic { width: 18px; height: 18px; flex: none; stroke-width: 2.4; }
 .pd-modblock__note { display: flex; align-items: flex-start; gap: 7px; margin: 0; color: var(--orange); font-size: 0.85rem; line-height: 1.4; }
 .pd-modblock__note .pd-ic { width: 15px; height: 15px; flex: none; margin-top: 2px; }
 .pd-btn--sm { padding: 7px 14px; font-size: 0.86rem; }

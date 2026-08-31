@@ -111,6 +111,26 @@
 
                 <div v-if="!form" class="pd-dialog__body pd-dialog__body--load">Загрузка…</div>
                 <div v-else class="pd-dialog__body">
+                    <!-- moderation / publication (existing courses only) -->
+                    <div v-if="!editing.isCreate" class="pd-modblock">
+                        <div class="pd-modblock__row">
+                            <span class="pd-modblock__lb">Статус</span>
+                            <span class="pd-badge" :class="`pd-badge--${statusMeta(editing.ModStatus).cls}`">{{ statusMeta(editing.ModStatus).label }}</span>
+                            <span class="pd-spacer"></span>
+                            <button
+                                v-if="nextStatusAction()" type="button"
+                                class="pd-btn pd-btn--sm" :class="nextStatusAction().danger ? 'pd-btn--dangerghost' : 'pd-btn--ghost'"
+                                :disabled="statusBusy" @click="setStatus(nextStatusAction().to)">
+                                {{ statusBusy ? '…' : nextStatusAction().label }}
+                            </button>
+                        </div>
+                        <p v-if="editing.ModStatus === 'Отправлено на модерацию'" class="pd-modblock__hint">Курс на проверке у модератора. Публикацию подтверждает администратор.</p>
+                        <p v-if="modNote(editing)" class="pd-modblock__note">
+                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+                            Замечание модератора: {{ modNote(editing) }}
+                        </p>
+                    </div>
+
                     <label class="pd-field">
                         <span class="pd-field__lb">Название<b class="pd-req">*</b></span>
                         <input v-model="form.Title" type="text" class="pd-input" placeholder="Название курса" maxlength="200" />
@@ -146,7 +166,44 @@
                         </select>
                     </label>
 
-                    <p v-if="!editing.isCreate" class="pd-hint">Цена, срок доступа и публикация — на следующем этапе.</p>
+                    <!-- access & price -->
+                    <div class="pd-money">
+                        <span class="pd-money__h">Доступ и цена</span>
+                        <label class="pd-check">
+                            <input v-model="form.Free" type="checkbox" />
+                            <span>Бесплатный курс</span>
+                        </label>
+
+                        <template v-if="!form.Free">
+                            <div class="pd-row2">
+                                <label class="pd-field">
+                                    <span class="pd-field__lb">Цена, ₽</span>
+                                    <input v-model.number="form.Price" type="number" min="0" step="100" class="pd-input" placeholder="0" />
+                                </label>
+                                <label class="pd-field">
+                                    <span class="pd-field__lb">Старая цена, ₽ <em class="pd-opt">для скидки</em></span>
+                                    <input v-model.number="form.old_price" type="number" min="0" step="100" class="pd-input" placeholder="—" />
+                                </label>
+                            </div>
+
+                            <div class="pd-field">
+                                <span class="pd-field__lb">Срок доступа</span>
+                                <div class="pd-seg">
+                                    <button v-for="d in DURATIONS" :key="d.v" type="button" class="pd-seg__b" :class="{ 'is-on': form.DurationLong === d.v }" @click="form.DurationLong = d.v">{{ d.label }}</button>
+                                </div>
+                            </div>
+
+                            <label v-if="form.DurationLong !== 0" class="pd-field">
+                                <span class="pd-field__lb">Цена продления, ₽ <em class="pd-opt">после окончания срока</em></span>
+                                <input v-model.number="form.DurationPrice" type="number" min="0" step="100" class="pd-input" placeholder="0" />
+                            </label>
+
+                            <label class="pd-check">
+                                <input v-model="form.Buy" type="checkbox" />
+                                <span>Доступен к покупке</span>
+                            </label>
+                        </template>
+                    </div>
                 </div>
 
                 <p v-if="editing && form && formError" class="pd-formerr">{{ formError }}</p>
@@ -218,6 +275,7 @@ const filter = ref('all'); // 'all' | 'discount' | 'fix' | <folder id>
 
 // ── Phase 1: metadata create / edit / delete (no money) ──────────────────────
 const CATEGORIES = ['Запись семинара', 'Онлайн-курс'];
+const DURATIONS = [{ v: 0, label: 'Бессрочный' }, { v: 6, label: '6 мес.' }, { v: 12, label: '12 мес.' }];
 const editing = ref(null);         // the course being edited, or { isCreate: true }
 const form = ref(null);            // { Title, Category, Decription, WhatTeach, For, folder }
 const formLoading = ref(false);
@@ -285,7 +343,7 @@ const visible = computed(() => {
     return list;
 });
 
-const COLS = 'id, "Title", "Free", "Price", old_price, "DurationPrice", "DurationLong", "ModStatus", "Less_Id", folder, video_id, slug, "Edit_Comment", "Edit_Lessons_Comment", created_at';
+const COLS = 'id, "Title", "Free", "Price", old_price, "DurationPrice", "DurationLong", "Buy", "ModStatus", "Less_Id", folder, video_id, slug, "Edit_Comment", "Edit_Lessons_Comment", created_at';
 
 async function load() {
     sb = getSupabase();
@@ -338,7 +396,10 @@ async function uniqueSlug(base, excludeId) {
 
 function openCreate() {
     editing.value = { isCreate: true };
-    form.value = { Title: '', Category: CATEGORIES[0], Decription: '', WhatTeach: '', For: '', folder: null };
+    form.value = {
+        Title: '', Category: CATEGORIES[0], Decription: '', WhatTeach: '', For: '', folder: null,
+        Free: false, Price: 0, old_price: 0, DurationLong: 0, DurationPrice: 0, Buy: true,
+    };
     confirmDelete.value = false; formError.value = '';
 }
 async function openEdit(c) {
@@ -348,15 +409,20 @@ async function openEdit(c) {
     // so the editor shows the true Category/Decription/WhatTeach/For and can't blank them on save.
     formLoading.value = true;
     try {
-        const { data } = await sb.from('course').select('"Title", "Category", "Decription", "WhatTeach", "For", folder').eq('id', c.id).limit(1);
+        const { data } = await sb.from('course')
+            .select('"Title", "Category", "Decription", "WhatTeach", "For", folder, "Free", "Price", old_price, "DurationLong", "DurationPrice", "Buy"')
+            .eq('id', c.id).limit(1);
         const full = data?.[0] || {};
         form.value = {
             Title: full.Title ?? c.Title ?? '', Category: full.Category || CATEGORIES[0],
             Decription: full.Decription || '', WhatTeach: full.WhatTeach || '', For: full.For || '', folder: full.folder || null,
+            Free: !!full.Free, Price: num(full.Price), old_price: num(full.old_price),
+            DurationLong: num(full.DurationLong), DurationPrice: num(full.DurationPrice), Buy: full.Buy !== false,
         };
     } catch (e) {
         formError.value = 'Не удалось загрузить курс.';
-        form.value = { Title: c.Title || '', Category: CATEGORIES[0], Decription: '', WhatTeach: '', For: '', folder: c.folder || null };
+        form.value = { Title: c.Title || '', Category: CATEGORIES[0], Decription: '', WhatTeach: '', For: '', folder: c.folder || null,
+            Free: !!c.Free, Price: num(c.Price), old_price: num(c.old_price), DurationLong: num(c.DurationLong), DurationPrice: num(c.DurationPrice), Buy: true };
     } finally {
         formLoading.value = false;
     }
@@ -371,6 +437,9 @@ async function saveCourse() {
     try {
         const isCreate = !!editing.value.isCreate;
         const slug = await uniqueSlug(slugify(title), isCreate ? null : editing.value.id);
+        // money normalization: a free course carries no price; a lifetime course carries no renewal price.
+        const free = !!form.value.Free;
+        const durLong = num(form.value.DurationLong);
         const fields = {
             Title: title,
             Category: form.value.Category,
@@ -379,11 +448,17 @@ async function saveCourse() {
             For: form.value.For.trim(),
             folder: form.value.folder || null,
             slug,
+            Free: free,
+            Price: free ? 0 : num(form.value.Price),
+            old_price: free ? 0 : num(form.value.old_price),
+            DurationLong: free ? 0 : durLong,
+            DurationPrice: free || durLong === 0 ? 0 : num(form.value.DurationPrice),
+            Buy: free ? false : !!form.value.Buy,
         };
         if (isCreate) {
-            // draft, no money yet (Price/Free/DurationLong set in Phase 2). Mirrors createBackingCourse.
+            // new courses always start as an unpublished draft; moderation is a separate action.
             const { data, error } = await sb.from('course')
-                .insert({ ...fields, owner: myId.value, Free: false, ModStatus: 'Черновик' })
+                .insert({ ...fields, owner: myId.value, ModStatus: 'Черновик' })
                 .select(COLS).limit(1);
             if (error) throw error;
             const row = data?.[0];
@@ -402,6 +477,38 @@ async function saveCourse() {
         formError.value = `Не удалось сохранить: ${e?.message || 'ошибка'}`;
     } finally {
         saving.value = false;
+    }
+}
+
+// ── moderation (creator side) ────────────────────────────────────────────────
+// The creator can submit a course for moderation, withdraw it, or unpublish a live course.
+// Only an admin (superadmin) sets «Опубликовано» — the creator never self-publishes.
+const statusBusy = ref(false);
+function nextStatusAction() {
+    if (!editing.value || editing.value.isCreate) return null;
+    switch (editing.value.ModStatus) {
+        case 'Опубликовано': return { to: 'Снято с публикации', label: 'Снять с публикации', danger: true };
+        case 'Отправлено на модерацию': return { to: 'Черновик', label: 'Отозвать с модерации', danger: false };
+        default: return { to: 'Отправлено на модерацию', label: 'Отправить на модерацию', danger: false }; // Черновик / Снято / Доработка
+    }
+}
+async function setStatus(to) {
+    if (statusBusy.value || !editing.value || editing.value.isCreate) return;
+    statusBusy.value = true; formError.value = '';
+    try {
+        const id = editing.value.id;
+        // no .limit() — see the PGRST109 note in saveCourse
+        const { data, error } = await sb.from('course').update({ ModStatus: to }).eq('id', id).select(COLS);
+        if (error) throw error;
+        const row = data?.[0];
+        if (row) {
+            courses.value = courses.value.map((c) => (c.id === row.id ? row : c));
+            editing.value = { ...editing.value, ModStatus: to };
+        }
+    } catch (e) {
+        formError.value = `Не удалось изменить статус: ${e?.message || 'ошибка'}`;
+    } finally {
+        statusBusy.value = false;
     }
 }
 
@@ -601,6 +708,25 @@ function ensureFonts() {
 .pd-seg__b { border: 0; background: none; border-radius: 9px; padding: 8px 16px; font-family: inherit; font-size: 0.9rem; font-weight: 600; color: var(--ink-2); cursor: pointer; transition: background 0.14s var(--ease-out), color 0.14s; }
 .pd-seg__b.is-on { background: var(--surface); color: var(--blue-ink); box-shadow: var(--shadow-sm); }
 .pd-hint { margin: 0; color: var(--ink-3); font-size: 0.85rem; }
+
+/* moderation block */
+.pd-modblock { background: var(--bg-tint); border: 1px solid var(--line); border-radius: var(--r-md); padding: 13px 15px; display: flex; flex-direction: column; gap: 9px; }
+.pd-modblock__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pd-modblock__lb { font-size: 0.86rem; font-weight: 600; color: var(--ink-2); }
+.pd-modblock__hint { margin: 0; color: var(--ink-3); font-size: 0.83rem; }
+.pd-modblock__note { display: flex; align-items: flex-start; gap: 7px; margin: 0; color: var(--orange); font-size: 0.85rem; line-height: 1.4; }
+.pd-modblock__note .pd-ic { width: 15px; height: 15px; flex: none; margin-top: 2px; }
+.pd-btn--sm { padding: 7px 14px; font-size: 0.86rem; }
+.pd-btn--dangerghost { background: var(--surface); color: var(--red); border: 1px solid #f3c4cd; }
+@media (hover: hover) and (pointer: fine) { .pd-btn--dangerghost:not(:disabled):hover { background: var(--red-tint); } }
+
+/* access & price */
+.pd-money { display: flex; flex-direction: column; gap: 14px; border-top: 1px solid var(--line); padding-top: 16px; }
+.pd-money__h { font-size: 0.92rem; font-weight: 800; letter-spacing: -0.01em; }
+.pd-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pd-opt { font-style: normal; font-weight: 400; color: var(--ink-3); font-size: 0.82rem; }
+.pd-check { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; font-size: 0.95rem; font-weight: 600; color: var(--ink); user-select: none; }
+.pd-check input { width: 18px; height: 18px; accent-color: var(--blue); cursor: pointer; flex: none; }
 .pd-formerr { margin: 0; padding: 10px 22px; background: var(--red-tint); color: var(--red); font-size: 0.88rem; font-weight: 600; border-top: 1px solid var(--line); }
 
 /* delete-confirm overlay (inside the dialog) */

@@ -271,6 +271,11 @@ const PAGE_OVERRIDES = [
     // Account settings: promo-styled ProfileEditPage replaces the WeWeb `profile` edit page. Also removed
     // from App.vue CHROME_EXCLUDE so it gets the shared AppHeader/AppFooter. /profile-edit-demo is the rollback.
     { path: '/profile', name: 'profile', component: ProfileEditPage, wwPath: 'profile' },
+    // Creator course management: hand-written CoursesManagePage replaces the WeWeb `courses_manage` page.
+    // Full rebuild — list/metadata/pricing+moderation/lessons/materials/PeerTube video/cover/grants+bans.
+    // Also removed from App.vue CHROME_EXCLUDE (gets shared chrome); coursesManageStyle.js goes inert here
+    // (it keys on the WeWeb `page-16089944…` route, which this override skips). /courses-manage-demo is the rollback.
+    { path: '/courses_manage', name: 'courses_manage', component: CoursesManagePage, wwPath: 'courses_manage' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

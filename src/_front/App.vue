@@ -24,8 +24,8 @@ import { isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
 const CHROME_EXCLUDE = [
     // account / product ( /profile, /profile_page and /my_courses are redesigned — they get the new chrome)
     '/my_finanse', '/dashboard', '/feedback',
-    // creator management (courses_manage runs coursesManageStyle.js — verify before enabling)
-    '/courses_manage', '/articles_manage',
+    // creator management (courses_manage is now the hand-written CoursesManagePage — gets the new chrome)
+    '/articles_manage',
     // admin
     '/superadmin',
     // auth utilities (login is a full-screen dedicated page — its own chrome, no AppHeader/Footer)

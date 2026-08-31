@@ -11,9 +11,9 @@
                 <p class="pd-lead">Демо дизайна и генерации PDF. Отредактируйте поля, чтобы увидеть с разными данными, и нажмите «Скачать PDF».</p>
 
                 <div class="pd-fields">
-                    <label class="pd-f"><span>Имя</span><input v-model="name" type="text" /></label>
+                    <label class="pd-f"><span>Имя ученика</span><input v-model="name" type="text" /></label>
                     <label class="pd-f"><span>Курс</span><input v-model="course" type="text" /></label>
-                    <label class="pd-f"><span>Автор</span><input v-model="author" type="text" /></label>
+                    <label class="pd-f"><span>Организатор (школа/автор)</span><input v-model="issuer" type="text" /></label>
                 </div>
 
                 <div class="pd-actions">
@@ -25,7 +25,7 @@
                 </div>
 
                 <div class="pd-preview">
-                    <CourseCertificate ref="cert" :name="name" :course="course" :author="author" :date="dateStr" :certNo="certNo" />
+                    <CourseCertificate ref="cert" :name="name" :course="course" :issuer="issuer" :issuerLogo="issuerLogo" :date="dateStr" :certNo="certNo" />
                 </div>
             </div>
         </section>
@@ -38,8 +38,9 @@ import CourseCertificate from '@/_front/course/CourseCertificate.vue';
 import { certNumber, certDate, downloadCertificatePdf, certFilename } from '@/_front/course/certificate.js';
 
 const name = ref('Иван Петров');
-const course = ref('Основы пальпации. Пётр Лебедев');
-const author = ref('Пётр Лебедев');
+const course = ref('Прикладная кинезиология. Базовый курс');
+const issuer = ref('Белорусская лига прикладных кинезиологов');
+const issuerLogo = ref('https://sb.meetgu.ru/storage/v1/object/public/profile//cca24546-94d4-46ee-a922-1a062b8f057a.jpg');
 const dateStr = certDate();
 const certNo = certNumber('12a60a4f-5ca9-4dbe-ac0c-f21ef584e6f5'); // sample user_course id
 const cert = ref(null);

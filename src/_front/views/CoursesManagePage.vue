@@ -147,8 +147,9 @@
                     </label>
 
                     <p v-if="!editing.isCreate" class="pd-hint">Цена, срок доступа и публикация — на следующем этапе.</p>
-                    <p v-if="formError" class="pd-formerr">{{ formError }}</p>
                 </div>
+
+                <p v-if="editing && form && formError" class="pd-formerr">{{ formError }}</p>
 
                 <div class="pd-dialog__foot">
                     <button v-if="!editing.isCreate" type="button" class="pd-btn pd-btn--danger" :disabled="!form" @click="confirmDelete = true">Удалить курс</button>
@@ -389,7 +390,9 @@ async function saveCourse() {
             if (row) courses.value = [row, ...courses.value];
             await appendUserCourse(row?.id);
         } else {
-            const { data, error } = await sb.from('course').update(fields).eq('id', editing.value.id).select(COLS).limit(1);
+            // NB: self-hosted PostgREST rejects UPDATE .select().limit() with no .order() (PGRST109)
+            // and rolls the whole mutation back — so no .limit() here (eq('id') already matches one row).
+            const { data, error } = await sb.from('course').update(fields).eq('id', editing.value.id).select(COLS);
             if (error) throw error;
             const row = data?.[0];
             if (row) courses.value = courses.value.map((c) => (c.id === row.id ? row : c));
@@ -598,7 +601,7 @@ function ensureFonts() {
 .pd-seg__b { border: 0; background: none; border-radius: 9px; padding: 8px 16px; font-family: inherit; font-size: 0.9rem; font-weight: 600; color: var(--ink-2); cursor: pointer; transition: background 0.14s var(--ease-out), color 0.14s; }
 .pd-seg__b.is-on { background: var(--surface); color: var(--blue-ink); box-shadow: var(--shadow-sm); }
 .pd-hint { margin: 0; color: var(--ink-3); font-size: 0.85rem; }
-.pd-formerr { margin: 0; color: var(--red); font-size: 0.88rem; font-weight: 600; }
+.pd-formerr { margin: 0; padding: 10px 22px; background: var(--red-tint); color: var(--red); font-size: 0.88rem; font-weight: 600; border-top: 1px solid var(--line); }
 
 /* delete-confirm overlay (inside the dialog) */
 .pd-confirm { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.86); backdrop-filter: blur(2px); border-radius: var(--r-lg); display: grid; place-items: center; padding: 20px; }

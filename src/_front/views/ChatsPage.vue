@@ -154,10 +154,11 @@
                                 </div>
                             </div>
 
+                            <p v-if="modNote" class="pd-modnote">{{ modNote }}</p>
                             <div ref="threadEl" class="pd-thread__body">
-                                <p v-if="!messages.length" class="pd-thread__empty">Нет сообщений. Напишите первым!</p>
+                                <p v-if="!visibleMessages.length" class="pd-thread__empty">Нет сообщений. Напишите первым!</p>
                                 <div
-                                    v-for="m in messages" :key="m.id"
+                                    v-for="m in visibleMessages" :key="m.id"
                                     class="pd-msg" :class="{ 'is-mine': m.creator === myId, 'is-grp': showSender(m) }"
                                 >
                                     <template v-if="showSender(m)">
@@ -169,6 +170,13 @@
                                         <div class="pd-msg__bubble">
                                             <span class="pd-msg__text">{{ m.text }}</span>
                                             <span class="pd-msg__time">{{ fmtTime(m.created_at) }}</span>
+                                        </div>
+                                    </div>
+                                    <div v-if="m.creator !== myId" class="pd-msg__mod">
+                                        <button type="button" class="pd-msg__kebab" aria-label="Действия с сообщением" @click="msgMenuId = msgMenuId === m.id ? null : m.id">⋯</button>
+                                        <div v-if="msgMenuId === m.id" class="pd-msg__menu">
+                                            <button type="button" @click="reportMessage(m)">Пожаловаться</button>
+                                            <button type="button" @click="toggleBlock(m.creator)">{{ blockedIds.has(m.creator) ? 'Разблокировать' : 'Заблокировать' }}</button>
                                         </div>
                                     </div>
                                 </div>
@@ -247,9 +255,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
+import { listBlockedUserIds, blockUser, unblockUser, reportContent } from '@/_front/moderation/moderationApi.js';
 
 const CHAT_COLS = 'id, user_1, user_2, users, read, sort_date, is_group, title, creator';
 
@@ -260,6 +269,14 @@ const usersById = ref({});     // uuid -> { id, Name, Photo }
 const activeChat = ref(null);
 const messages = ref([]);
 const text = ref('');
+
+// UGC moderation (Apple 1.2): blocked users' messages are hidden; per-message report/block menu.
+const blockedIds = ref(new Set());   // uuids the current user has blocked
+const msgMenuId = ref(null);         // id of the message whose action menu is open
+const modNote = ref('');             // transient toast under the thread header
+let modNoteTimer = null;
+// A blocked user's messages disappear from the thread immediately (1-on-1 and groups alike).
+const visibleMessages = computed(() => messages.value.filter((m) => m.creator === myId.value || !blockedIds.value.has(m.creator)));
 const sending = ref(false);
 const searchQ = ref('');
 const searchResults = ref([]);
@@ -331,6 +348,7 @@ async function load() {
     sb = getSupabase();
     myId.value = readStoredSession()?.user?.id || null;
     if (!sb || !myId.value) { loading.value = false; return; }
+    try { blockedIds.value = new Set(await listBlockedUserIds(myId.value)); } catch (e) { /* non-fatal */ }
 
     // one query covers 1-on-1 AND groups: chats whose users[] array contains me
     const { data: chats } = await sb.from('chats')
@@ -411,6 +429,7 @@ async function openChat(xId) {
 }
 
 async function afterOpen(chat) {
+    msgMenuId.value = null;   // close any open message action menu when switching threads
     if (isGroup(chat)) await ensureUsers(chat.users || []);   // resolve member names/photos
     await loadMessages(chat.id);
     subscribeMessages(chat.id);
@@ -452,6 +471,38 @@ async function send() {
         patchChat(activeChat.value.id, { sort_date: now, read: [myId.value], preview: t });
         reorderChats();
     } catch (e) { text.value = t; /* restore on failure */ } finally { sending.value = false; }
+}
+
+/* ── UGC moderation (report / block) ─────────────────────────────────────── */
+function flashNote(t) { modNote.value = t; clearTimeout(modNoteTimer); modNoteTimer = setTimeout(() => { modNote.value = ''; }, 2600); }
+async function reportMessage(m) {
+    msgMenuId.value = null;
+    if (!m || m.creator === myId.value) return;
+    try {
+        await reportContent({
+            reporter: myId.value,
+            surface: isGroup(activeChat.value) ? 'group' : 'chat',
+            targetType: 'message', targetId: m.id, targetUser: m.creator,
+            textSnapshot: m.text,
+        });
+        flashNote('Жалоба отправлена — мы рассмотрим её в течение 24 часов.');
+    } catch (e) { flashNote('Не удалось отправить жалобу.'); }
+}
+async function toggleBlock(uid) {
+    msgMenuId.value = null;
+    if (!uid || uid === myId.value) return;
+    const wasBlocked = blockedIds.value.has(uid);
+    try {
+        if (wasBlocked) {
+            await unblockUser(myId.value, uid);
+            const s = new Set(blockedIds.value); s.delete(uid); blockedIds.value = s;
+            flashNote('Пользователь разблокирован.');
+        } else {
+            await blockUser(myId.value, uid);
+            blockedIds.value = new Set([...blockedIds.value, uid]);
+            flashNote('Пользователь заблокирован — его сообщения скрыты.');
+        }
+    } catch (e) { flashNote('Не удалось изменить блокировку.'); }
 }
 
 /* ── group operations (all mutate chats.users / chats.title) ─────────────── */
@@ -770,6 +821,17 @@ function ensureFonts() {
 .pd-msg__text { display: block; font-size: 0.98rem; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
 .pd-msg__time { display: block; margin-top: 3px; text-align: right; font-size: 0.72rem; color: var(--ink-3); }
 .pd-msg.is-mine .pd-msg__time { color: rgba(255, 255, 255, 0.75); }
+
+/* per-message report/block menu (others' messages only) */
+.pd-msg__mod { position: relative; align-self: flex-end; margin-bottom: 2px; flex: none; }
+.pd-msg__kebab { border: 0; background: none; cursor: pointer; color: var(--ink-3); font-size: 18px; line-height: 1; padding: 4px 6px; border-radius: 8px; opacity: 0; transition: opacity 0.12s, background 0.12s; }
+.pd-msg:hover .pd-msg__kebab, .pd-msg__kebab:focus-visible { opacity: 1; }
+@media (hover: hover) and (pointer: fine) { .pd-msg__kebab:hover { background: var(--bg-tint); color: var(--ink); } }
+@media (hover: none) { .pd-msg__kebab { opacity: 0.55; } }
+.pd-msg__menu { position: absolute; z-index: 5; bottom: calc(100% + 4px); left: 0; min-width: 168px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-md, 0 12px 34px -12px rgba(9,23,71,.35)); padding: 5px; display: flex; flex-direction: column; }
+.pd-msg__menu button { text-align: left; border: 0; background: none; cursor: pointer; font-family: inherit; font-size: 0.9rem; font-weight: 600; color: var(--ink); padding: 9px 11px; border-radius: 8px; white-space: nowrap; }
+@media (hover: hover) and (pointer: fine) { .pd-msg__menu button:hover { background: var(--bg-tint); } }
+.pd-modnote { flex: none; margin: 0; padding: 9px 16px; background: var(--blue-tint); color: var(--blue-ink); font-size: 0.86rem; font-weight: 600; text-align: center; }
 
 .pd-thread__input { display: flex; align-items: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); flex: none; }
 .pd-thread__input textarea { flex: 1; border: 1px solid var(--line); outline: none; background: var(--bg-tint); border-radius: 20px; padding: 11px 18px; font-family: inherit; font-size: 15px; line-height: 1.4; color: var(--ink); min-width: 0; resize: none; max-height: 132px; overflow-y: auto; display: block; }

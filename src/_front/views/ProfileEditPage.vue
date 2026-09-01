@@ -141,6 +141,21 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- ── Blocked users (unblock) ───────────────────── -->
+                <div v-if="blocked.length" class="pd-card" data-reveal>
+                    <div class="pd-blk">
+                        <div class="pd-blk__head"><b>Заблокированные</b> <span class="pd-subs__n">({{ blocked.length }})</span></div>
+                        <p class="pd-blk__hint">Вы не видите сообщения и комментарии этих пользователей.</p>
+                        <div class="pd-blk__list">
+                            <div v-for="u in blocked" :key="u.id" class="pd-blk__item">
+                                <img v-if="u.Photo" :src="u.Photo" :alt="u.Name" /><span v-else class="pd-subs__i">{{ initials(u.Name) }}</span>
+                                <span class="pd-subs__name">{{ u.Name || 'Без имени' }}</span>
+                                <button type="button" class="pd-blk__unblock" @click="unblock(u.id)">Разблокировать</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
     </main>
@@ -149,6 +164,7 @@
 <script setup>
 import { ref, reactive, onMounted, nextTick } from 'vue';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
+import { listBlockedUserIds, unblockUser } from '@/_front/moderation/moderationApi.js';
 
 const STORAGE_URL = 'https://sb.meetgu.ru/storage/v1/object/public/profile//';
 const BUCKET = 'profile';
@@ -181,6 +197,7 @@ const pwOk = ref(false);
 
 const following = ref([]);
 const followers = ref([]);
+const blocked = ref([]);   // users this user has blocked (UGC moderation, Apple 1.2) — with unblock
 const openSubs = reactive({ following: false, followers: false });
 
 const USERNAME_RE = /^[a-zA-Z0-9_-]{3,20}$/;
@@ -219,6 +236,13 @@ async function loadSubs() {
     ]);
     following.value = await usersByIds((subs || []).map((r) => r.target));
     followers.value = await usersByIds((fol || []).map((r) => r.subscriber));
+    try { blocked.value = await usersByIds(await listBlockedUserIds(uid.value)); } catch (e) { /* non-fatal */ }
+}
+async function unblock(id) {
+    try {
+        await unblockUser(uid.value, id);
+        blocked.value = blocked.value.filter((u) => u.id !== id);
+    } catch (e) { /* keep row on failure */ }
 }
 async function usersByIds(ids) {
     const uniq = [...new Set(ids.filter(Boolean))];
@@ -406,6 +430,13 @@ function ensureFonts() {
 .pd-subs__i { display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-weight: 700; font-size: 0.8rem; }
 .pd-subs__name { font-weight: 600; font-size: 0.94rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pd-subs__empty { color: var(--ink-3); font-size: 0.9rem; }
+.pd-blk__head { font-size: 1.05rem; }
+.pd-blk__hint { color: var(--ink-3); font-size: 0.88rem; margin: 4px 0 12px; }
+.pd-blk__list { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; }
+.pd-blk__item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-md); }
+.pd-blk__item img, .pd-blk__item .pd-subs__i { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; flex: none; }
+.pd-blk__unblock { margin-left: auto; border: 1px solid var(--line); background: var(--surface); color: var(--blue-ink); font-family: inherit; font-weight: 600; font-size: 0.84rem; padding: 6px 12px; border-radius: var(--r-pill); cursor: pointer; white-space: nowrap; }
+@media (hover: hover) and (pointer: fine) { .pd-blk__unblock:hover { background: var(--bg-tint); } }
 
 @media (max-width: 720px) {
     .pd-grid2, .pd-subs { grid-template-columns: 1fr; }

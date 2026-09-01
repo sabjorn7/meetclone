@@ -123,6 +123,7 @@
                     </form>
                     <p v-else class="pd-cmt__login"><a href="/login" class="pd-link">Войдите</a>, чтобы оставить комментарий.</p>
 
+                    <p v-if="modNote" class="pd-cmt__note">{{ modNote }}</p>
                     <p v-if="!topComments.length" class="pd-cmt__empty">Пока нет комментариев. Будьте первым!</p>
 
                     <ul class="pd-cmt__list">
@@ -139,6 +140,8 @@
                                     <p v-else class="pd-cmt__txt">{{ c.text }}</p>
                                     <div class="pd-cmt__acts">
                                         <button v-if="myId && !c.delete" type="button" class="pd-cmt__act" @click="toggleReply(c.id)">Ответить</button>
+                                        <button v-if="myId && c.creator !== myId && !c.delete" type="button" class="pd-cmt__act" @click="reportComment(c)">Пожаловаться</button>
+                                        <button v-if="myId && c.creator !== myId" type="button" class="pd-cmt__act" @click="blockCommenter(c.creator)">Заблокировать</button>
                                         <button v-if="isSuperadmin" type="button" class="pd-cmt__act pd-cmt__act--mod" @click="toggleDelete(c)">{{ c.delete ? 'Восстановить' : 'Удалить' }}</button>
                                     </div>
 
@@ -163,8 +166,10 @@
                                                     </div>
                                                     <p v-if="r.delete" class="pd-cmt__txt pd-cmt__txt--del">Комментарий удалён</p>
                                                     <p v-else class="pd-cmt__txt">{{ r.text }}</p>
-                                                    <div v-if="isSuperadmin" class="pd-cmt__acts">
-                                                        <button type="button" class="pd-cmt__act pd-cmt__act--mod" @click="toggleDelete(r)">{{ r.delete ? 'Восстановить' : 'Удалить' }}</button>
+                                                    <div v-if="isSuperadmin || (myId && r.creator !== myId)" class="pd-cmt__acts">
+                                                        <button v-if="myId && r.creator !== myId && !r.delete" type="button" class="pd-cmt__act" @click="reportComment(r)">Пожаловаться</button>
+                                                        <button v-if="myId && r.creator !== myId" type="button" class="pd-cmt__act" @click="blockCommenter(r.creator)">Заблокировать</button>
+                                                        <button v-if="isSuperadmin" type="button" class="pd-cmt__act pd-cmt__act--mod" @click="toggleDelete(r)">{{ r.delete ? 'Восстановить' : 'Удалить' }}</button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -186,6 +191,7 @@ import { useRoute } from 'vue-router';
 import { marked } from 'marked';
 import mediumZoom from 'medium-zoom';
 import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
+import { listBlockedUserIds, blockUser, reportContent } from '@/_front/moderation/moderationApi.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PEERTUBE = 'https://video.meetgu.ru';
@@ -204,6 +210,10 @@ const article = ref(null);
 const author = ref(null);
 const comments = ref([]);
 const usersById = ref({});
+// UGC moderation (Apple 1.2): hide blocked users' comments + per-comment report/block.
+const blockedIds = ref(new Set());
+const modNote = ref('');
+let modNoteTimer = null;
 const myRating = ref(null);
 
 const bodyEl = ref(null);
@@ -232,8 +242,26 @@ const videoEmbedUrl = computed(() => {
     const p = new URLSearchParams({ title: '0', warningTitle: '0', peertubeLink: '0', p2p: '0' });
     return `${PEERTUBE}/videos/embed/${article.value.video_id}?${p.toString()}`;
 });
-const topComments = computed(() => comments.value.filter((c) => !c.Reply_to));
-function repliesOf(id) { return comments.value.filter((c) => c.Reply_to === id); }
+const notBlocked = (c) => c.creator === myId.value || !blockedIds.value.has(c.creator);
+const topComments = computed(() => comments.value.filter((c) => !c.Reply_to && notBlocked(c)));
+function repliesOf(id) { return comments.value.filter((c) => c.Reply_to === id && notBlocked(c)); }
+
+function flashNote(t) { modNote.value = t; clearTimeout(modNoteTimer); modNoteTimer = setTimeout(() => { modNote.value = ''; }, 2600); }
+async function reportComment(c) {
+    if (!c || c.creator === myId.value) return;
+    try {
+        await reportContent({ reporter: myId.value, surface: 'article', targetType: 'comment', targetId: c.id, targetUser: c.creator, textSnapshot: c.text });
+        flashNote('Жалоба отправлена — мы рассмотрим её в течение 24 часов.');
+    } catch (e) { flashNote('Не удалось отправить жалобу.'); }
+}
+async function blockCommenter(uid) {
+    if (!uid || uid === myId.value) return;
+    try {
+        await blockUser(myId.value, uid);
+        blockedIds.value = new Set([...blockedIds.value, uid]);
+        flashNote('Пользователь заблокирован — его комментарии скрыты.');
+    } catch (e) { flashNote('Не удалось заблокировать.'); }
+}
 
 /* ── helpers ────────────────────────────────────────────────────────────── */
 function initials(name) {
@@ -266,6 +294,7 @@ async function load() {
     sb = getSupabase();
     myId.value = readStoredSession()?.user?.id || null;
     if (!sb) { loading.value = false; return; }
+    if (myId.value) { try { blockedIds.value = new Set(await listBlockedUserIds(myId.value)); } catch (e) { /* non-fatal */ } }
 
     const key = route.query.slug || route.params.slug || '';
     if (!key) { loading.value = false; return; }
@@ -512,6 +541,7 @@ function ensureFonts() {
 .pd-cmt__form--reply { margin: 12px 0 4px; }
 .pd-cmt__replyacts { display: flex; gap: 8px; }
 .pd-cmt__login, .pd-cmt__empty { color: var(--ink-2); }
+.pd-cmt__note { margin: 0 0 12px; padding: 9px 14px; background: var(--blue-tint); color: var(--blue-ink); border-radius: 10px; font-size: 0.88rem; font-weight: 600; }
 .pd-cmt__login { padding: 14px 16px; background: var(--bg-tint); border-radius: var(--r-md); margin-bottom: 24px; }
 .pd-cmt__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 22px; }
 .pd-cmt__row { display: flex; gap: 12px; }

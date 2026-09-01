@@ -14,8 +14,8 @@
                 <div class="pd-blob" aria-hidden="true"></div>
                 <div class="pd-wrap pd-hero__grid">
                     <div class="pd-hero__lead">
-                        <span v-if="user.role" class="pd-badge" data-reveal>
-                            <span class="pd-badge__dot" aria-hidden="true"></span>{{ user.role }}
+                        <span v-if="roleLabel" class="pd-badge" data-reveal>
+                            <span class="pd-badge__dot" aria-hidden="true"></span>{{ roleLabel }}
                         </span>
                         <h1 class="pd-hero__title" data-reveal>{{ user.Name }}</h1>
                         <p v-if="user.city" class="pd-hero__city" data-reveal>
@@ -225,6 +225,14 @@ const initials = computed(() => {
     return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '·';
 });
 const isSchool = computed(() => user.value?.role === 'Учебное заведение');
+// The DB stores practicing members as 'Ученик', but the whole UI displays 'Специалист' (matches
+// /users roleLabel). The public profile redesign rendered user.role raw and missed this swap.
+const roleLabel = computed(() => {
+    const r = user.value?.role;
+    if (r === 'Ученик') return 'Специалист';
+    if (r === 'Спикер' || r === 'Учебное заведение') return r;
+    return ''; // other roles (admin/superadmin) get no public badge, same as /users
+});
 const aboutLabel = computed(() => (isSchool.value ? 'О школе' : hasAuthored.value ? 'Об авторе' : 'О специалисте'));
 const coursesLabel = computed(() => (isSchool.value ? 'Курсы школы' : 'Курсы автора'));
 // The taken-courses section reads as a portfolio for a specialist, or "education" for a speaker who also teaches.

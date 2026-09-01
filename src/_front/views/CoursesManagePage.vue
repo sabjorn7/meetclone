@@ -360,7 +360,11 @@
                                         <span v-else class="pd-grant__ava pd-grant__ava--i">{{ initials(u.Name) }}</span>
                                         <span class="pd-grant__name">{{ u.Name || 'Без имени' }}<em>{{ u.email }}</em></span>
                                     </span>
-                                    <button type="button" class="pd-btn pd-btn--sm" :disabled="grantBusyId === u.id" @click="grantAccess(u)">{{ grantBusyId === u.id ? '…' : 'Выдать' }}</button>
+                                    <span class="pd-grant__act">
+                                        <span v-if="u.grant" class="pd-grant__tag" :class="`pd-grant__tag--${u.grant.kind}`">{{ kindLabel(u.grant.kind) }}</span>
+                                        <button v-if="!u.grant" type="button" class="pd-btn pd-btn--sm" :disabled="grantBusyId === u.id" @click="grantAccess(u)">{{ grantBusyId === u.id ? '…' : 'Выдать' }}</button>
+                                        <button v-else-if="u.grant.kind !== 'buy'" type="button" class="pd-btn pd-btn--sm pd-btn--dangerghost" :disabled="grantBusyId === u.id" @click="revokeFromSearch(u)">{{ grantBusyId === u.id ? '…' : 'Отозвать' }}</button>
+                                    </span>
                                 </li>
                             </ul>
                             <p v-else-if="grantSearch.trim().length >= 2 && !grantSearching" class="pd-hint">Никого не найдено.</p>
@@ -375,9 +379,10 @@
                                         <img v-if="g.Photo" :src="g.Photo" :alt="g.Name" class="pd-grant__ava" />
                                         <span v-else class="pd-grant__ava pd-grant__ava--i">{{ initials(g.Name) }}</span>
                                         <span class="pd-grant__name">
-                                            {{ g.Name || g.email || 'Пользователь' }}
+                                            {{ g.Name || 'Пользователь' }}
+                                            <em v-if="g.email" class="pd-grant__mail">{{ g.email }}</em>
                                             <em>
-                                                <span class="pd-grant__tag" :class="`pd-grant__tag--${g.kind}`">{{ g.kind === 'buy' ? 'Куплен' : (g.kind === 'free' ? 'Выдан' : 'Не оплачен') }}</span>
+                                                <span class="pd-grant__tag" :class="`pd-grant__tag--${g.kind}`">{{ kindLabel(g.kind) }}</span>
                                                 {{ g.end_period ? '· до ' + fmtDate(g.end_period) : '· бессрочно' }}
                                             </em>
                                         </span>
@@ -1216,6 +1221,7 @@ async function loadGrantees(c) {
     } catch (e) { grantError.value = 'Не удалось загрузить список.'; }
     finally { granteesLoading.value = false; }
 }
+const kindLabel = (kind) => (kind === 'buy' ? 'Куплен' : (kind === 'free' ? 'Выдан' : 'Не оплачен'));
 let grantSearchSeq = 0;
 async function searchGrantUsers() {
     const q = grantSearch.value.trim();
@@ -1228,8 +1234,22 @@ async function searchGrantUsers() {
             .select('id, "Name", email, "Photo"')
             .or(`Name.ilike.%${q}%,email.ilike.%${q}%`).limit(8);
         if (seq !== grantSearchSeq) return; // a newer search superseded this one
-        const grantedIds = new Set(grantees.value.map((g) => g.id));
-        grantResults.value = (data || []).filter((u) => u.id !== myId.value && !grantedIds.has(u.id));
+        const users = (data || []).filter((u) => u.id !== myId.value);
+        // Annotate each match with its access status FOR THIS COURSE instead of hiding already-granted
+        // users (which read as "not found"). Query only the shown ids, so it's accurate even for courses
+        // with more students than the 300-row roster cap.
+        const grantMap = {};
+        const ids = users.map((u) => u.id);
+        if (ids.length && editing.value && !editing.value.isCreate) {
+            const { data: ucs } = await sb.from('user_course')
+                .select('id, "user", buy, "Free"').eq('course', editing.value.id).in('user', ids);
+            for (const r of (ucs || [])) {
+                if (grantMap[r.user]) continue; // first row wins if a user has several
+                grantMap[r.user] = { ucId: r.id, kind: r.buy ? 'buy' : (r.Free ? 'free' : 'pending') };
+            }
+        }
+        if (seq !== grantSearchSeq) return;
+        grantResults.value = users.map((u) => ({ ...u, grant: grantMap[u.id] || null }));
     } catch (e) { /* keep silent; the list just stays empty */ }
     finally { if (seq === grantSearchSeq) grantSearching.value = false; }
 }
@@ -1251,9 +1271,17 @@ async function grantAccess(student) {
         await sb.from('users').update({ buied_courses: [...bc, ucId], buied_course_orig: [...bco, c.id] }).eq('id', student.id);
         grantees.value = [{ ucId, end_period, kind: 'free', ...student }, ...grantees.value];
         granteesTotal.value += 1;
-        grantSearch.value = ''; grantResults.value = [];
+        // Keep the person in the search results, flipped in place to "granted" (tag + «Отозвать»),
+        // rather than clearing the query — so the teacher sees the outcome without re-searching.
+        const hit = grantResults.value.find((r) => r.id === student.id);
+        if (hit) hit.grant = { ucId, kind: 'free' };
     } catch (e) { grantError.value = `Не удалось выдать доступ: ${e?.message || 'ошибка'}`; }
     finally { grantBusyId.value = null; }
+}
+// Revoke initiated from a search-result row (carries the grant's ucId).
+function revokeFromSearch(u) {
+    if (!u.grant) return;
+    return revokeAccess({ id: u.id, ucId: u.grant.ucId });
 }
 async function revokeAccess(g) {
     if (grantBusyId.value) return;
@@ -1271,6 +1299,9 @@ async function revokeAccess(g) {
         await sb.from('users').update({ buied_courses: bc, buied_course_orig: bco }).eq('id', g.id);
         grantees.value = grantees.value.filter((x) => x.ucId !== g.ucId);
         granteesTotal.value = Math.max(0, granteesTotal.value - 1);
+        // keep any matching search-result row in sync (flip it back to «Выдать»)
+        const hit = grantResults.value.find((r) => r.grant && r.grant.ucId === g.ucId);
+        if (hit) hit.grant = null;
     } catch (e) { grantError.value = `Не удалось отозвать доступ: ${e?.message || 'ошибка'}`; }
     finally { grantBusyId.value = null; }
 }
@@ -1608,8 +1639,9 @@ function ensureFonts() {
 .pd-grant__ava { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; }
 .pd-grant__ava--i { display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-weight: 700; font-size: 0.75rem; }
 .pd-grant__name { display: flex; flex-direction: column; min-width: 0; font-size: 0.92rem; font-weight: 600; color: var(--ink); line-height: 1.2; }
-.pd-grant__name em { font-style: normal; font-weight: 400; font-size: 0.8rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pd-grant__act { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.pd-grant__name em { font-style: normal; font-weight: 400; font-size: 0.8rem; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.pd-grant__mail { margin-top: 1px; }
+.pd-grant__act { display: inline-flex; align-items: center; gap: 8px; flex: none; }
 .pd-iconbtn { text-decoration: none; }
 .pd-grant__tag { display: inline-block; padding: 1px 7px; border-radius: var(--r-pill); font-size: 0.72rem; font-weight: 700; }
 .pd-grant__tag--buy { background: var(--green-tint); color: var(--green); }

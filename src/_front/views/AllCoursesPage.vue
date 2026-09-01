@@ -130,7 +130,8 @@
                             </li>
                         </ul>
                         <div class="pd-qv__actions">
-                            <button class="pd-btn" type="button" :disabled="buying" @click="buyFromQuickView">{{ qvBuyLabel }}</button>
+                            <a v-if="qvOwns" class="pd-btn" :href="`/my_courses?course=${qv.id}`">Уже в библиотеке</a>
+                            <button v-else class="pd-btn" type="button" :disabled="buying" @click="buyFromQuickView">{{ qvBuyLabel }}</button>
                             <a class="pd-btn pd-btn--ghost" :href="courseHref(qv)">Подробнее о курсе</a>
                             <span class="pd-qv__price" :class="{ 'is-free': qv.Free }">{{ qv.Free ? 'Бесплатно' : money(qv.Price) + ' ₽' }}</span>
                         </div>
@@ -146,7 +147,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
-import { getBuyerRow, enrollFree, addToCart, courseInCart } from '@/_front/course/coursesApi.js';
+import { getBuyerRow, ownsCourse, enrollFree, addToCart, courseInCart } from '@/_front/course/coursesApi.js';
 
 const courses = ref([]);
 const authorsById = ref({});
@@ -164,6 +165,7 @@ const buyer = ref(null);         // full users row (resolved lazily on first buy
 const buying = ref(false);
 const buyError = ref('');
 const qvInCart = ref(false);     // the quick-view course is already in the cart
+const qvOwns = ref(false);       // the quick-view course is already owned (a user_course row exists)
 const qvStats = ref(null);       // {lessons, materials, students, reviews, ratings, avg} for the popup
 const showAuthModal = ref(false); // guest tried to buy → login/register prompt
 
@@ -243,6 +245,7 @@ function openQuickView(c) {
     qv.value = c;
     buyError.value = '';
     qvInCart.value = false;
+    qvOwns.value = false;
     // Stats are set SYNCHRONOUSLY from the already-loaded course row (Less_Id / comment / rating), so the
     // block is in the first render — no dependency on an async re-render. Materials (lessons File) and the
     // student count need extra queries, so they load best-effort below and patch in when they resolve.
@@ -263,6 +266,8 @@ function openQuickView(c) {
     const patch = (extra) => { if (qv.value?.id === c.id && qvStats.value) qvStats.value = { ...qvStats.value, ...extra }; };
     // cart state (paid, logged-in) — drives the "В корзине" label
     if (buyerId.value && !c.Free) courseInCart(sb, c.id, buyerId.value).then((v) => { if (qv.value?.id === c.id) qvInCart.value = v; }).catch(() => {});
+    // ownership → "Уже в библиотеке" (same source of truth as CoursePage: a user_course row)
+    if (buyerId.value) ownsCourse(sb, c.id, buyerId.value).then((v) => { if (qv.value?.id === c.id) qvOwns.value = v; }).catch(() => {});
     // materials = lessons that carry a File
     if (lids.length) {
         sb.from('lessons').select('id, "File"').in('id', lids)

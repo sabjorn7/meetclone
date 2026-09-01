@@ -49,8 +49,8 @@
                             </div>
                             <template v-if="owns">
                                 <button v-if="canRenew" class="pd-btn pd-btn--lg pd-btn--block" type="button" :disabled="buying" @click="onRenew">{{ renewLabel }}</button>
-                                <a v-else class="pd-btn pd-btn--lg pd-btn--block" href="/my_courses">Уже в библиотеке</a>
-                                <a v-if="canRenew" class="pd-owned-link" href="/my_courses">Уже куплено — открыть в «Мои курсы»</a>
+                                <a v-else class="pd-btn pd-btn--lg pd-btn--block" :href="myCoursesHref">Уже в библиотеке</a>
+                                <a v-if="canRenew" class="pd-owned-link" :href="myCoursesHref">Уже куплено — открыть в «Мои курсы»</a>
                             </template>
                             <button v-else class="pd-btn pd-btn--lg pd-btn--block" type="button" :disabled="buying" @click="onBuy">{{ ctaLabel }}</button>
                             <p v-if="buyError" class="pd-buyerr">{{ buyError }}</p>
@@ -161,7 +161,7 @@
                             <p v-if="course.old_price" class="pd-price__old">{{ money(course.old_price) }} ₽</p>
                             <template v-if="owns">
                                 <button v-if="canRenew" class="pd-btn pd-btn--lg pd-btn--block" type="button" :disabled="buying" @click="onRenew">{{ renewLabel }}</button>
-                                <a v-else class="pd-btn pd-btn--lg pd-btn--block" href="/my_courses">Уже в библиотеке</a>
+                                <a v-else class="pd-btn pd-btn--lg pd-btn--block" :href="myCoursesHref">Уже в библиотеке</a>
                             </template>
                             <button v-else class="pd-btn pd-btn--lg pd-btn--block" type="button" :disabled="buying" @click="onBuy">{{ ctaLabel }}</button>
                             <p v-if="buyError" class="pd-buyerr">{{ buyError }}</p>
@@ -294,6 +294,8 @@ const ctaLabel = computed(() => {
 // Renewal is offered to owners only when the author set a positive DurationPrice (parity with the
 // WeWeb course_info owner branch; DurationPrice<=0 → no self-serve renewal, just the library link).
 const canRenew = computed(() => owns.value && Number(course.value?.DurationPrice) > 0);
+// owned course → deep-link into its player (MyCoursePage reads ?course=<id>; bare /my_courses shows "Курс не найден")
+const myCoursesHref = computed(() => `/my_courses?course=${course.value?.id}`);
 const renewLabel = computed(() => {
     if (buying.value) return 'Секунду…';
     return inCart.value ? 'Продление в корзине — оформить' : `Продлить за ${money(course.value?.DurationPrice)} ₽`;

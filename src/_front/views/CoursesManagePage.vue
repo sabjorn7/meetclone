@@ -615,6 +615,10 @@ const lessonSaving = ref(false);
 const materialBusy = ref(false);
 const lessonError = ref('');
 const lessonBusyId = ref(null);    // row-level spinner (reorder/delete)
+// True when loadLessons couldn't fetch a row for EVERY id in Less_Id. A partial set must
+// never be persisted back (add/delete/reorder write lessons.value → Less_Id), or the missing
+// lesson is permanently orphaned. We block those edits until a clean reload.
+const lessonsIncomplete = ref(false);
 
 // ── Phase 4: PeerTube video (lesson video + course teaser) ──
 const videoUploading = ref(false); // true while a chunked upload runs (blocks a second one)
@@ -986,17 +990,26 @@ async function writeLessId(courseId, ids) {
 async function loadLessons(c) {
     if (!c || c.isCreate) return;
     lessonsLoading.value = true;
+    lessonsIncomplete.value = false;
+    lessonError.value = '';
     try {
         const ids = Array.isArray(c.Less_Id) ? c.Less_Id : [];
         if (!ids.length) { lessons.value = []; return; }
-        const { data } = await sb.from('lessons').select('id, "Title", "Descr", "File", video_id, video_size, resume_video_id, resume_chunk, resume_name, ban_list').in('id', ids);
+        const { data, error } = await sb.from('lessons').select('id, "Title", "Descr", "File", video_id, video_size, resume_video_id, resume_chunk, resume_name, ban_list').in('id', ids);
+        if (error) throw error;
         const byId = Object.fromEntries((data || []).map((l) => [l.id, l]));
-        lessons.value = ids.map((id) => byId[id]).filter(Boolean); // keep Less_Id order
-    } catch (e) { lessonError.value = 'Не удалось загрузить уроки.'; }
+        const loaded = ids.map((id) => byId[id]);
+        // Any id without a row → the fetch is INCOMPLETE. Keep what loaded for display, but
+        // flag it so the Less_Id-writing edits (add/delete/reorder) refuse to run and can't
+        // persist a shortened array over the real one.
+        lessonsIncomplete.value = loaded.some((l) => !l);
+        lessons.value = loaded.filter(Boolean); // keep Less_Id order
+        if (lessonsIncomplete.value) lessonError.value = 'Часть уроков не загрузилась. Редактирование заблокировано, чтобы не потерять их — обновите страницу.';
+    } catch (e) { lessonsIncomplete.value = true; lessonError.value = 'Не удалось загрузить уроки. Редактирование заблокировано — обновите страницу.'; }
     finally { lessonsLoading.value = false; }
 }
 async function addLesson() {
-    if (!editing.value || editing.value.isCreate || lessonSaving.value || !editable.value) return;
+    if (!editing.value || editing.value.isCreate || lessonSaving.value || !editable.value || lessonsIncomplete.value) return;
     lessonError.value = '';
     try {
         const n = lessons.value.length + 1;
@@ -1032,7 +1045,7 @@ async function saveLessonMeta() {
     finally { lessonSaving.value = false; }
 }
 async function deleteLesson(lesson) {
-    if (lessonBusyId.value || !editable.value) return;
+    if (lessonBusyId.value || !editable.value || lessonsIncomplete.value) return;
     lessonBusyId.value = lesson.id; lessonError.value = '';
     try {
         // remove the material object too, if any (best-effort)
@@ -1047,7 +1060,7 @@ async function deleteLesson(lesson) {
 }
 async function moveLesson(idx, dir) {
     const j = idx + dir;
-    if (j < 0 || j >= lessons.value.length || lessonBusyId.value || !editable.value) return;
+    if (j < 0 || j >= lessons.value.length || lessonBusyId.value || !editable.value || lessonsIncomplete.value) return;
     const arr = lessons.value.slice();
     [arr[idx], arr[j]] = [arr[j], arr[idx]];
     lessons.value = arr;

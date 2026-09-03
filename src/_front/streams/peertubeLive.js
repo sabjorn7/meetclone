@@ -172,6 +172,9 @@ export async function getVideoInfo(videoId) {
             previewPath: v.previewPath || null,
             thumbnailPath: v.thumbnailPath || null,
             hasPlaylist: Array.isArray(v.streamingPlaylists) && v.streamingPlaylists.length > 0,
+            // Current concurrent live viewers (PeerTube exposes `viewers` on the public video
+            // object while a live is on air; absent/0 otherwise). Public, no auth needed.
+            viewers: Number.isFinite(v.viewers) ? v.viewers : null,
             name: v.name,
         };
     } catch (_) {

@@ -13,6 +13,7 @@
             <template v-else>
                 <div class="sp-detail-head">
                     <span class="sp-badge" :class="'sp-badge-' + displayState">{{ displayLabel }}</span>
+                    <span v-if="displayState === 'live' && viewers != null" class="sp-badge sp-badge-viewers">👁 {{ viewers }} {{ viewerWord(viewers) }}</span>
                     <span class="sp-price">{{ priceLabel(detail) }}</span>
                 </div>
                 <h2 class="sp-detail-title">{{ detail.title }}</h2>
@@ -436,6 +437,17 @@ const playerSrc = computed(() =>
         ? embedUrl(detail.value.peertube_video_id, { autoplay: displayState.value === 'live' })
         : ''
 );
+// Current live viewers (from PeerTube's public `viewers`), refreshed by the poll while live.
+const viewers = computed(() => detailInfo.value?.viewers ?? null);
+// Russian verb agreement: "1 смотрит", "2 смотрят", "21 смотрит" …
+function viewerWord(n) {
+    return (n % 10 === 1 && n % 100 !== 11) ? 'смотрит' : 'смотрят';
+}
+// Poll PeerTube while the live is waiting, on air (to refresh viewers + catch the end), or its
+// replay is still transcoding.
+function shouldPoll() {
+    return displayState.value === 'scheduled' || displayState.value === 'live' || replayProcessing.value;
+}
 
 async function loadDetail(id) {
     detailLoading.value = true;
@@ -457,7 +469,7 @@ async function loadDetail(id) {
         }
         // Poll while waiting for the live to start (state 4 → 1) OR for a just-ended live's replay
         // to finish transcoding (ended but not yet playable).
-        if ((displayState.value === 'scheduled' || replayProcessing.value) && detail.value?.peertube_video_id) startPoll();
+        if (shouldPoll() && detail.value?.peertube_video_id) startPoll();
         // Viewer chat — same access gate as the stream; poll for new messages while open.
         if (hasAccess.value) {
             chatLoading.value = true;
@@ -489,16 +501,16 @@ async function buyStream() {
 function startPoll() {
     stopPoll();
     let attempts = 0;
-    const maxAttempts = Math.ceil((15 * 60000) / 20000); // ~15 min backstop (replay transcoding)
+    const maxAttempts = Math.ceil((6 * 3600000) / 20000); // ~6h backstop (covers a long live)
     pollTimer = setInterval(async () => {
         if (!detail.value?.peertube_video_id) return stopPoll();
         detailInfo.value = await getVideoInfo(detail.value.peertube_video_id);
-        // re-fetch the author's cached status too (they may have pressed "я в эфире")
+        // re-fetch the author's cached status too (they may have pressed "я в эфире" / ended it)
         const fresh = await getStreamById(supa(), detail.value.id);
         if (fresh) detail.value = fresh;
         attempts += 1;
-        // Stop once the live has resolved AND we're not waiting on a replay, or after the backstop.
-        if ((displayState.value !== 'scheduled' && !replayProcessing.value) || attempts >= maxAttempts) stopPoll();
+        // Keep polling while waiting / live (viewer count) / replay transcoding; stop otherwise.
+        if (!shouldPoll() || attempts >= maxAttempts) stopPoll();
     }, 20000);
 }
 function stopPoll() {
@@ -1038,6 +1050,10 @@ onBeforeUnmount(() => {
 .sp-badge-hidden {
     background: #fff4e5;
     color: #b06a00;
+}
+.sp-badge-viewers {
+    background: #eaf1fe;
+    color: #2360c6;
 }
 .sp-notice {
     background: #eef6ff;

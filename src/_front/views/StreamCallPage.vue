@@ -20,8 +20,17 @@
         <template v-else>
             <div v-if="reconnecting" class="lkc-banner">Переподключение…</div>
 
-            <div class="lkc-grid" :class="gridClass">
-                <StreamTile v-for="p in participants" :key="p.sid" :entry="p" />
+            <!-- Screen share present → spotlight (big screen + small camera strip); else camera grid -->
+            <div v-if="screenShares.length" class="lkc-stage">
+                <div class="lkc-spotlight">
+                    <StreamTile :entry="screenShares[0]" />
+                </div>
+                <div class="lkc-strip">
+                    <StreamTile v-for="p in participants" :key="p.key" :entry="p" />
+                </div>
+            </div>
+            <div v-else class="lkc-grid" :class="gridClass">
+                <StreamTile v-for="p in participants" :key="p.key" :entry="p" />
             </div>
 
             <!-- Owner roster panel -->
@@ -77,6 +86,19 @@
                         <polygon points="23 7 16 12 23 17 23 7" />
                         <rect x="1" y="5" width="15" height="14" rx="2" />
                         <line v-if="!camOn" x1="2" y1="2" x2="22" y2="22" />
+                    </svg>
+                </button>
+                <button
+                    v-if="canScreenShare"
+                    class="lkc-ctrl"
+                    :class="{ on: screenSharing }"
+                    :title="screenSharing ? 'Остановить демонстрацию' : 'Демонстрация экрана'"
+                    @click="toggleScreenShare"
+                >
+                    <svg class="lkc-ic" viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="2" y="3" width="20" height="14" rx="2" />
+                        <line x1="8" y1="21" x2="16" y2="21" />
+                        <line x1="12" y1="17" x2="12" y2="21" />
                     </svg>
                 </button>
 
@@ -141,11 +163,17 @@ let reconnectAttempt = 0;
 let reconnectTimer = null;
 let refreshTimer = null; // proactive token refresh before the 2h TTL
 
-const participants = ref([]); // flat plain snapshots (see snapshot())
+const participants = ref([]); // camera snapshots, one per participant
+const screenShares = ref([]); // active screen-share snapshots (spotlight)
 const micOn = ref(true);
 const camOn = ref(true);
+const screenSharing = ref(false); // is THIS device sharing its screen
 const userWantsCamera = ref(true); // intent — survives the background camera suspend
 const role = ref('cohost');
+
+// Screen share is desktop-only (getDisplayMedia is absent on mobile browsers).
+const canScreenShare =
+    typeof navigator !== 'undefined' && !!navigator.mediaDevices && !!navigator.mediaDevices.getDisplayMedia;
 
 const devices = ref({ cams: [], mics: [] });
 const selectedCam = ref('');
@@ -183,16 +211,19 @@ const REBUILD_ON = [
     RoomEvent.ActiveSpeakersChanged,
 ];
 
-function snapshot(p, isLocal) {
-    const camPub = p.getTrackPublication(Track.Source.Camera);
+// One snapshot per (participant, source). `active` = there's a live, unmuted track for that source.
+function snapshot(p, isLocal, source) {
+    const pub = p.getTrackPublication(source);
     return {
+        key: `${p.sid}:${source}`,
         sid: p.sid,
         identity: p.identity,
         name: p.name || p.identity,
         isLocal,
+        source,
         speaking: p.isSpeaking,
         micEnabled: p.isMicrophoneEnabled,
-        hasCamera: !!camPub && !!camPub.track && !camPub.isMuted,
+        active: !!pub && !!pub.track && !pub.isMuted,
         participant: markRaw(p),
     };
 }
@@ -200,12 +231,15 @@ function snapshot(p, isLocal) {
 function syncParticipants() {
     const r = room.value;
     if (!r) return;
-    participants.value = [
-        snapshot(r.localParticipant, true),
-        ...[...r.remoteParticipants.values()].map((p) => snapshot(p, false)),
-    ];
+    const all = [r.localParticipant, ...r.remoteParticipants.values()];
+    participants.value = all.map((p) => snapshot(p, p === r.localParticipant, Track.Source.Camera));
+    // Screen shares are a separate publication on the same participant → their own spotlight tiles.
+    screenShares.value = all
+        .map((p) => snapshot(p, p === r.localParticipant, Track.Source.ScreenShare))
+        .filter((s) => s.active);
     micOn.value = r.localParticipant.isMicrophoneEnabled;
     camOn.value = r.localParticipant.isCameraEnabled;
+    screenSharing.value = r.localParticipant.isScreenShareEnabled;
 }
 
 function handleTrackSubscribed(track) {
@@ -403,6 +437,18 @@ function onPickMic(e) {
     selectedMic.value = id;
     room.value?.switchActiveDevice('audioinput', id).catch(() => {});
 }
+async function toggleScreenShare() {
+    const r = room.value;
+    if (!r) return;
+    try {
+        // Video only (no screen audio in v1). getDisplayMedia shows the browser's native picker;
+        // if the user cancels or denies it rejects → no-op. Stopping via the browser's own "Stop
+        // sharing" bar fires LocalTrackUnpublished → syncParticipants resets screenSharing.
+        await r.localParticipant.setScreenShareEnabled(!screenSharing.value);
+    } catch {
+        /* picker cancelled / permission denied */
+    }
+}
 
 function leave() {
     leaving = true;
@@ -563,6 +609,41 @@ onBeforeRouteLeave(() => {
 }
 .lkc-grid--3 {
     grid-template-columns: repeat(3, min(31vw, 460px));
+}
+/* Screen-share spotlight: big shared screen on top, small camera strip below. */
+.lkc-stage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 12px 100px;
+}
+.lkc-spotlight {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+.lkc-spotlight :deep(.lkc-tile) {
+    aspect-ratio: auto;
+    width: 100%;
+    height: 100%;
+}
+.lkc-strip {
+    flex: 0 0 auto;
+    height: 96px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+}
+.lkc-strip :deep(.lkc-tile) {
+    aspect-ratio: 16 / 9;
+    width: auto;
+    height: 100%;
+    flex: 0 0 auto;
+}
+.lkc-ctrl.on {
+    background: #2563eb;
 }
 .lkc-controls {
     position: fixed;

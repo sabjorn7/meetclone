@@ -1,20 +1,22 @@
 <template>
-    <div class="lkc-tile" :class="{ 'is-speaking': entry.speaking }">
+    <div class="lkc-tile" :class="{ 'is-speaking': entry.speaking && !isScreen }">
         <video
-            v-show="entry.hasCamera"
+            v-show="entry.active"
             ref="videoEl"
             class="lkc-tile__video"
+            :class="{ screen: isScreen, mirror: entry.isLocal && !isScreen }"
             autoplay
             playsinline
             :muted="entry.isLocal"
         ></video>
-        <div v-if="!entry.hasCamera" class="lkc-tile__avatar">{{ initials }}</div>
+        <div v-if="!entry.active" class="lkc-tile__avatar">{{ initials }}</div>
         <div class="lkc-tile__bar">
-            <span class="lkc-tile__mic" :class="{ off: !entry.micEnabled }">
+            <span v-if="!isScreen" class="lkc-tile__mic" :class="{ off: !entry.micEnabled }">
                 {{ entry.micEnabled ? '🎙' : '🔇' }}
             </span>
             <span class="lkc-tile__name">
-                {{ entry.name }}<template v-if="entry.isLocal"> (вы)</template>
+                {{ entry.name }}<template v-if="entry.isLocal"> (вы)</template
+                ><template v-if="isScreen"> — экран</template>
             </span>
         </div>
     </div>
@@ -29,17 +31,19 @@ const videoEl = ref(null);
 // The currently-attached LiveKit track (kept out of reactivity — plain local var).
 let attached = null;
 
+const isScreen = computed(() => props.entry.source === Track.Source.ScreenShare);
+
 const initials = computed(() => {
     const parts = (props.entry.name || '').trim().split(/\s+/).slice(0, 2);
     return parts.map((s) => (s[0] ? s[0].toUpperCase() : '')).join('') || '?';
 });
 
-// Attach/detach the participant's camera track to our <video>. Runs after render (flush:'post')
-// so the element exists; detaches the old track on any change to avoid leaking media elements.
+// Attach/detach the participant's track for this tile's source (camera OR screen) to our <video>.
+// Runs after render (flush:'post'); detaches the old track on any change to avoid leaking elements.
 function sync() {
     const p = props.entry.participant;
-    const pub = p && p.getTrackPublication ? p.getTrackPublication(Track.Source.Camera) : null;
-    const track = props.entry.hasCamera && pub ? pub.track : null;
+    const pub = p && p.getTrackPublication ? p.getTrackPublication(props.entry.source) : null;
+    const track = props.entry.active && pub ? pub.track : null;
     if (track === attached) return;
     if (attached && videoEl.value) attached.detach(videoEl.value);
     attached = null;
@@ -49,7 +53,7 @@ function sync() {
     }
 }
 
-watch(() => [props.entry.hasCamera, props.entry.participant], sync, {
+watch(() => [props.entry.active, props.entry.participant, props.entry.source], sync, {
     immediate: true,
     flush: 'post',
 });
@@ -78,6 +82,14 @@ onBeforeUnmount(() => {
     height: 100%;
     object-fit: cover;
     display: block;
+}
+/* A shared screen is letterboxed (never cropped) and never mirrored. */
+.lkc-tile__video.screen {
+    object-fit: contain;
+    background: #000;
+}
+.lkc-tile__video.mirror {
+    transform: scaleX(-1);
 }
 .lkc-tile__avatar {
     width: 100%;

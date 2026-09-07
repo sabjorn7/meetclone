@@ -160,6 +160,18 @@
                             <input v-model="form.scheduledAt" type="datetime-local" />
                         </label>
                         <div class="sp-field">
+                            <span>Формат эфира</span>
+                            <div class="sp-radio-row">
+                                <label class="sp-radio"><input type="radio" value="solo" v-model="form.format" /> Один ведущий</label>
+                                <label class="sp-radio"><input type="radio" value="multi" v-model="form.format" /> Со-ведущие</label>
+                            </div>
+                            <p class="sp-note">
+                                {{ form.format === 'multi'
+                                    ? 'Несколько ведущих в одном кадре. Приглашение и запуск — на странице эфира.'
+                                    : 'Классический эфир: камера телефона или OBS, один ведущий.' }}
+                            </p>
+                        </div>
+                        <div class="sp-field">
                             <span>Доступ</span>
                             <div class="sp-radio-row">
                                 <label class="sp-radio"><input type="radio" value="free" v-model="form.kind" /> Бесплатно</label>
@@ -317,7 +329,7 @@ const notice = ref('');
 const error = ref('');
 const creds = ref(null);
 const maskKey = ref(false);
-const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3 });
+const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo' });
 const shareMsg = ref('');
 
 const canSubmit = computed(() => {
@@ -706,7 +718,7 @@ watch(replayProcessing, processing => {
 // ---------- create / author actions ----------
 function cancelForm() {
     showForm.value = false;
-    form.value = { title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3 };
+    form.value = { title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo' };
     error.value = '';
 }
 async function createBroadcast() {
@@ -715,10 +727,15 @@ async function createBroadcast() {
     error.value = '';
     try {
         const paid = form.value.kind === 'paid';
+        const multi = form.value.format === 'multi';
         const price = paid ? Number(form.value.price) : 0;
         const months = paid ? Number(form.value.months) : null;
         const scheduled_at = form.value.scheduledAt ? new Date(form.value.scheduledAt).toISOString() : null;
-        const live = await createLive(supa(), { name: form.value.title, description: form.value.description, saveReplay: true });
+        // Multi (co-host): NO PeerTube live / OBS creds here — the orchestrator's /live/start
+        // creates the live + composite egress when the owner goes live from the stream page.
+        const live = multi
+            ? null
+            : await createLive(supa(), { name: form.value.title, description: form.value.description, saveReplay: true });
         // Paid → create the hidden backing course first, then link it to the stream.
         const backingId = paid
             ? await createBackingCourse(supa(), { owner: me.value.id, title: form.value.title, price, months })
@@ -728,14 +745,22 @@ async function createBroadcast() {
             title: form.value.title,
             description: form.value.description,
             price,
-            peertube_video_id: live.video.uuid,
+            peertube_video_id: multi ? null : live.video.uuid,
             access_months: months,
             backing_course_id: backingId,
             scheduled_at,
+            mode: multi ? 'multi' : 'solo',
         });
         const withAuthor = { ...row, authorUser: me.value };
         myStreams.value.unshift(withAuthor);
         listItems.value.unshift(withAuthor);
+        if (multi) {
+            // No OBS creds for a co-host stream — send the owner to the stream page,
+            // where "Начать эфир" + the roster (invite) live.
+            cancelForm();
+            router.push(`/streams?stream=${row.id}`);
+            return;
+        }
         creds.value = { title: row.title, rtmpUrl: live.rtmpUrl, streamKey: live.streamKey };
         maskKey.value = false;
         cancelForm();

@@ -71,6 +71,14 @@
                 </ul>
             </div>
 
+            <!-- Presenter-only slide navigation -->
+            <div v-if="presenting" class="lkc-presbar">
+                <button class="lkc-navbtn" :disabled="pageNum <= 1" @click="gotoPage(-1)">←</button>
+                <span class="lkc-navlabel">{{ pageNum }} / {{ pageCount }}</span>
+                <button class="lkc-navbtn" :disabled="pageNum >= pageCount" @click="gotoPage(1)">→</button>
+                <button class="lkc-navbtn lkc-navbtn--stop" @click="stopPresentation">Завершить</button>
+            </div>
+
             <!-- Controls -->
             <div class="lkc-controls">
                 <button class="lkc-ctrl" :class="{ off: !micOn }" title="Микрофон" @click="toggleMic">
@@ -91,7 +99,8 @@
                 <button
                     v-if="canScreenShare"
                     class="lkc-ctrl"
-                    :class="{ on: screenSharing }"
+                    :class="{ on: screenSharing && !presenting }"
+                    :disabled="presenting"
                     :title="screenSharing ? 'Остановить демонстрацию' : 'Демонстрация экрана'"
                     @click="toggleScreenShare"
                 >
@@ -99,6 +108,20 @@
                         <rect x="2" y="3" width="20" height="14" rx="2" />
                         <line x1="8" y1="21" x2="16" y2="21" />
                         <line x1="12" y1="17" x2="12" y2="21" />
+                    </svg>
+                </button>
+                <button
+                    class="lkc-ctrl"
+                    :class="{ on: presenting }"
+                    :disabled="screenSharing && !presenting"
+                    :title="presenting ? 'Завершить презентацию' : 'Презентация (PDF)'"
+                    @click="presenting ? stopPresentation() : startPresentation()"
+                >
+                    <svg class="lkc-ic" viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="14" rx="1" />
+                        <line x1="3" y1="9" x2="21" y2="9" />
+                        <line x1="12" y1="18" x2="12" y2="21" />
+                        <line x1="8" y1="21" x2="16" y2="21" />
                     </svg>
                 </button>
 
@@ -132,6 +155,15 @@
 
         <!-- Hidden container for remote audio elements -->
         <div ref="audioBox" style="display: none"></div>
+        <!-- Hidden PDF-presentation canvas (published as a screen-share track) + file picker -->
+        <canvas ref="presCanvas" style="display: none"></canvas>
+        <input
+            ref="fileInput"
+            type="file"
+            accept="application/pdf,.pdf"
+            style="display: none"
+            @change="onPdfPicked"
+        />
     </div>
 </template>
 
@@ -174,6 +206,17 @@ const role = ref('cohost');
 // Screen share is desktop-only (getDisplayMedia is absent on mobile browsers).
 const canScreenShare =
     typeof navigator !== 'undefined' && !!navigator.mediaDevices && !!navigator.mediaDevices.getDisplayMedia;
+
+// PDF presentation (Approach B): render a slide to a canvas via pdf.js and publish the canvas as a
+// screen-share-source track → reuses the whole spotlight pipeline (client + egress) for free.
+const presenting = ref(false);
+const pageNum = ref(1);
+const pageCount = ref(0);
+const presCanvas = ref(null);
+const fileInput = ref(null);
+let pdfDoc = null; // pdf.js document (non-reactive)
+let presStream = null; // canvas.captureStream()
+let presMst = null; // its MediaStreamTrack (what we publish/unpublish)
 
 const devices = ref({ cams: [], mics: [] });
 const selectedCam = ref('');
@@ -450,6 +493,85 @@ async function toggleScreenShare() {
     }
 }
 
+// ── PDF presentation ──
+function startPresentation() {
+    if (presenting.value) return;
+    if (screenSharing.value) return; // busy with a real screen share (shares the ScreenShare slot)
+    fileInput.value?.click();
+}
+
+async function onPdfPicked(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // allow re-picking the same file later
+    if (!file || !room.value) return;
+    try {
+        const pdfjsLib = await import('pdfjs-dist');
+        const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+        const buf = await file.arrayBuffer();
+        pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+        pageCount.value = pdfDoc.numPages;
+        pageNum.value = 1;
+        await renderPage(1);
+        // Publish the canvas as a screen-share-source track (spotlight everywhere, no egress change).
+        presStream = presCanvas.value.captureStream(5);
+        presMst = presStream.getVideoTracks()[0];
+        await room.value.localParticipant.publishTrack(presMst, {
+            source: Track.Source.ScreenShare,
+            name: 'presentation',
+        });
+        presenting.value = true;
+    } catch {
+        window.alert('Не удалось открыть PDF.');
+        await stopPresentation();
+    }
+}
+
+async function renderPage(n) {
+    if (!pdfDoc || !presCanvas.value) return;
+    const page = await pdfDoc.getPage(n);
+    const base = page.getViewport({ scale: 1 });
+    const vp = page.getViewport({ scale: 1600 / base.width }); // ~1600px wide, crisp at 720p+
+    const c = presCanvas.value;
+    c.width = Math.round(vp.width);
+    c.height = Math.round(vp.height);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+}
+
+async function gotoPage(delta) {
+    const next = pageNum.value + delta;
+    if (next < 1 || next > pageCount.value) return;
+    pageNum.value = next;
+    await renderPage(next); // the captureStream reflects the redraw → all viewers + composite update
+}
+
+async function stopPresentation() {
+    try {
+        if (presMst && room.value) room.value.localParticipant.unpublishTrack(presMst, true);
+    } catch {
+        /* ignore */
+    }
+    try {
+        presStream && presStream.getTracks().forEach((t) => t.stop());
+    } catch {
+        /* ignore */
+    }
+    try {
+        pdfDoc && pdfDoc.destroy();
+    } catch {
+        /* ignore */
+    }
+    presStream = null;
+    presMst = null;
+    pdfDoc = null;
+    presenting.value = false;
+    pageCount.value = 0;
+    pageNum.value = 1;
+}
+
 function leave() {
     leaving = true;
     teardownRoom();
@@ -504,6 +626,7 @@ function statusLabel(c) {
 
 // Teardown — shared by unmount / route-leave. beforeunload only best-effort disconnects.
 function teardownRoom() {
+    stopPresentation();
     const r = room.value;
     if (r) {
         try {
@@ -644,6 +767,45 @@ onBeforeRouteLeave(() => {
 }
 .lkc-ctrl.on {
     background: #2563eb;
+}
+.lkc-ctrl:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+.lkc-presbar {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 84px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-family: 'Raleway', sans-serif;
+}
+.lkc-navbtn {
+    border: none;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 15px;
+}
+.lkc-navbtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+.lkc-navbtn--stop {
+    background: #dc2626;
+}
+.lkc-navlabel {
+    min-width: 52px;
+    text-align: center;
+    font-size: 14px;
 }
 .lkc-controls {
     position: fixed;

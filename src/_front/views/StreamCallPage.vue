@@ -155,8 +155,10 @@
 
         <!-- Hidden container for remote audio elements -->
         <div ref="audioBox" style="display: none"></div>
-        <!-- Hidden PDF-presentation canvas (published as a screen-share track) + file picker -->
-        <canvas ref="presCanvas" style="display: none"></canvas>
+        <!-- PDF-presentation canvas (published as a screen-share track). Positioned OFF-SCREEN
+             rather than display:none — Chrome doesn't composite a display:none canvas, so
+             captureStream() would yield blank/black frames. -->
+        <canvas ref="presCanvas" class="lkc-offscreen"></canvas>
         <input
             ref="fileInput"
             type="file"
@@ -521,6 +523,7 @@ async function onPdfPicked(e) {
         // Publish the canvas as a screen-share-source track (spotlight everywhere, no egress change).
         presStream = presCanvas.value.captureStream(5);
         presMst = presStream.getVideoTracks()[0];
+        if (typeof presMst.requestFrame === 'function') presMst.requestFrame(); // push the first slide now
         await room.value.localParticipant.publishTrack(presMst, {
             source: Track.Source.ScreenShare,
             name: 'presentation',
@@ -551,6 +554,7 @@ async function gotoPage(delta) {
     if (next < 1 || next > pageCount.value) return;
     pageNum.value = next;
     await renderPage(next); // the captureStream reflects the redraw → all viewers + composite update
+    if (presMst && typeof presMst.requestFrame === 'function') presMst.requestFrame();
 }
 
 async function stopPresentation() {
@@ -772,6 +776,14 @@ onBeforeRouteLeave(() => {
 }
 .lkc-ctrl.on {
     background: #2563eb;
+}
+/* Rendered (so Chrome composites it for captureStream) but off-screen. */
+.lkc-offscreen {
+    position: fixed;
+    left: -100000px;
+    top: 0;
+    pointer-events: none;
+    opacity: 0.01;
 }
 .lkc-ctrl:disabled {
     opacity: 0.4;

@@ -10,7 +10,9 @@
             </template>
             <template v-else>
                 <div class="lkc-spinner"></div>
-                <p class="lkc-center__text">Подключение к эфиру…</p>
+                <p class="lkc-center__text">
+                    {{ phase === 'reconnecting' ? 'Переподключение к эфиру…' : 'Подключение к эфиру…' }}
+                </p>
             </template>
         </div>
 
@@ -100,7 +102,7 @@
 <script setup>
 import { ref, shallowRef, computed, onMounted, onBeforeUnmount, markRaw } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
-import { Room, RoomEvent, Track } from 'livekit-client';
+import { DisconnectReason, Room, RoomEvent, Track } from 'livekit-client';
 
 import { getLiveToken, inviteCohost, removeCohost, LiveApiError } from '@/_front/streams/liveApi.js';
 import { listCohosts } from '@/_front/streams/cohosts.js';
@@ -113,9 +115,17 @@ const router = useRouter();
 const streamId = String(route.query.stream || '');
 
 const room = shallowRef(null); // LiveKit Room — NOT deeply reactive
-const phase = ref('loading'); // loading | connecting | connected | error
+const phase = ref('loading'); // loading | connecting | connected | reconnecting | error
 const errorMsg = ref(null);
-const reconnecting = ref(false);
+const reconnecting = ref(false); // SDK-level transient reconnect banner
+
+// Full app-level reconnect cycle (mirror of mobile call.tsx): re-mint + rejoin with exponential
+// backoff for up to RECONNECT_WINDOW_MS on a FULL disconnect, unless the reason is terminal.
+const RECONNECT_WINDOW_MS = 120000; // ~2 min, then give up
+let reconnectStart = null;
+let reconnectAttempt = 0;
+let reconnectTimer = null;
+let refreshTimer = null; // proactive token refresh before the 2h TTL
 
 const participants = ref([]); // flat plain snapshots (see snapshot())
 const micOn = ref(true);
@@ -229,13 +239,24 @@ function beforeUnloadHandler() {
     room.value?.disconnect();
 }
 
+let leaving = false;
+
 async function connect() {
     if (!streamId) {
         errorMsg.value = 'Не указан эфир.';
         phase.value = 'error';
         return;
     }
-    phase.value = 'connecting';
+    // Drop any previous room (rejoin path) before making a fresh one.
+    if (room.value) {
+        try {
+            room.value.disconnect();
+        } catch {
+            /* ignore */
+        }
+        room.value = null;
+    }
+    if (phase.value !== 'reconnecting') phase.value = 'connecting';
     errorMsg.value = null;
     try {
         const grant = await getLiveToken(supa(), streamId);
@@ -255,23 +276,97 @@ async function connect() {
 
         room.value = r;
         phase.value = 'connected';
+        reconnecting.value = false;
+        reconnectStart = null;
+        reconnectAttempt = 0;
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
         syncParticipants();
         loadDevices();
+        scheduleTokenRefresh(grant.expires_at);
     } catch (e) {
-        errorMsg.value = e instanceof LiveApiError ? e.message : e?.message || 'Не удалось подключиться к эфиру.';
-        phase.value = 'error';
+        // Membership revoked (removed) / stream gone → terminal, no point retrying.
+        if (e instanceof LiveApiError && (e.code === 'not_a_cohost' || e.code === 'stream_not_found')) {
+            errorMsg.value = 'Доступ к эфиру закрыт.';
+            phase.value = 'error';
+            return;
+        }
+        scheduleReconnect(); // network error while minting → keep trying within the window
     }
 }
 
-let leaving = false;
-function onRoomDisconnected() {
-    if (leaving) return; // user-initiated → handled by leave()
-    errorMsg.value = 'Соединение потеряно.';
-    phase.value = 'error';
+// Proactive token refresh ~10 min before the ~2h TTL, so a long call never needs a visible rejoin.
+// Feature-detected — a no-op if this livekit-client build doesn't expose updateToken.
+function scheduleTokenRefresh(expiresAt) {
+    if (refreshTimer) {
+        clearTimeout(refreshTimer);
+        refreshTimer = null;
+    }
+    const ms = new Date(expiresAt).getTime() - Date.now() - 10 * 60 * 1000;
+    if (!Number.isFinite(ms) || ms <= 0) return;
+    refreshTimer = setTimeout(async () => {
+        try {
+            const g = await getLiveToken(supa(), streamId);
+            const r = room.value;
+            if (r && typeof r.updateToken === 'function') r.updateToken(g.token);
+            else if (r && r.engine && typeof r.engine.updateToken === 'function') r.engine.updateToken(g.token);
+        } catch {
+            /* the reconnect loop re-mints on a real disconnect */
+        }
+    }, ms);
+}
+
+function terminalDisconnectMessage(reason) {
+    switch (reason) {
+        case DisconnectReason.PARTICIPANT_REMOVED:
+            return 'Владелец удалил вас из эфира.';
+        case DisconnectReason.ROOM_DELETED:
+        case DisconnectReason.ROOM_CLOSED:
+            return 'Эфир завершён.';
+        case DisconnectReason.DUPLICATE_IDENTITY:
+            return 'Вы вошли в эфир с другого устройства.';
+        default:
+            return null;
+    }
+}
+
+function scheduleReconnect() {
+    if (leaving) return;
+    if (reconnectStart == null) reconnectStart = Date.now();
+    if (Date.now() - reconnectStart > RECONNECT_WINDOW_MS) {
+        errorMsg.value = 'Не удалось переподключиться. Проверьте интернет и попробуйте снова.';
+        phase.value = 'error';
+        return;
+    }
+    const delay = Math.min(30000, 1000 * 2 ** reconnectAttempt);
+    reconnectAttempt += 1;
+    phase.value = 'reconnecting';
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => connect(), delay);
+}
+
+function onRoomDisconnected(reason) {
+    if (leaving || reason === DisconnectReason.CLIENT_INITIATED) return;
+    const term = terminalDisconnectMessage(reason);
+    if (term) {
+        errorMsg.value = term;
+        phase.value = 'error';
+        return;
+    }
+    scheduleReconnect();
 }
 
 function reconnect() {
-    teardownRoom();
+    reconnectStart = null;
+    reconnectAttempt = 0;
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+    errorMsg.value = null;
+    phase.value = 'loading';
     connect();
 }
 
@@ -360,6 +455,14 @@ function teardownRoom() {
     audioEls.forEach((el) => el.parentNode && el.parentNode.removeChild(el));
     audioEls.clear();
     room.value = null;
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+    if (refreshTimer) {
+        clearTimeout(refreshTimer);
+        refreshTimer = null;
+    }
 }
 
 onMounted(() => {

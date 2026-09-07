@@ -63,7 +63,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .lkc-tile {
     position: relative;
-    aspect-ratio: 3 / 4;
+    aspect-ratio: 16 / 9;
+    width: 100%;
     border-radius: 14px;
     overflow: hidden;
     background: #161b2e;

@@ -410,18 +410,20 @@ onBeforeRouteLeave(() => {
 .lkc-grid {
     flex: 1;
     display: grid;
-    gap: 8px;
-    padding: 8px;
-    padding-bottom: 96px;
+    gap: 10px;
+    padding: 12px 12px 100px;
     overflow-y: auto;
-    grid-template-columns: repeat(2, 1fr);
-    align-content: start;
+    /* Center the tiles both ways so a 1–2 person call doesn't hug the top-left. */
+    align-content: center;
+    justify-content: center;
+    grid-auto-rows: min-content;
+    grid-template-columns: repeat(2, min(46vw, 620px));
 }
 .lkc-grid--1 {
-    grid-template-columns: 1fr;
+    grid-template-columns: min(92vw, 960px);
 }
 .lkc-grid--3 {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, min(31vw, 460px));
 }
 .lkc-controls {
     position: fixed;

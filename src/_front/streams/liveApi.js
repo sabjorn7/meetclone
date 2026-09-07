@@ -94,3 +94,8 @@ export function stopLive(supabase, streamId) {
 export function inviteCohost(supabase, streamId, email) {
     return post(supabase, '/live/invite', { stream_id: streamId, email: (email || '').trim() });
 }
+
+/** Owner-only: remove a co-host — sets stream_cohosts row to 'removed' + kicks from the live room. */
+export function removeCohost(supabase, streamId, userId) {
+    return post(supabase, '/live/remove', { stream_id: streamId, user_id: userId });
+}

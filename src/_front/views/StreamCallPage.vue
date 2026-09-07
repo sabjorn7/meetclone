@@ -49,6 +49,13 @@
                         <span class="lkc-roster__status" :data-role="c.role" :data-status="c.status">
                             {{ statusLabel(c) }}
                         </span>
+                        <span v-if="c.role === 'cohost'" class="lkc-roster__remove">
+                            <template v-if="confirmRemoveId === c.id">
+                                <button class="lkc-link-danger" :disabled="removingId === c.id" @click="removeCohostRoom(c)">{{ removingId === c.id ? '…' : 'Точно?' }}</button>
+                                <button class="lkc-link-muted" @click="confirmRemoveId = null">Отмена</button>
+                            </template>
+                            <button v-else class="lkc-link-danger" @click="confirmRemoveId = c.id">Удалить</button>
+                        </span>
                     </li>
                 </ul>
             </div>
@@ -95,7 +102,7 @@ import { ref, shallowRef, computed, onMounted, onBeforeUnmount, markRaw } from '
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { Room, RoomEvent, Track } from 'livekit-client';
 
-import { getLiveToken, inviteCohost, LiveApiError } from '@/_front/streams/liveApi.js';
+import { getLiveToken, inviteCohost, removeCohost, LiveApiError } from '@/_front/streams/liveApi.js';
 import { listCohosts } from '@/_front/streams/cohosts.js';
 import StreamTile from './StreamTile.vue';
 
@@ -125,6 +132,8 @@ const rosterOpen = ref(false);
 const cohosts = ref([]);
 const inviteEmail = ref('');
 const inviting = ref(false);
+const confirmRemoveId = ref(null);
+const removingId = ref(null);
 
 const isOwner = computed(() => role.value === 'owner');
 const gridClass = computed(() => {
@@ -319,6 +328,18 @@ async function invite() {
         window.alert(msg);
     } finally {
         inviting.value = false;
+    }
+}
+async function removeCohostRoom(c) {
+    removingId.value = c.id;
+    try {
+        await removeCohost(supa(), streamId, c.user);
+        confirmRemoveId.value = null;
+        cohosts.value = await listCohosts(supa(), streamId).catch(() => cohosts.value);
+    } catch (e) {
+        window.alert(e.message || 'Не удалось удалить.');
+    } finally {
+        removingId.value = null;
     }
 }
 function statusLabel(c) {
@@ -530,8 +551,35 @@ onBeforeRouteLeave(() => {
     padding: 10px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
+.lkc-roster__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .lkc-roster__status {
     font-size: 12px;
     color: #93c5fd;
+    margin: 0 8px;
+}
+.lkc-roster__remove {
+    display: inline-flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.lkc-link-danger,
+.lkc-link-muted {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-size: 13px;
+}
+.lkc-link-danger {
+    color: #f87171;
+}
+.lkc-link-muted {
+    color: #94a3b8;
 }
 </style>

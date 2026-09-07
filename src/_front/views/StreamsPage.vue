@@ -82,8 +82,15 @@
                         </div>
                         <ul v-if="cohosts.length" class="sp-cohost-list">
                             <li v-for="c in cohosts" :key="c.id">
-                                <span>{{ cohostName(c) }}</span>
+                                <span class="sp-cohost-name">{{ cohostName(c) }}</span>
                                 <span class="sp-cohost-status">{{ cohostStatusLabel(c) }}</span>
+                                <span v-if="c.role === 'cohost'" class="sp-cohost-remove">
+                                    <template v-if="confirmRemoveId === c.id">
+                                        <button class="sp-link-danger" :disabled="removingId === c.id" @click="removeCohostWeb(c)">{{ removingId === c.id ? '…' : 'Точно?' }}</button>
+                                        <button class="sp-link-muted" @click="confirmRemoveId = null">Отмена</button>
+                                    </template>
+                                    <button v-else class="sp-link-danger" @click="confirmRemoveId = c.id">Удалить</button>
+                                </span>
                             </li>
                         </ul>
                     </template>
@@ -309,7 +316,7 @@ import {
     deleteStreamMessage,
 } from '@/_front/streams/streamsApi.js';
 // Multi-host (co-host) live: orchestrator client + roster reads. Solo path is untouched.
-import { startLive, stopLive, inviteCohost, LiveApiError } from '@/_front/streams/liveApi.js';
+import { startLive, stopLive, inviteCohost, removeCohost, LiveApiError } from '@/_front/streams/liveApi.js';
 import { listCohosts, getMyCohostRole } from '@/_front/streams/cohosts.js';
 
 const route = useRoute();
@@ -352,6 +359,8 @@ const liveBusy = ref(false);
 const cohosts = ref([]);
 const inviteEmail = ref('');
 const inviting = ref(false);
+const confirmRemoveId = ref(null); // inline "точно?" confirm per cohost row
+const removingId = ref(null);
 
 // viewer-chat state
 const messages = ref([]);
@@ -591,6 +600,20 @@ async function inviteCohostWeb() {
         );
     } finally {
         inviting.value = false;
+    }
+}
+
+async function removeCohostWeb(c) {
+    if (!detail.value) return;
+    removingId.value = c.id;
+    try {
+        await removeCohost(supa(), detail.value.id, c.user);
+        confirmRemoveId.value = null;
+        cohosts.value = await listCohosts(supa(), detail.value.id).catch(() => cohosts.value);
+    } catch (e) {
+        window.alert(e.message || 'Не удалось удалить.');
+    } finally {
+        removingId.value = null;
     }
 }
 
@@ -1294,9 +1317,36 @@ onBeforeUnmount(() => {
     border-top: 1px solid #eceef1;
     font-size: 14px;
 }
+.sp-cohost-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .sp-cohost-status {
     font-size: 12px;
     color: #2563eb;
+    margin: 0 10px;
+}
+.sp-cohost-remove {
+    display: inline-flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.sp-link-danger,
+.sp-link-muted {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-size: 13px;
+}
+.sp-link-danger {
+    color: #dc2626;
+}
+.sp-link-muted {
+    color: #64748b;
 }
 .sp-player-wrap {
     width: 100%;

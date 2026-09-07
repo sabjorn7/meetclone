@@ -506,8 +506,13 @@ async function onPdfPicked(e) {
     if (!file || !room.value) return;
     try {
         const pdfjsLib = await import('pdfjs-dist');
-        const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
-        pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+        // Load the worker via Vite's ?worker (bundled as a regular .js chunk + used through
+        // workerPort) instead of ?url — the latter emits a .mjs, which the prod nginx serves as
+        // application/octet-stream and the browser refuses for a module worker. One worker, reused.
+        if (!pdfjsLib.GlobalWorkerOptions.workerPort) {
+            const PdfWorker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?worker')).default;
+            pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
+        }
         const buf = await file.arrayBuffer();
         pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
         pageCount.value = pdfDoc.numPages;

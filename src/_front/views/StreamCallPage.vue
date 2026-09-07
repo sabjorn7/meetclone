@@ -65,10 +65,19 @@
             <!-- Controls -->
             <div class="lkc-controls">
                 <button class="lkc-ctrl" :class="{ off: !micOn }" title="Микрофон" @click="toggleMic">
-                    {{ micOn ? '🎙' : '🔇' }}
+                    <svg class="lkc-ic" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                        <path d="M5 11a7 7 0 0 0 14 0" />
+                        <line x1="12" y1="18" x2="12" y2="22" />
+                        <line v-if="!micOn" x1="3" y1="3" x2="21" y2="21" />
+                    </svg>
                 </button>
                 <button class="lkc-ctrl" :class="{ off: !camOn }" title="Камера" @click="toggleCam">
-                    {{ camOn ? '📹' : '🚫' }}
+                    <svg class="lkc-ic" viewBox="0 0 24 24" aria-hidden="true">
+                        <polygon points="23 7 16 12 23 17 23 7" />
+                        <rect x="1" y="5" width="15" height="14" rx="2" />
+                        <line v-if="!camOn" x1="2" y1="2" x2="22" y2="22" />
+                    </svg>
                 </button>
 
                 <select class="lkc-select" :value="selectedCam" title="Камера" @change="onPickCam">
@@ -82,15 +91,20 @@
                     </option>
                 </select>
 
-                <button
-                    v-if="isOwner"
-                    class="lkc-ctrl"
-                    title="Со-ведущие"
-                    @click="toggleRoster"
-                >
-                    👥
+                <button v-if="isOwner" class="lkc-ctrl" title="Со-ведущие" @click="toggleRoster">
+                    <svg class="lkc-ic" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
                 </button>
-                <button class="lkc-ctrl lkc-ctrl--danger" title="Выйти" @click="leave">✕</button>
+                <button class="lkc-ctrl lkc-ctrl--danger" title="Выйти" @click="leave">
+                    <svg class="lkc-ic" viewBox="0 0 24 24" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
             </div>
         </template>
 
@@ -544,7 +558,8 @@ onBeforeRouteLeave(() => {
     grid-template-columns: repeat(2, min(46vw, 620px));
 }
 .lkc-grid--1 {
-    grid-template-columns: min(92vw, 960px);
+    /* Also cap width by the available height so the 16:9 tile fits above the controls and centers. */
+    grid-template-columns: min(92vw, 960px, calc((100vh - 170px) * 16 / 9));
 }
 .lkc-grid--3 {
     grid-template-columns: repeat(3, min(31vw, 460px));
@@ -568,9 +583,21 @@ onBeforeRouteLeave(() => {
     border-radius: 26px;
     border: none;
     cursor: pointer;
-    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: rgba(255, 255, 255, 0.16);
     color: #fff;
+}
+.lkc-ic {
+    width: 22px;
+    height: 22px;
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 .lkc-ctrl.off {
     background: rgba(255, 255, 255, 0.32);

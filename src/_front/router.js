@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 
 import wwPage from './views/wwPage.vue';
 import StreamsPage from './views/StreamsPage.vue';
+import StreamCallPage from './views/StreamCallPage.vue';
 import ProfilePage from './views/ProfilePage.vue';
 import CoursePage from './views/CoursePage.vue';
 import AllCoursesPage from './views/AllCoursesPage.vue';
@@ -298,6 +299,14 @@ routes.push({
     path: '/streams',
     name: 'streams',
     component: StreamsPage,
+});
+
+// Multi-host broadcaster room (owner + co-hosts LiveKit call). Standalone route; a physical
+// dist/streams/call/index.html is produced via vite.config.js. Full-screen (in CHROME_EXCLUDE).
+routes.push({
+    path: '/streams/call',
+    name: 'streams-call',
+    component: StreamCallPage,
 });
 
 // Standalone alias for the public profile (same ProfilePage component as the /profile_page override

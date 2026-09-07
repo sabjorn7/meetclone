@@ -30,6 +30,8 @@ const CHROME_EXCLUDE = [
     '/superadmin',
     // auth utilities (login is a full-screen dedicated page — its own chrome, no AppHeader/Footer)
     '/login', '/login-demo', '/registration', '/reset_pw',
+    // multi-host broadcaster room — full-screen call UI, no shared chrome
+    '/streams/call',
     // dev / internal
     '/components', '/testpage',
 ];

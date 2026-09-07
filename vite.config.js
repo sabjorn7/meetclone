@@ -23,6 +23,17 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
                 { name: 'description', content: 'Онлайн-трансляции спикеров и учебных заведений на платформе МитГуру.' },
             ],
         };
+        // Multi-host broadcaster room (co-host call). Needs its own dist/streams/call/index.html
+        // so a direct hit / refresh on /streams/call resolves (no SPA fallback).
+        pages['streams-call-en'] = {
+            ..._tpl,
+            outputDir: './streams/call',
+            title: 'Эфир — МитГуру',
+            meta: [
+                { name: 'title', content: 'Эфир — МитГуру' },
+                { name: 'description', content: 'Прямой эфир с со-ведущими на платформе МитГуру.' },
+            ],
+        };
     }
 }
 

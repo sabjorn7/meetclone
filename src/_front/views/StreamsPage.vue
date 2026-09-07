@@ -65,6 +65,32 @@
                     </div>
                 </div>
 
+                <!-- Multi-host (co-host) controls — ONLY mode='multi'; the solo path is untouched. -->
+                <div v-if="detail.mode === 'multi'" class="sp-cohost">
+                    <!-- Owner -->
+                    <template v-if="isAuthor">
+                        <div class="sp-cohost-actions">
+                            <template v-if="detail.status === 'live'">
+                                <button class="sp-btn sp-btn-primary" @click="enterCall">Войти в эфир</button>
+                                <button class="sp-btn sp-btn-secondary" :disabled="liveBusy" @click="endMulti">Завершить эфир</button>
+                            </template>
+                            <button v-else class="sp-btn sp-btn-primary" :disabled="liveBusy" @click="startMulti">Начать эфир</button>
+                        </div>
+                        <div class="sp-cohost-invite">
+                            <input v-model="inviteEmail" type="email" placeholder="e-mail со-ведущего" autocomplete="off" @keyup.enter="inviteCohostWeb" />
+                            <button class="sp-btn sp-btn-secondary" :disabled="inviting" @click="inviteCohostWeb">{{ inviting ? '…' : 'Пригласить' }}</button>
+                        </div>
+                        <ul v-if="cohosts.length" class="sp-cohost-list">
+                            <li v-for="c in cohosts" :key="c.id">
+                                <span>{{ cohostName(c) }}</span>
+                                <span class="sp-cohost-status">{{ cohostStatusLabel(c) }}</span>
+                            </li>
+                        </ul>
+                    </template>
+                    <!-- Invited co-host -->
+                    <button v-else-if="myCohostRole" class="sp-btn sp-btn-primary" @click="enterCall">Войти как со-ведущий</button>
+                </div>
+
                 <p v-if="error" class="sp-error">{{ error }}</p>
                 <p v-if="detail.description" class="sp-detail-desc">{{ detail.description }}</p>
 
@@ -270,6 +296,9 @@ import {
     sendStreamMessage,
     deleteStreamMessage,
 } from '@/_front/streams/streamsApi.js';
+// Multi-host (co-host) live: orchestrator client + roster reads. Solo path is untouched.
+import { startLive, stopLive, inviteCohost, LiveApiError } from '@/_front/streams/liveApi.js';
+import { listCohosts, getMyCohostRole } from '@/_front/streams/cohosts.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -304,6 +333,13 @@ const detailLoading = ref(false);
 const bought = ref(false);
 const buying = ref(false);
 let pollTimer = null;
+
+// multi-host (co-host) detail state — only used when detail.mode === 'multi'
+const myCohostRole = ref(null); // current non-author user's membership, or null
+const liveBusy = ref(false);
+const cohosts = ref([]);
+const inviteEmail = ref('');
+const inviting = ref(false);
 
 // viewer-chat state
 const messages = ref([]);
@@ -454,6 +490,8 @@ async function loadDetail(id) {
     detail.value = null;
     detailInfo.value = null;
     bought.value = false;
+    myCohostRole.value = null;
+    cohosts.value = [];
     error.value = '';
     stopPoll();
     stopChatPoll();
@@ -466,6 +504,14 @@ async function loadDetail(id) {
         // Has the current user already purchased this paid stream?
         if (detail.value && Number(detail.value.price) > 0 && detail.value.backing_course_id && me.value) {
             bought.value = await hasBoughtStream(supa(), detail.value, me.value.id);
+        }
+        // Multi-host: owner loads the roster; a non-author loads their own membership (join CTA).
+        if (detail.value?.mode === 'multi') {
+            if (isAuthor.value) {
+                cohosts.value = await listCohosts(supa(), detail.value.id).catch(() => []);
+            } else if (me.value) {
+                myCohostRole.value = await getMyCohostRole(supa(), detail.value.id, me.value.id).catch(() => null);
+            }
         }
         // Poll while waiting for the live to start (state 4 → 1) OR for a just-ended live's replay
         // to finish transcoding (ended but not yet playable).
@@ -482,6 +528,66 @@ async function loadDetail(id) {
     } finally {
         detailLoading.value = false;
     }
+}
+
+// ---------- multi-host (co-host) actions ----------
+function enterCall() {
+    if (detail.value) router.push(`/streams/call?stream=${detail.value.id}`);
+}
+
+async function startMulti() {
+    if (liveBusy.value || !detail.value) return;
+    liveBusy.value = true;
+    try {
+        await startLive(supa(), detail.value.id);
+        await loadDetail(detail.value.id); // refresh status/ids
+        enterCall();
+    } catch (e) {
+        if (e instanceof LiveApiError && e.code === 'already_live') enterCall();
+        else error.value = e.message || 'Не удалось начать эфир.';
+    } finally {
+        liveBusy.value = false;
+    }
+}
+
+async function endMulti() {
+    if (liveBusy.value || !detail.value) return;
+    liveBusy.value = true;
+    try {
+        await stopLive(supa(), detail.value.id);
+        await loadDetail(detail.value.id);
+    } catch (e) {
+        error.value = e.message || 'Не удалось завершить эфир.';
+    } finally {
+        liveBusy.value = false;
+    }
+}
+
+async function inviteCohostWeb() {
+    const email = inviteEmail.value.trim();
+    if (!email || !email.includes('@') || !detail.value) return;
+    inviting.value = true;
+    try {
+        await inviteCohost(supa(), detail.value.id, email);
+        inviteEmail.value = '';
+        cohosts.value = await listCohosts(supa(), detail.value.id).catch(() => cohosts.value);
+    } catch (e) {
+        window.alert(
+            e instanceof LiveApiError && e.code === 'user_not_found'
+                ? 'Пользователь с таким e-mail не зарегистрирован.'
+                : e.message || 'Не удалось пригласить.',
+        );
+    } finally {
+        inviting.value = false;
+    }
+}
+
+function cohostName(c) {
+    return (c.userInfo && (c.userInfo.Name || c.userInfo.email)) || 'Участник';
+}
+function cohostStatusLabel(c) {
+    if (c.role === 'owner') return 'Владелец';
+    return c.status === 'joined' ? 'В эфире' : 'Приглашён';
 }
 
 async function buyStream() {
@@ -1123,6 +1229,49 @@ onBeforeUnmount(() => {
     line-height: 1.5;
     color: #374151;
     white-space: pre-line;
+}
+/* Multi-host (co-host) controls on the stream detail */
+.sp-cohost {
+    margin-top: 16px;
+    padding: 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    background: #f9fafb;
+}
+.sp-cohost-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.sp-cohost-invite {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+.sp-cohost-invite input {
+    flex: 1;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    font-size: 14px;
+}
+.sp-cohost-list {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+}
+.sp-cohost-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-top: 1px solid #eceef1;
+    font-size: 14px;
+}
+.sp-cohost-status {
+    font-size: 12px;
+    color: #2563eb;
 }
 .sp-player-wrap {
     width: 100%;

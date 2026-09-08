@@ -1,11 +1,13 @@
 <template>
     <div class="ev">
-        <!-- Detail view (?event=<id>) — reuse the E5 detail component; :key remounts on id change -->
+        <!-- Detail view (?event=<id>) — reuse the E5 detail component; :key remounts on id change.
+             NOT wrapped in the narrow .ev-inner: EventDetailPage manages its own 1200px width to
+             match CoursePage exactly (the 960px .ev-inner was squeezing it to ~848px). -->
         <template v-if="activeEventId">
-            <div class="ev-inner">
+            <div class="ev-detailtop">
                 <a class="ev-back" href="/events" @click.prevent="backToList">← Все мероприятия</a>
-                <EventDetailPage :key="activeEventId" />
             </div>
+            <EventDetailPage :key="activeEventId" />
         </template>
 
         <!-- Calendar (list) -->
@@ -123,6 +125,9 @@ onMounted(async () => {
 .ev-muted { color: #64748b; padding: 32px 0; }
 .ev-error { color: #dc2626; }
 .ev-back { display: inline-block; margin-bottom: 16px; color: #2563eb; text-decoration: none; }
+/* detail-mode top bar aligned to EventDetailPage's own 1200px container (no narrow wrapper) */
+.ev-detailtop { max-width: 1200px; margin: 0 auto; padding: 16px 40px 0; }
+@media (max-width: 900px) { .ev-detailtop { padding: 16px 22px 0; } }
 .ev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
 .ev-card { display: flex; flex-direction: column; border: 1px solid #eceef1; border-radius: 14px; overflow: hidden; text-decoration: none; color: inherit; background: #fff; transition: box-shadow .15s; }
 .ev-card:hover { box-shadow: 0 6px 20px rgba(15,23,42,.08); }

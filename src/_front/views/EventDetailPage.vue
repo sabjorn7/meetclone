@@ -71,59 +71,69 @@
                     allowfullscreen
                 ></iframe>
             </div>
+            </div><!-- /ed-narrow (hero + map) -->
 
-            <!-- Registration card -->
-            <div class="ed-card">
-                <!-- guest -->
-                <template v-if="!me">
-                    <div class="ed-price">{{ money(event.price) }} ₽</div>
-                    <a class="ed-btn ed-btn--primary" href="/login">Войти, чтобы записаться</a>
-                </template>
+            <!-- Registration — CoursePage pd-price layout (blue "what's included" + white price/CTA) -->
+            <section class="pd-price-wrap">
+                <div class="pd-wrap">
+                    <div class="pd-price">
+                        <div class="pd-price__l">
+                            <h2 class="pd-price__h">Участие в мероприятии</h2>
+                            <p class="pd-price__sub">{{ event.title }}</p>
+                            <ul class="pd-price__incl">
+                                <li v-if="whenText"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 12l5 5L20 6" /></svg>{{ whenText }}</li>
+                                <li v-if="event.location"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 12l5 5L20 6" /></svg>{{ event.location }}</li>
+                                <li><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 12l5 5L20 6" /></svg>Чат участников после регистрации</li>
+                            </ul>
+                        </div>
+                        <div class="pd-price__card">
+                            <!-- guest -->
+                            <template v-if="!me">
+                                <span class="pd-price__label">Стоимость</span>
+                                <div class="pd-price__amount">{{ money(event.price) }}<span class="cur"> ₽</span></div>
+                                <a class="pd-btn pd-btn--lg pd-btn--block" href="/login">Войти, чтобы записаться</a>
+                            </template>
 
-                <!-- already registered -->
-                <template v-else-if="reg && reg.status === 'paid'">
-                    <div class="ed-ok">✓ Вы записаны</div>
-                    <div v-if="reg.payment_type === 'deposit'" class="ed-note">
-                        Оплачено {{ money(reg.amount_paid) }} ₽ из {{ money(reg.amount_total) }} ₽.
-                        Остаток {{ money(reg.amount_total - reg.amount_paid) }} ₽ — на месте.
+                            <!-- already registered -->
+                            <template v-else-if="reg && reg.status === 'paid'">
+                                <div class="pd-price__ok">✓ Вы записаны</div>
+                                <p v-if="reg.payment_type === 'deposit'" class="pd-price__demo">
+                                    Оплачено {{ money(reg.amount_paid) }} из {{ money(reg.amount_total) }} ₽. Остаток {{ money(reg.amount_total - reg.amount_paid) }} ₽ — на месте.
+                                </p>
+                                <a v-if="event.chat" class="pd-btn pd-btn--lg pd-btn--block" :href="`/chats?chat=${event.chat}`">Чат мероприятия</a>
+                            </template>
+
+                            <!-- pending -->
+                            <template v-else-if="reg && reg.status === 'pending'">
+                                <p class="pd-price__demo">Оплата обрабатывается. Если только что оплатили — обновите страницу через минуту.</p>
+                                <button class="pd-btn pd-btn--lg pd-btn--block" :disabled="busy" @click="pay(reg.payment_type || 'full')">Оплатить снова</button>
+                            </template>
+
+                            <!-- new registration -->
+                            <template v-else>
+                                <span class="pd-price__label">Стоимость</span>
+                                <div v-if="!hasDeposit" class="pd-price__amount">{{ money(event.price) }}<span class="cur"> ₽</span></div>
+                                <div v-else class="ed-choices">
+                                    <label class="ed-choice" :class="{ on: choice === 'full' }">
+                                        <input type="radio" value="full" v-model="choice" />
+                                        Полная — {{ money(event.price) }} ₽
+                                    </label>
+                                    <label class="ed-choice" :class="{ on: choice === 'deposit' }">
+                                        <input type="radio" value="deposit" v-model="choice" />
+                                        Предоплата — {{ money(depositAmount) }} ₽
+                                        <span class="ed-choice__sub">остаток {{ money(event.price - depositAmount) }} ₽ на месте</span>
+                                    </label>
+                                </div>
+                                <button class="pd-btn pd-btn--lg pd-btn--block" :disabled="busy || seatsFull" @click="pay(choice)">
+                                    {{ seatsFull ? 'Мест нет' : (busy ? 'Переход к оплате…' : 'Оплатить') }}
+                                </button>
+                            </template>
+
+                            <p v-if="payError" class="pd-buyerr">{{ payError }}</p>
+                        </div>
                     </div>
-                    <a v-if="event.chat" class="ed-btn" :href="`/chats?chat=${event.chat}`">Чат мероприятия</a>
-                </template>
-
-                <!-- pending (payment not finished / just returned from Prodamus) -->
-                <template v-else-if="reg && reg.status === 'pending'">
-                    <div class="ed-note">
-                        Оплата обрабатывается. Если вы только что оплатили — обновите страницу через минуту.
-                        Не завершили оплату?
-                    </div>
-                    <button class="ed-btn ed-btn--primary" :disabled="busy" @click="pay(reg.payment_type || 'full')">
-                        Оплатить снова
-                    </button>
-                </template>
-
-                <!-- new registration -->
-                <template v-else>
-                    <div v-if="hasDeposit" class="ed-choices">
-                        <label class="ed-choice" :class="{ on: choice === 'full' }">
-                            <input type="radio" value="full" v-model="choice" />
-                            Полная оплата — {{ money(event.price) }} ₽
-                        </label>
-                        <label class="ed-choice" :class="{ on: choice === 'deposit' }">
-                            <input type="radio" value="deposit" v-model="choice" />
-                            Предоплата — {{ money(depositAmount) }} ₽
-                            <span class="ed-choice__sub">остаток {{ money(event.price - depositAmount) }} ₽ на месте</span>
-                        </label>
-                    </div>
-                    <div v-else class="ed-price">{{ money(event.price) }} ₽</div>
-
-                    <button class="ed-btn ed-btn--primary" :disabled="busy || seatsFull" @click="pay(choice)">
-                        {{ seatsFull ? 'Мест нет' : (busy ? 'Переход к оплате…' : 'Оплатить') }}
-                    </button>
-                </template>
-
-                <p v-if="payError" class="ed-error">{{ payError }}</p>
-            </div>
-            </div><!-- /ed-narrow (map + registration) -->
+                </div>
+            </section>
         </template>
     </div>
 </template>
@@ -279,10 +289,35 @@ onMounted(async () => {
 .pd-forcard { position: relative; background: #fff; border: 1px solid #e4e9f1; border-radius: 16px; padding: 24px 24px 24px 28px; }
 .pd-forcard__dot { position: absolute; left: 24px; top: 30px; width: 10px; height: 10px; border-radius: 50%; background: #5495f3; }
 .pd-forcard p { margin: 0 0 0 22px; color: #5b6472; font-size: 1rem; }
+/* ── Registration (pd-price) — copied verbatim from CoursePage (values inlined) ── */
+.pd-price-wrap { padding: 20px 0 40px; }
+.pd-price { display: grid; grid-template-columns: 1.25fr 0.85fr; border-radius: 26px; overflow: hidden; box-shadow: 0 14px 40px -20px rgba(9,23,71,0.24); }
+.pd-price__l { background: #2e70dd; color: #fff; padding: 46px 44px; }
+.pd-price__h { margin: 0 0 8px; font-weight: 700; font-size: clamp(1.6rem, 3vw, 2.3rem); letter-spacing: -0.02em; line-height: 1.1; }
+.pd-price__sub { margin: 0 0 24px; font-weight: 500; color: rgba(255,255,255,0.85); }
+.pd-price__incl { list-style: none; margin: 0; padding: 0; display: grid; gap: 13px; }
+.pd-price__incl li { display: flex; align-items: flex-start; gap: 12px; font-weight: 500; }
+.pd-price__incl .pd-ic { flex: none; width: 22px; height: 22px; stroke-width: 2.4; stroke: #fff; fill: none; margin-top: 1px; }
+.pd-price__card { background: #fff; padding: 42px 40px; display: flex; flex-direction: column; justify-content: center; }
+.pd-price__label { font-weight: 500; font-size: 0.9rem; color: #98a0ad; }
+.pd-price__amount { margin: 8px 0 0; font-weight: 700; font-size: clamp(2.6rem, 5vw, 3.6rem); line-height: 0.95; letter-spacing: -0.03em; color: #091747; }
+.pd-price__amount .cur { color: #c2410c; }
+.pd-price__ok { font-weight: 700; font-size: 1.4rem; color: #21a366; }
+.pd-price__demo { margin: 12px 0 0; text-align: center; font-size: 0.82rem; color: #98a0ad; }
+.pd-buyerr { margin: 12px 0 0; text-align: center; font-size: 0.85rem; color: #dc2626; }
+.pd-price__card .pd-btn, .pd-price__card .ed-choices { margin-top: 22px; }
+.pd-btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; border: 0; cursor: pointer; font-family: inherit; font-weight: 700; background: #2e70dd; color: #fff; border-radius: 999px; transition: background 0.16s; }
+.pd-btn:hover { background: #2360c6; }
+.pd-btn:disabled { opacity: 0.55; cursor: default; }
+.pd-btn--lg { padding: 16px 28px; font-size: 1.05rem; }
+.pd-btn--block { width: 100%; }
+
 @media (max-width: 900px) {
     .ed { padding-inline: 22px; }
     .pd-wrap { padding-inline: 22px; }
     .pd-section { padding: 56px 0; }
+    .pd-price { grid-template-columns: 1fr; }
+    .pd-price__l, .pd-price__card { padding: 32px 26px; }
 }
 @media (max-width: 560px) {
     .pd-learn { grid-template-columns: 1fr; }

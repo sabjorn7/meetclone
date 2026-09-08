@@ -45,7 +45,7 @@ export function isEventsOrganizer(userId) {
 // ── CRUD (creator/organizer only; the page gates access) ─────────────────────
 
 const EVENT_FIELDS =
-    'id, created_at, slug, title, description, starts_at, location, speaker_id, cover_url, price, deposit_percent, capacity, chat, backing_course_id, owner, status';
+    'id, created_at, slug, title, description, starts_at, ends_at, location, speaker_id, cover_url, price, deposit_percent, capacity, chat, backing_course_id, owner, status';
 
 /**
  * Create an event. Order matters: create the hidden backing course FIRST so events.backing_course_id
@@ -63,6 +63,7 @@ export async function createEvent(supabase, input) {
             title,
             description: (input.description || '').trim(),
             starts_at: input.starts_at || null,
+            ends_at: input.ends_at || null,
             location: (input.location || '').trim() || null,
             speaker_id: input.speaker_id || null,
             cover_url: input.cover_url || null,
@@ -81,7 +82,7 @@ export async function createEvent(supabase, input) {
 /** Update editable event fields (never owner/chat/backing_course_id). */
 export async function updateEvent(supabase, eventId, fields) {
     const patch = {};
-    for (const k of ['title', 'description', 'starts_at', 'location', 'speaker_id', 'cover_url', 'price', 'deposit_percent', 'capacity']) {
+    for (const k of ['title', 'description', 'starts_at', 'ends_at', 'location', 'speaker_id', 'cover_url', 'price', 'deposit_percent', 'capacity']) {
         if (k in fields) patch[k] = fields[k];
     }
     const { data, error } = await supabase.from('events').update(patch).eq('id', eventId).select(EVENT_FIELDS).limit(1);
@@ -100,7 +101,7 @@ export async function getEventById(supabase, id) {
 export async function listPublishedEvents(supabase) {
     const { data, error } = await supabase
         .from('events')
-        .select('id, title, starts_at, location, cover_url, price, deposit_percent, capacity, status')
+        .select('id, title, starts_at, ends_at, location, cover_url, price, deposit_percent, capacity, status')
         .eq('status', 'published')
         .order('starts_at', { ascending: true, nullsFirst: false });
     if (error) throw new Error(`Не удалось загрузить мероприятия: ${error.message}`);

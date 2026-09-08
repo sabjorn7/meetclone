@@ -47,8 +47,11 @@
                 <label class="em-field"><span>Описание</span>
                     <textarea v-model.trim="form.description" rows="3" placeholder="О чём мероприятие"></textarea>
                 </label>
-                <label class="em-field"><span>Дата и время</span>
+                <label class="em-field"><span>Дата и время начала</span>
                     <input v-model="form.starts_at_local" type="datetime-local" />
+                </label>
+                <label class="em-field"><span>Окончание (для многодневных, необязательно)</span>
+                    <input v-model="form.ends_at_local" type="datetime-local" />
                 </label>
                 <label class="em-field"><span>Место проведения</span>
                     <input v-model.trim="form.location" type="text" placeholder="Город, адрес, площадка" />
@@ -175,13 +178,13 @@ function isoToLocal(iso) {
 function localToIso(local) { return local ? new Date(local).toISOString() : null; }
 
 function blankForm() {
-    return { id: null, title: '', description: '', starts_at_local: '', location: '', speaker_id: null, speaker_name: '', price: null, deposit_percent: '', capacity: '', cover_url: null };
+    return { id: null, title: '', description: '', starts_at_local: '', ends_at_local: '', location: '', speaker_id: null, speaker_name: '', price: null, deposit_percent: '', capacity: '', cover_url: null };
 }
 function resetSpeakerPicker() { speakerQuery.value = ''; speakerResults.value = []; clearTimeout(speakerTimer); }
 function openCreate() { form.value = blankForm(); resetSpeakerPicker(); dialogError.value = ''; dialog.value = true; }
 async function openEdit(ev) {
     form.value = {
-        id: ev.id, title: ev.title || '', description: ev.description || '', starts_at_local: isoToLocal(ev.starts_at),
+        id: ev.id, title: ev.title || '', description: ev.description || '', starts_at_local: isoToLocal(ev.starts_at), ends_at_local: isoToLocal(ev.ends_at),
         location: ev.location || '', speaker_id: ev.speaker_id || null, speaker_name: '', price: ev.price,
         deposit_percent: ev.deposit_percent ?? '', capacity: ev.capacity ?? '', cover_url: ev.cover_url || null,
     };
@@ -228,7 +231,7 @@ async function save() {
     busy.value = true; dialogError.value = '';
     const f = form.value;
     const payload = {
-        title: f.title, description: f.description, starts_at: localToIso(f.starts_at_local),
+        title: f.title, description: f.description, starts_at: localToIso(f.starts_at_local), ends_at: localToIso(f.ends_at_local),
         location: f.location, speaker_id: f.speaker_id, cover_url: f.cover_url,
         price: Number(f.price),
         deposit_percent: f.deposit_percent === '' || f.deposit_percent == null ? null : Number(f.deposit_percent),

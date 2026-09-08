@@ -22,6 +22,18 @@
 
             <p v-if="event.description" class="ed-desc">{{ event.description }}</p>
 
+            <!-- Venue map (Yandex embed by the free-text address; no API key, no stored coords) -->
+            <div v-if="event.location" class="ed-map">
+                <h2 class="ed-map__title">Как добраться</h2>
+                <div class="ed-map__addr">📍 {{ event.location }}</div>
+                <iframe
+                    class="ed-map__frame"
+                    :src="`https://yandex.ru/map-widget/v1/?text=${encodeURIComponent(event.location)}`"
+                    loading="lazy"
+                    allowfullscreen
+                ></iframe>
+            </div>
+
             <!-- Registration card -->
             <div class="ed-card">
                 <!-- guest -->
@@ -106,10 +118,19 @@ const busy = ref(false);
 const payError = ref('');
 
 const dateFmt = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const timeFmt = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
 const whenText = computed(() => {
-    if (!event.value?.starts_at) return '';
-    const d = new Date(event.value.starts_at);
-    return Number.isNaN(d.getTime()) ? '' : dateFmt.format(d);
+    const s0 = event.value?.starts_at;
+    if (!s0) return '';
+    const s = new Date(s0);
+    if (Number.isNaN(s.getTime())) return '';
+    const sTxt = dateFmt.format(s);
+    const e0 = event.value?.ends_at;
+    if (!e0) return sTxt;
+    const e = new Date(e0);
+    if (Number.isNaN(e.getTime())) return sTxt;
+    // same calendar day → append end time; multi-day → append full end date
+    return s.toDateString() === e.toDateString() ? `${sTxt} – ${timeFmt.format(e)}` : `${sTxt} – ${dateFmt.format(e)}`;
 });
 const hasDeposit = computed(() => event.value?.deposit_percent != null && Number(event.value.deposit_percent) > 0);
 const depositAmount = computed(() => (hasDeposit.value ? eventAmount(event.value, 'deposit') : 0));
@@ -177,7 +198,11 @@ onMounted(async () => {
 .ed-speaker { color: #2563eb; text-decoration: none; font-weight: 600; }
 .ed-speaker:hover { text-decoration: underline; }
 .ed-desc { line-height: 1.6; color: #334155; white-space: pre-line; margin: 16px 0; }
-.ed-card { border: 1px solid #eceef1; border-radius: 16px; padding: 20px; margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+.ed-map { margin: 24px 0; }
+.ed-map__title { font-size: 20px; font-weight: 700; margin: 0 0 8px; }
+.ed-map__addr { color: #334155; margin-bottom: 10px; }
+.ed-map__frame { width: 100%; height: 340px; border: 0; border-radius: 16px; box-shadow: 0 6px 20px rgba(15,23,42,.06); }
+.ed-card { border: 1px solid #eceef1; border-radius: 18px; padding: 22px; margin-top: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 28px rgba(15,23,42,.07); }
 .ed-price { font-size: 24px; font-weight: 800; }
 .ed-ok { font-size: 18px; font-weight: 700; color: #16a34a; }
 .ed-note { font-size: 14px; color: #64748b; }

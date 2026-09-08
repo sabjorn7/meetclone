@@ -26,7 +26,7 @@
                                 </div>
                                 <div class="ev-card__body">
                                     <div class="ev-card__title">{{ ev.title }}</div>
-                                    <div v-if="fmtDate(ev.starts_at)" class="ev-card__meta">🕐 {{ fmtDate(ev.starts_at) }}</div>
+                                    <div v-if="ev.starts_at" class="ev-card__meta">🕐 {{ fmtRange(ev.starts_at, ev.ends_at) }}</div>
                                     <div v-if="ev.location" class="ev-card__meta">📍 {{ ev.location }}</div>
                                     <div class="ev-card__price">{{ priceLabel(ev) }}</div>
                                 </div>
@@ -44,7 +44,7 @@
                                 </div>
                                 <div class="ev-card__body">
                                     <div class="ev-card__title">{{ ev.title }}</div>
-                                    <div v-if="fmtDate(ev.starts_at)" class="ev-card__meta">🕐 {{ fmtDate(ev.starts_at) }}</div>
+                                    <div v-if="ev.starts_at" class="ev-card__meta">🕐 {{ fmtRange(ev.starts_at, ev.ends_at) }}</div>
                                 </div>
                             </a>
                         </div>
@@ -73,7 +73,18 @@ const error = ref('');
 const items = ref([]);
 
 const dateFmt = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
-function fmtDate(iso) { if (!iso) return ''; const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : dateFmt.format(d); }
+const dayFmt = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' });
+const timeFmt = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
+function fmtRange(startIso, endIso) {
+    if (!startIso) return '';
+    const s = new Date(startIso);
+    if (Number.isNaN(s.getTime())) return '';
+    const sTxt = dateFmt.format(s);
+    if (!endIso) return sTxt;
+    const e = new Date(endIso);
+    if (Number.isNaN(e.getTime())) return sTxt;
+    return s.toDateString() === e.toDateString() ? `${sTxt} – ${timeFmt.format(e)}` : `${sTxt} – ${dayFmt.format(e)}`;
+}
 function priceLabel(ev) {
     const p = Number(ev.price) || 0;
     if (!p) return 'Бесплатно';
@@ -83,8 +94,11 @@ function priceLabel(ev) {
 }
 
 const now = Date.now();
-const upcoming = computed(() => items.value.filter((e) => !e.starts_at || new Date(e.starts_at).getTime() >= now));
-const past = computed(() => items.value.filter((e) => e.starts_at && new Date(e.starts_at).getTime() < now).reverse());
+// An event counts as "past" only once its END (or start, if no end) is behind us — a multi-day
+// event stays "upcoming" until it actually finishes.
+function endMs(e) { const t = e.ends_at || e.starts_at; return t ? new Date(t).getTime() : Infinity; }
+const upcoming = computed(() => items.value.filter((e) => endMs(e) >= now));
+const past = computed(() => items.value.filter((e) => endMs(e) < now).reverse());
 
 function backToList() { window.location.href = '/events'; }
 

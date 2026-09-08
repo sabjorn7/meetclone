@@ -168,9 +168,11 @@ async function load() {
     let byId = {};
     if (ids.length) {
         const { data: cs } = await sb.from('course')
-            .select('id, "Title", "Category", slug, "DurationLong", video_id, owner')
+            .select('id, "Title", "Category", slug, "DurationLong", video_id, owner, "ModStatus"')
             .in('id', ids);
-        byId = Object.fromEntries((cs || []).map((c) => [c.id, c]));
+        // Exclude hidden backing courses (paid streams 'Трансляции' / events 'Мероприятия', all
+        // 'Черновик') so they don't appear as broken "courses" (slug=null) in «Ваши курсы».
+        byId = Object.fromEntries((cs || []).filter((c) => c.ModStatus !== 'Черновик').map((c) => [c.id, c]));
     }
 
     // "Ваши курсы": dedupe to one entry per course (keep the newest enrollment window)

@@ -121,6 +121,24 @@
                 </div>
             </section>
 
+            <!-- Contact form (call-back lead) -->
+            <section class="pd-section pd-section--tint">
+                <div class="pd-wrap ed-contact">
+                    <h2 class="pd-h2">Остались вопросы?</h2>
+                    <p class="ed-contact__sub">Оставьте телефон — перезвоним и всё расскажем.</p>
+                    <template v-if="contactSent">
+                        <div class="ed-contact__ok">✓ Спасибо! Мы свяжемся с вами.</div>
+                    </template>
+                    <form v-else class="ed-contact__form" @submit.prevent="sendContact">
+                        <input v-model="contactPhone" type="tel" class="ed-contact__input" placeholder="+7 900 000-00-00" autocomplete="tel" />
+                        <button type="submit" class="pd-btn pd-btn--lg" :disabled="contactSending">
+                            {{ contactSending ? 'Отправка…' : 'Оставить заявку' }}
+                        </button>
+                    </form>
+                    <p v-if="contactError" class="pd-buyerr">{{ contactError }}</p>
+                </div>
+            </section>
+
         </template>
     </div>
 </template>
@@ -136,6 +154,7 @@ import {
     countPaidRegistrations,
     purchaseEvent,
     eventAmount,
+    submitContactRequest,
 } from '@/_front/streams/eventsApi.js';
 
 const sb = () => window.wwLib?.wwPlugins?.supabase?.instance;
@@ -152,6 +171,24 @@ const paidCount = ref(0);
 const choice = ref('full');
 const busy = ref(false);
 const payError = ref('');
+const contactPhone = ref('');
+const contactSending = ref(false);
+const contactSent = ref(false);
+const contactError = ref('');
+
+async function sendContact() {
+    if (contactSending.value) return;
+    contactSending.value = true; contactError.value = '';
+    try {
+        await submitContactRequest(sb(), { event: event.value?.id, phone: contactPhone.value });
+        contactSent.value = true;
+        contactPhone.value = '';
+    } catch (e) {
+        contactError.value = e.message || 'Не удалось отправить заявку.';
+    } finally {
+        contactSending.value = false;
+    }
+}
 
 const dateFmt = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const timeFmt = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -239,6 +276,11 @@ onMounted(async () => {
 .ed-draft { display: inline-block; font-size: 12px; color: #b45309; background: #fef3c7; padding: 2px 8px; border-radius: 999px; margin: 10px 0; }
 .ed-map__addr { color: #5b6472; margin-bottom: 14px; }
 .ed-map__frame { width: 100%; height: 380px; border: 0; border-radius: 16px; box-shadow: 0 6px 20px rgba(15,23,42,.06); }
+.ed-contact { max-width: 640px; }
+.ed-contact__sub { margin: 0 0 20px; color: #5b6472; font-size: 1.05rem; }
+.ed-contact__form { display: flex; gap: 12px; flex-wrap: wrap; }
+.ed-contact__input { flex: 1; min-width: 220px; height: 54px; padding: 0 18px; border: 1px solid #d1d5db; border-radius: 999px; font: inherit; background: #fff; }
+.ed-contact__ok { font-weight: 700; font-size: 1.2rem; color: #21a366; }
 .ed-choices { display: flex; flex-direction: column; gap: 8px; }
 .ed-choice { border: 1px solid #d1d5db; border-radius: 12px; padding: 12px 14px; cursor: pointer; font-size: 15px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ed-choice.on { border-color: #2563eb; background: #eff6ff; }

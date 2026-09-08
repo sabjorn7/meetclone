@@ -118,6 +118,14 @@ export async function getUserBrief(supabase, userId) {
     return data?.[0] || null;
 }
 
+/** Save a call-back request (phone lead). n8n polls status='new' → emails adv@meetgu.ru → marks notified. */
+export async function submitContactRequest(supabase, { event, phone }) {
+    const p = (phone || '').trim();
+    if (p.replace(/\D/g, '').length < 6) throw new Error('Введите корректный номер телефона.');
+    const { error } = await supabase.from('event_contact_requests').insert({ event: event || null, phone: p });
+    if (error) throw new Error(`Не удалось отправить заявку: ${error.message}`);
+}
+
 /** Search users by name/email for the speaker picker (same pattern as chat member search). */
 export async function searchUsers(supabase, query) {
     const q = (query || '').trim();

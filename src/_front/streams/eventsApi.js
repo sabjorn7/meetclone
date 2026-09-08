@@ -31,6 +31,95 @@ export async function createEventBackingCourse(supabase, { owner, title, price }
     return data?.[0]?.id;
 }
 
+// The SOLE organizer allowed to manage offline events (MeetGuru company account adv@meetgu.ru).
+// This is the /events_manage gate — a per-user check, NOT a role check (unlike courses_manage).
+// NOTE: a client-side gate only; events/event_registrations are RLS-off like the rest of the site,
+// so this hides the UI but is not a hard DB barrier (consistent with courses_manage). A server/RLS
+// barrier would be a separate hardening step.
+export const EVENTS_ORGANIZER_USER_ID = 'caa712f8-f5e8-484d-b46d-c56205f52ed1'; // adv@meetgu.ru
+
+export function isEventsOrganizer(userId) {
+    return userId === EVENTS_ORGANIZER_USER_ID;
+}
+
+// ── CRUD (creator/organizer only; the page gates access) ─────────────────────
+
+const EVENT_FIELDS =
+    'id, created_at, slug, title, description, starts_at, location, speaker, cover_url, price, deposit_percent, capacity, chat, backing_course_id, owner, status';
+
+/**
+ * Create an event. Order matters: create the hidden backing course FIRST so events.backing_course_id
+ * is set on insert; the BEFORE INSERT trigger then auto-creates the group chat and fills events.chat.
+ */
+export async function createEvent(supabase, input) {
+    const owner = input.owner;
+    const title = (input.title || '').trim();
+    const price = Number(input.price) || 0;
+    const backingCourseId = await createEventBackingCourse(supabase, { owner, title, price });
+    const { data, error } = await supabase
+        .from('events')
+        .insert({
+            owner,
+            title,
+            description: (input.description || '').trim(),
+            starts_at: input.starts_at || null,
+            location: (input.location || '').trim() || null,
+            speaker: (input.speaker || '').trim() || null,
+            cover_url: input.cover_url || null,
+            price,
+            deposit_percent: input.deposit_percent != null && input.deposit_percent !== '' ? Number(input.deposit_percent) : null,
+            capacity: input.capacity != null && input.capacity !== '' ? Number(input.capacity) : null,
+            backing_course_id: backingCourseId,
+            status: 'draft',
+        })
+        .select(EVENT_FIELDS)
+        .limit(1);
+    if (error) throw new Error(`Не удалось создать мероприятие: ${error.message}`);
+    return data?.[0];
+}
+
+/** Update editable event fields (never owner/chat/backing_course_id). */
+export async function updateEvent(supabase, eventId, fields) {
+    const patch = {};
+    for (const k of ['title', 'description', 'starts_at', 'location', 'speaker', 'cover_url', 'price', 'deposit_percent', 'capacity']) {
+        if (k in fields) patch[k] = fields[k];
+    }
+    const { data, error } = await supabase.from('events').update(patch).eq('id', eventId).select(EVENT_FIELDS).limit(1);
+    if (error) throw new Error(`Не удалось сохранить мероприятие: ${error.message}`);
+    return data?.[0];
+}
+
+/** The organizer's events, newest first. */
+export async function listMyEvents(supabase, ownerId) {
+    const { data, error } = await supabase.from('events').select(EVENT_FIELDS).eq('owner', ownerId).order('created_at', { ascending: false });
+    if (error) throw new Error(`Не удалось загрузить мероприятия: ${error.message}`);
+    return data || [];
+}
+
+/** Count paid registrations for an event (roster size / capacity display / delete guard). */
+export async function countPaidRegistrations(supabase, eventId) {
+    const { count } = await supabase
+        .from('event_registrations')
+        .select('id', { count: 'exact', head: true })
+        .eq('event', eventId)
+        .eq('status', 'paid');
+    return count || 0;
+}
+
+/** Publish (draft → published) — the organizer self-publishes (no admin moderation for events). */
+export async function publishEvent(supabase, eventId) {
+    const { error } = await supabase.from('events').update({ status: 'published' }).eq('id', eventId);
+    if (error) throw new Error(`Не удалось опубликовать: ${error.message}`);
+}
+
+/** Delete an event — REFUSED if anyone has a paid registration (money already taken). */
+export async function deleteEvent(supabase, eventId) {
+    const paid = await countPaidRegistrations(supabase, eventId);
+    if (paid > 0) throw new Error('Нельзя удалить мероприятие с оплаченными регистрациями.');
+    const { error } = await supabase.from('events').delete().eq('id', eventId);
+    if (error) throw new Error(`Не удалось удалить: ${error.message}`);
+}
+
 /** How much this payment charges: full price, or the deposit share (rounded to the ruble). */
 export function eventAmount(event, paymentType) {
     if (paymentType === 'deposit') {

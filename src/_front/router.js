@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import wwPage from './views/wwPage.vue';
 import StreamsPage from './views/StreamsPage.vue';
 import StreamCallPage from './views/StreamCallPage.vue';
+import EventsManagePage from './views/EventsManagePage.vue';
 import ProfilePage from './views/ProfilePage.vue';
 import CoursePage from './views/CoursePage.vue';
 import AllCoursesPage from './views/AllCoursesPage.vue';
@@ -307,6 +308,14 @@ routes.push({
     path: '/streams/call',
     name: 'streams-call',
     component: StreamCallPage,
+});
+
+// Offline-events management (organizer-only, gated in-component to adv@meetgu.ru). Standalone
+// route; a physical dist/events_manage/index.html is produced via vite.config.js. Shared chrome.
+routes.push({
+    path: '/events_manage',
+    name: 'events-manage',
+    component: EventsManagePage,
 });
 
 // Standalone alias for the public profile (same ProfilePage component as the /profile_page override

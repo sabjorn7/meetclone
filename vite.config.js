@@ -34,6 +34,16 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
                 { name: 'description', content: 'Прямой эфир с со-ведущими на платформе МитГуру.' },
             ],
         };
+        // Offline-events management (organizer-only). Needs dist/events_manage/index.html for direct hits.
+        pages['events-manage-en'] = {
+            ..._tpl,
+            outputDir: './events_manage',
+            title: 'Управление мероприятиями — МитГуру',
+            meta: [
+                { name: 'title', content: 'Управление мероприятиями — МитГуру' },
+                { name: 'description', content: 'Создание и управление офлайн-мероприятиями на платформе МитГуру.' },
+            ],
+        };
     }
 }
 

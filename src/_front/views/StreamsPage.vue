@@ -156,7 +156,8 @@
                     <form v-if="showForm" class="sp-form" @submit.prevent="createBroadcast">
                         <label class="sp-field">
                             <span>Название</span>
-                            <input v-model.trim="form.title" type="text" maxlength="200" placeholder="Например: Разбор кейсов по кинезиологии" required />
+                            <input v-model.trim="form.title" type="text" minlength="3" maxlength="120" placeholder="Например: Разбор кейсов по кинезиологии" required />
+                            <span v-if="form.title && form.title.trim().length < 3" class="sp-note">Название — минимум 3 символа.</span>
                         </label>
                         <label class="sp-field">
                             <span>Описание</span>
@@ -340,7 +341,9 @@ const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', pr
 const shareMsg = ref('');
 
 const canSubmit = computed(() => {
-    if (!form.value.title) return false;
+    // PeerTube requires a 3–120 char video title; the live is created from this name.
+    const len = (form.value.title || '').trim().length;
+    if (len < 3 || len > 120) return false;
     if (form.value.kind === 'paid') return Number(form.value.price) > 0;
     return true;
 });

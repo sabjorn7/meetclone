@@ -44,6 +44,16 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
                 { name: 'description', content: 'Создание и управление офлайн-мероприятиями на платформе МитГуру.' },
             ],
         };
+        // Public events calendar + detail (?event=). Needs dist/events/index.html for direct hits/refresh.
+        pages['events-en'] = {
+            ..._tpl,
+            outputDir: './events',
+            title: 'Мероприятия — МитГуру',
+            meta: [
+                { name: 'title', content: 'Мероприятия — МитГуру' },
+                { name: 'description', content: 'Офлайн-мероприятия и семинары по кинезиологии на платформе МитГуру.' },
+            ],
+        };
     }
 }
 

@@ -96,6 +96,17 @@ export async function getEventById(supabase, id) {
     return data?.[0] || null;
 }
 
+/** Published events for the public calendar, earliest first. */
+export async function listPublishedEvents(supabase) {
+    const { data, error } = await supabase
+        .from('events')
+        .select('id, title, starts_at, location, cover_url, price, deposit_percent, capacity, status')
+        .eq('status', 'published')
+        .order('starts_at', { ascending: true, nullsFirst: false });
+    if (error) throw new Error(`Не удалось загрузить мероприятия: ${error.message}`);
+    return data || [];
+}
+
 /** Brief user card for display (speaker on the detail page). */
 export async function getUserBrief(supabase, userId) {
     if (!userId) return null;

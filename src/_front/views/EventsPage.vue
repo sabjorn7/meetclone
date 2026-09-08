@@ -10,51 +10,65 @@
             <EventDetailPage :key="activeEventId" />
         </template>
 
-        <!-- Calendar (list) -->
+        <!-- Calendar (list) — pd-* system + full-width horizontal cards (like /articles brand) -->
         <template v-else>
-            <div class="ev-inner">
-                <h1 class="ev-title">Мероприятия</h1>
-                <p v-if="error" class="ev-error">{{ error }}</p>
-                <div v-if="loading" class="ev-muted">Загрузка…</div>
+            <main class="pd">
+                <header class="pd-hero">
+                    <div class="pd-wrap">
+                        <h1 class="pd-hero__title">Мероприятия</h1>
+                        <p class="pd-hero__sub">Офлайн-семинары и встречи по кинезиологии.</p>
+                    </div>
+                </header>
 
-                <template v-else>
-                    <section v-if="upcoming.length" class="ev-section">
-                        <h2 class="ev-sub">Предстоящие</h2>
-                        <div class="ev-grid">
-                            <a v-for="ev in upcoming" :key="ev.id" class="ev-card" :href="`/events?event=${ev.id}`">
-                                <div class="ev-card__cover">
-                                    <img v-if="ev.cover_url" :src="ev.cover_url" alt="" />
-                                    <div v-else class="ev-card__cover--empty">🗓</div>
-                                </div>
-                                <div class="ev-card__body">
-                                    <div class="ev-card__title">{{ ev.title }}</div>
-                                    <div v-if="ev.starts_at" class="ev-card__meta">🕐 {{ fmtRange(ev.starts_at, ev.ends_at) }}</div>
-                                    <div v-if="ev.location" class="ev-card__meta">📍 {{ ev.location }}</div>
-                                    <div class="ev-card__price">{{ priceLabel(ev) }}</div>
-                                </div>
-                            </a>
-                        </div>
-                    </section>
+                <section class="pd-section">
+                    <div class="pd-wrap">
+                        <p v-if="error" class="pd-empty">{{ error }}</p>
+                        <p v-else-if="loading" class="pd-empty">Загрузка…</p>
 
-                    <section v-if="past.length" class="ev-section">
-                        <h2 class="ev-sub">Прошедшие</h2>
-                        <div class="ev-grid">
-                            <a v-for="ev in past" :key="ev.id" class="ev-card ev-card--past" :href="`/events?event=${ev.id}`">
-                                <div class="ev-card__cover">
-                                    <img v-if="ev.cover_url" :src="ev.cover_url" alt="" />
-                                    <div v-else class="ev-card__cover--empty">🗓</div>
+                        <template v-else>
+                            <template v-if="upcoming.length">
+                                <h2 class="pd-grouphead">Предстоящие</h2>
+                                <div class="pd-list">
+                                    <a v-for="ev in upcoming" :key="ev.id" class="pd-erow" :href="`/events?event=${ev.id}`">
+                                        <div class="pd-erow__cover">
+                                            <img v-if="ev.cover_url" :src="ev.cover_url" :alt="ev.title" loading="lazy" />
+                                            <div v-else class="pd-erow__cover--empty">🗓</div>
+                                            <span class="pd-erow__badge">Предстоящее</span>
+                                        </div>
+                                        <div class="pd-erow__body">
+                                            <h3 class="pd-erow__title">{{ ev.title }}</h3>
+                                            <div v-if="ev.starts_at" class="pd-erow__meta">🕐 {{ fmtRange(ev.starts_at, ev.ends_at) }}</div>
+                                            <div v-if="ev.location" class="pd-erow__meta">📍 {{ ev.location }}</div>
+                                            <div class="pd-erow__spacer"></div>
+                                            <div class="pd-erow__price">{{ priceLabel(ev) }}</div>
+                                        </div>
+                                    </a>
                                 </div>
-                                <div class="ev-card__body">
-                                    <div class="ev-card__title">{{ ev.title }}</div>
-                                    <div v-if="ev.starts_at" class="ev-card__meta">🕐 {{ fmtRange(ev.starts_at, ev.ends_at) }}</div>
-                                </div>
-                            </a>
-                        </div>
-                    </section>
+                            </template>
 
-                    <div v-if="!upcoming.length && !past.length" class="ev-muted">Пока нет мероприятий.</div>
-                </template>
-            </div>
+                            <template v-if="past.length">
+                                <h2 class="pd-grouphead">Прошедшие</h2>
+                                <div class="pd-list">
+                                    <a v-for="ev in past" :key="ev.id" class="pd-erow pd-erow--past" :href="`/events?event=${ev.id}`">
+                                        <div class="pd-erow__cover">
+                                            <img v-if="ev.cover_url" :src="ev.cover_url" :alt="ev.title" loading="lazy" />
+                                            <div v-else class="pd-erow__cover--empty">🗓</div>
+                                            <span class="pd-erow__badge pd-erow__badge--past">Прошло</span>
+                                        </div>
+                                        <div class="pd-erow__body">
+                                            <h3 class="pd-erow__title">{{ ev.title }}</h3>
+                                            <div v-if="ev.starts_at" class="pd-erow__meta">🕐 {{ fmtRange(ev.starts_at, ev.ends_at) }}</div>
+                                            <div v-if="ev.location" class="pd-erow__meta">📍 {{ ev.location }}</div>
+                                        </div>
+                                    </a>
+                                </div>
+                            </template>
+
+                            <p v-if="!upcoming.length && !past.length" class="pd-empty">Пока нет мероприятий.</p>
+                        </template>
+                    </div>
+                </section>
+            </main>
         </template>
     </div>
 </template>
@@ -119,24 +133,52 @@ onMounted(async () => {
 
 <style scoped>
 .ev { min-height: 60vh; }
-.ev-inner { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; font-family: 'Raleway', sans-serif; color: #0f172a; }
-.ev-title { font-size: 28px; font-weight: 800; margin: 0 0 20px; }
-.ev-sub { font-size: 20px; font-weight: 700; margin: 24px 0 12px; }
-.ev-muted { color: #64748b; padding: 32px 0; }
-.ev-error { color: #dc2626; }
-.ev-back { display: inline-block; margin-bottom: 16px; color: #2563eb; text-decoration: none; }
-/* detail-mode top bar aligned to EventDetailPage's own 1200px container (no narrow wrapper) */
+/* detail-mode top bar aligned to EventDetailPage's own 1200px container */
 .ev-detailtop { max-width: 1200px; margin: 0 auto; padding: 16px 40px 0; }
+.ev-back { display: inline-block; color: #1f5fc9; text-decoration: none; }
 @media (max-width: 900px) { .ev-detailtop { padding: 16px 22px 0; } }
-.ev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
-.ev-card { display: flex; flex-direction: column; border: 1px solid #eceef1; border-radius: 14px; overflow: hidden; text-decoration: none; color: inherit; background: #fff; transition: box-shadow .15s; }
-.ev-card:hover { box-shadow: 0 6px 20px rgba(15,23,42,.08); }
-.ev-card--past { opacity: .7; }
-.ev-card__cover { aspect-ratio: 16 / 9; background: #f4f5f7; }
-.ev-card__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.ev-card__cover--empty { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 30px; }
-.ev-card__body { padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
-.ev-card__title { font-weight: 700; font-size: 16px; }
-.ev-card__meta { font-size: 13px; color: #64748b; }
-.ev-card__price { margin-top: 6px; font-weight: 700; color: #2563eb; font-size: 14px; }
+
+/* ── List: pd-* system copied from /articles (exact values) ── */
+.pd {
+    --bg: #ffffff; --bg-tint: #f1f6fd; --surface: #ffffff;
+    --ink: #091747; --ink-2: #5b6472; --ink-3: #98a0ad; --line: #e4e9f1;
+    --blue: #2e70dd; --blue-ink: #1f5fc9; --blue-tint: #eaf1fe;
+    --r-lg: 22px; --r-pill: 999px;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --shadow-hov: 0 22px 46px -26px rgba(9, 23, 71, 0.34);
+    --wrap: 1200px;
+    background: var(--bg); color: var(--ink);
+    font-family: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 17px; line-height: 1.55;
+}
+.pd *, .pd *::before, .pd *::after { box-sizing: border-box; }
+.pd-wrap { width: 100%; max-width: var(--wrap); margin-inline: auto; padding-inline: 40px; }
+.pd-hero { padding: 48px 0 20px; }
+.pd-hero__title { margin: 0; font-weight: 800; font-size: clamp(2rem, 4.6vw, 3rem); line-height: 1.04; letter-spacing: -0.03em; }
+.pd-hero__sub { margin: 14px 0 0; color: var(--ink-2); font-size: 1.08rem; }
+.pd-section { padding: 8px 0 80px; }
+.pd-empty { padding: 60px 0; text-align: center; color: var(--ink-3); }
+.pd-grouphead { margin: 28px 0 16px; font-weight: 800; font-size: 1.35rem; letter-spacing: -0.02em; color: var(--ink); }
+
+/* full-width horizontal cards */
+.pd-list { display: flex; flex-direction: column; gap: 16px; }
+.pd-erow { display: flex; gap: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; text-decoration: none; color: inherit; transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .pd-erow:hover { transform: translateY(-2px); box-shadow: var(--shadow-hov); border-color: transparent; } }
+.pd-erow--past { opacity: 0.72; }
+.pd-erow__cover { position: relative; flex: 0 0 320px; aspect-ratio: 16 / 9; background: var(--bg-tint); }
+.pd-erow__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pd-erow__cover--empty { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 34px; }
+.pd-erow__badge { position: absolute; top: 12px; left: 12px; background: rgba(255,255,255,0.94); color: var(--blue-ink); border-radius: var(--r-pill); padding: 5px 12px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; backdrop-filter: blur(4px); }
+.pd-erow__badge--past { color: var(--ink-3); }
+.pd-erow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 22px 24px; }
+.pd-erow__title { margin: 0; font-weight: 800; font-size: 1.35rem; line-height: 1.24; letter-spacing: -0.02em; }
+.pd-erow__meta { margin-top: 8px; color: var(--ink-2); font-size: 0.98rem; }
+.pd-erow__spacer { flex: 1; min-height: 12px; }
+.pd-erow__price { margin-top: 12px; font-weight: 800; color: var(--blue-ink); font-size: 1.1rem; }
+
+@media (max-width: 640px) {
+    .pd-wrap { padding-inline: 22px; }
+    .pd-erow { flex-direction: column; gap: 0; }
+    .pd-erow__cover { flex-basis: auto; width: 100%; }
+}
 </style>

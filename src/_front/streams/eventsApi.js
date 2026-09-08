@@ -45,7 +45,7 @@ export function isEventsOrganizer(userId) {
 // ── CRUD (creator/organizer only; the page gates access) ─────────────────────
 
 const EVENT_FIELDS =
-    'id, created_at, slug, title, description, starts_at, location, speaker, cover_url, price, deposit_percent, capacity, chat, backing_course_id, owner, status';
+    'id, created_at, slug, title, description, starts_at, location, speaker_id, cover_url, price, deposit_percent, capacity, chat, backing_course_id, owner, status';
 
 /**
  * Create an event. Order matters: create the hidden backing course FIRST so events.backing_course_id
@@ -64,7 +64,7 @@ export async function createEvent(supabase, input) {
             description: (input.description || '').trim(),
             starts_at: input.starts_at || null,
             location: (input.location || '').trim() || null,
-            speaker: (input.speaker || '').trim() || null,
+            speaker_id: input.speaker_id || null,
             cover_url: input.cover_url || null,
             price,
             deposit_percent: input.deposit_percent != null && input.deposit_percent !== '' ? Number(input.deposit_percent) : null,
@@ -81,12 +81,38 @@ export async function createEvent(supabase, input) {
 /** Update editable event fields (never owner/chat/backing_course_id). */
 export async function updateEvent(supabase, eventId, fields) {
     const patch = {};
-    for (const k of ['title', 'description', 'starts_at', 'location', 'speaker', 'cover_url', 'price', 'deposit_percent', 'capacity']) {
+    for (const k of ['title', 'description', 'starts_at', 'location', 'speaker_id', 'cover_url', 'price', 'deposit_percent', 'capacity']) {
         if (k in fields) patch[k] = fields[k];
     }
     const { data, error } = await supabase.from('events').update(patch).eq('id', eventId).select(EVENT_FIELDS).limit(1);
     if (error) throw new Error(`Не удалось сохранить мероприятие: ${error.message}`);
     return data?.[0];
+}
+
+/** Single event by id (public read). Returns null if not found. */
+export async function getEventById(supabase, id) {
+    const { data, error } = await supabase.from('events').select(EVENT_FIELDS).eq('id', id).limit(1);
+    if (error) throw new Error(error.message);
+    return data?.[0] || null;
+}
+
+/** Brief user card for display (speaker on the detail page). */
+export async function getUserBrief(supabase, userId) {
+    if (!userId) return null;
+    const { data } = await supabase.from('users').select('id, "Name", "Photo"').eq('id', userId).limit(1);
+    return data?.[0] || null;
+}
+
+/** Search users by name/email for the speaker picker (same pattern as chat member search). */
+export async function searchUsers(supabase, query) {
+    const q = (query || '').trim();
+    if (!q) return [];
+    const { data } = await supabase
+        .from('users')
+        .select('id, "Name", "Photo", email')
+        .or(`Name.ilike.%${q}%,email.ilike.%${q}%`)
+        .limit(20);
+    return data || [];
 }
 
 /** The organizer's events, newest first. */
@@ -227,7 +253,7 @@ export async function purchaseEvent(supabase, { buyer, event, paymentType }) {
 
     // 4) build + fetch the Prodamus payment link (same builder as courses/streams)
     const base = 'https://meetguru.payform.ru/?do=link&sys=meetguru';
-    const urlSuccess = `https://app.meetgu.ru/events/${event.slug || event.id}`;
+    const urlSuccess = `https://app.meetgu.ru/events?event=${event.id}`;
     const products =
         `products[0][price]=${encodeURIComponent(amount)}` +
         `&products[0][quantity]=1` +

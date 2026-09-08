@@ -53,9 +53,20 @@
                 <label class="em-field"><span>Место проведения</span>
                     <input v-model.trim="form.location" type="text" placeholder="Город, адрес, площадка" />
                 </label>
-                <label class="em-field"><span>Спикер</span>
-                    <input v-model.trim="form.speaker" type="text" placeholder="Имя спикера" />
-                </label>
+                <div class="em-field"><span>Спикер</span>
+                    <div v-if="form.speaker_id" class="em-speaker">
+                        <span class="em-speaker__name">{{ form.speaker_name || 'Выбран' }}</span>
+                        <button type="button" class="em-btn em-btn--sm" @click="clearSpeaker">Убрать</button>
+                    </div>
+                    <template v-else>
+                        <input v-model="speakerQuery" type="text" placeholder="Поиск по имени или e-mail" @input="onSpeakerSearch" />
+                        <ul v-if="speakerResults.length" class="em-picker">
+                            <li v-for="u in speakerResults" :key="u.id" @click="pickSpeaker(u)">
+                                {{ u.Name || u.email || 'Без имени' }}<span v-if="u.email" class="em-picker__email"> · {{ u.email }}</span>
+                            </li>
+                        </ul>
+                    </template>
+                </div>
 
                 <div class="em-grid">
                     <label class="em-field"><span>Цена, ₽ *</span>
@@ -103,6 +114,8 @@ import {
     updateEvent,
     publishEvent,
     deleteEvent,
+    searchUsers,
+    getUserBrief,
 } from '@/_front/streams/eventsApi.js';
 
 const BUCKET = 'profile';
@@ -120,6 +133,11 @@ const dialog = ref(false);
 const dialogError = ref('');
 const coverBusy = ref(false);
 const form = ref(null);
+
+// speaker picker
+const speakerQuery = ref('');
+const speakerResults = ref([]);
+let speakerTimer = null;
 
 const dateFmt = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 function fmtDate(iso) { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : dateFmt.format(d); }
@@ -157,18 +175,39 @@ function isoToLocal(iso) {
 function localToIso(local) { return local ? new Date(local).toISOString() : null; }
 
 function blankForm() {
-    return { id: null, title: '', description: '', starts_at_local: '', location: '', speaker: '', price: null, deposit_percent: '', capacity: '', cover_url: null };
+    return { id: null, title: '', description: '', starts_at_local: '', location: '', speaker_id: null, speaker_name: '', price: null, deposit_percent: '', capacity: '', cover_url: null };
 }
-function openCreate() { form.value = blankForm(); dialogError.value = ''; dialog.value = true; }
-function openEdit(ev) {
+function resetSpeakerPicker() { speakerQuery.value = ''; speakerResults.value = []; clearTimeout(speakerTimer); }
+function openCreate() { form.value = blankForm(); resetSpeakerPicker(); dialogError.value = ''; dialog.value = true; }
+async function openEdit(ev) {
     form.value = {
         id: ev.id, title: ev.title || '', description: ev.description || '', starts_at_local: isoToLocal(ev.starts_at),
-        location: ev.location || '', speaker: ev.speaker || '', price: ev.price, deposit_percent: ev.deposit_percent ?? '',
-        capacity: ev.capacity ?? '', cover_url: ev.cover_url || null,
+        location: ev.location || '', speaker_id: ev.speaker_id || null, speaker_name: '', price: ev.price,
+        deposit_percent: ev.deposit_percent ?? '', capacity: ev.capacity ?? '', cover_url: ev.cover_url || null,
     };
+    resetSpeakerPicker();
     dialogError.value = ''; dialog.value = true;
+    if (ev.speaker_id) {
+        const u = await getUserBrief(sb(), ev.speaker_id).catch(() => null);
+        if (form.value) form.value.speaker_name = u?.Name || u?.email || 'Выбран';
+    }
 }
-function closeDialog() { dialog.value = false; form.value = null; }
+function closeDialog() { dialog.value = false; form.value = null; resetSpeakerPicker(); }
+
+function onSpeakerSearch() {
+    clearTimeout(speakerTimer);
+    const q = speakerQuery.value.trim();
+    if (!q) { speakerResults.value = []; return; }
+    speakerTimer = setTimeout(async () => {
+        speakerResults.value = await searchUsers(sb(), q).catch(() => []);
+    }, 280);
+}
+function pickSpeaker(u) {
+    form.value.speaker_id = u.id;
+    form.value.speaker_name = u.Name || u.email || 'Выбран';
+    resetSpeakerPicker();
+}
+function clearSpeaker() { form.value.speaker_id = null; form.value.speaker_name = ''; }
 
 async function onCover(e) {
     const file = e.target.files?.[0]; e.target.value = '';
@@ -190,7 +229,7 @@ async function save() {
     const f = form.value;
     const payload = {
         title: f.title, description: f.description, starts_at: localToIso(f.starts_at_local),
-        location: f.location, speaker: f.speaker, cover_url: f.cover_url,
+        location: f.location, speaker_id: f.speaker_id, cover_url: f.cover_url,
         price: Number(f.price),
         deposit_percent: f.deposit_percent === '' || f.deposit_percent == null ? null : Number(f.deposit_percent),
         capacity: f.capacity === '' || f.capacity == null ? null : Number(f.capacity),
@@ -253,6 +292,12 @@ onMounted(async () => {
 .em-field > span { color: #64748b; font-weight: 600; }
 .em-field input, .em-field textarea { border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font: inherit; }
 .em-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.em-speaker { display: flex; align-items: center; gap: 10px; }
+.em-speaker__name { font-weight: 600; }
+.em-picker { list-style: none; margin: 6px 0 0; padding: 0; border: 1px solid #eceef1; border-radius: 10px; max-height: 200px; overflow-y: auto; }
+.em-picker li { padding: 8px 12px; cursor: pointer; font-size: 14px; }
+.em-picker li:hover { background: #f4f5f7; }
+.em-picker__email { color: #94a3b8; font-size: 12px; }
 .em-cover { display: flex; align-items: center; gap: 12px; }
 .em-cover__img { width: 120px; height: 80px; object-fit: cover; border-radius: 10px; }
 .em-dialog__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }

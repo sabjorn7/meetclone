@@ -4,6 +4,7 @@
         <div v-else-if="notFound" class="ed-center">Мероприятие не найдено.</div>
 
         <template v-else>
+            <div class="ed-narrow">
             <div v-if="event.cover_url" class="ed-cover"><img :src="event.cover_url" alt="" /></div>
 
             <h1 class="ed-title">{{ event.title }}</h1>
@@ -21,8 +22,9 @@
             </div>
 
             <p v-if="event.description" class="ed-desc">{{ event.description }}</p>
+            </div><!-- /ed-narrow (hero) -->
 
-            <!-- Marketing blocks — LITERALLY the CoursePage structure/classes -->
+            <!-- Marketing blocks — LITERALLY the CoursePage structure/classes (full 1200px width) -->
             <section v-if="learnItems.length" class="pd-section pd-section--tint">
                 <div class="pd-wrap">
                     <h2 class="pd-h2">Чему научитесь</h2>
@@ -56,13 +58,15 @@
                 </div>
             </section>
 
-            <!-- Venue map (Yandex embed by the free-text address; no API key, no stored coords) -->
+            <div class="ed-narrow">
+            <!-- Venue map: Google embed by the free-text address — centers on the address with a
+                 marker immediately, no intermediate "found N" click, no API key. -->
             <div v-if="event.location" class="ed-map">
                 <h2 class="ed-map__title">Как добраться</h2>
                 <div class="ed-map__addr">📍 {{ event.location }}</div>
                 <iframe
                     class="ed-map__frame"
-                    :src="`https://yandex.ru/map-widget/v1/?text=${encodeURIComponent(event.location)}`"
+                    :src="`https://www.google.com/maps?q=${encodeURIComponent(event.location)}&output=embed`"
                     loading="lazy"
                     allowfullscreen
                 ></iframe>
@@ -119,6 +123,7 @@
 
                 <p v-if="payError" class="ed-error">{{ payError }}</p>
             </div>
+            </div><!-- /ed-narrow (map + registration) -->
         </template>
     </div>
 </template>
@@ -231,7 +236,9 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.ed { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; font-family: 'Raleway', sans-serif; color: #0f172a; }
+.ed { max-width: 1200px; margin: 0 auto; padding: 24px 40px 64px; font-family: 'Raleway', sans-serif; color: #091747; }
+/* Hero / map / registration stay in a comfortable reading column; pd-sections go full 1200px. */
+.ed-narrow { max-width: 820px; margin: 0 auto; }
 .ed-center { text-align: center; color: #64748b; padding: 64px 0; }
 .ed-cover { border-radius: 16px; overflow: hidden; margin-bottom: 18px; }
 .ed-cover img { width: 100%; display: block; }
@@ -258,11 +265,11 @@ onMounted(async () => {
 .ed-btn:disabled { opacity: .5; cursor: default; }
 .ed-error { color: #dc2626; font-size: 14px; }
 
-/* ── Marketing blocks — pd-* structure copied verbatim from CoursePage (values inlined) ── */
-.pd-section { padding: 40px 0; }
-.pd-section--tint { background: #f1f6fd; border-radius: 20px; }
-.pd-wrap { max-width: 820px; margin: 0 auto; padding: 0 16px; }
-.pd-h2 { font-size: 24px; font-weight: 800; color: #091747; margin: 0 0 22px; }
+/* ── Marketing blocks — pd-* structure copied verbatim from CoursePage (exact values) ── */
+.pd-section { padding: 80px 0; }
+.pd-section--tint { background: #f1f6fd; }
+.pd-wrap { width: 100%; max-width: 1200px; margin-inline: auto; padding-inline: 40px; }
+.pd-h2 { margin: 0 0 32px; font-weight: 700; font-size: clamp(1.9rem, 4vw, 3rem); line-height: 1.06; letter-spacing: -0.02em; color: #091747; }
 .pd-learn { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 32px; }
 .pd-learn__item { display: flex; align-items: flex-start; gap: 12px; font-size: 1.06rem; color: #091747; }
 .pd-learn__item .pd-ic { flex: none; width: 24px; height: 24px; stroke-width: 2.6; stroke: #21a366; fill: none; margin-top: 2px; }
@@ -272,7 +279,12 @@ onMounted(async () => {
 .pd-forcard { position: relative; background: #fff; border: 1px solid #e4e9f1; border-radius: 16px; padding: 24px 24px 24px 28px; }
 .pd-forcard__dot { position: absolute; left: 24px; top: 30px; width: 10px; height: 10px; border-radius: 50%; background: #5495f3; }
 .pd-forcard p { margin: 0 0 0 22px; color: #5b6472; font-size: 1rem; }
-@media (max-width: 640px) {
+@media (max-width: 900px) {
+    .ed { padding-inline: 22px; }
+    .pd-wrap { padding-inline: 22px; }
+    .pd-section { padding: 56px 0; }
+}
+@media (max-width: 560px) {
     .pd-learn { grid-template-columns: 1fr; }
     .pd-cards--for { grid-template-columns: 1fr; }
 }

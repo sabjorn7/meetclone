@@ -4,25 +4,25 @@
         <div v-else-if="notFound" class="ed-center">Мероприятие не найдено.</div>
 
         <template v-else>
-            <div class="ed-narrow">
-            <div v-if="event.cover_url" class="ed-cover"><img :src="event.cover_url" alt="" /></div>
+            <div class="pd-wrap ed-hero">
+                <div v-if="event.cover_url" class="ed-cover"><img :src="event.cover_url" alt="" /></div>
 
-            <h1 class="ed-title">{{ event.title }}</h1>
-            <span v-if="event.status !== 'published'" class="ed-draft">Черновик (виден только вам)</span>
+                <h1 class="ed-title">{{ event.title }}</h1>
+                <span v-if="event.status !== 'published'" class="ed-draft">Черновик (виден только вам)</span>
 
-            <div class="ed-meta">
-                <div v-if="whenText" class="ed-meta__row">🕐 {{ whenText }}</div>
-                <div v-if="event.location" class="ed-meta__row">📍 {{ event.location }}</div>
-                <div v-if="speaker" class="ed-meta__row">
-                    🎤 <a class="ed-speaker" :href="`/profile_page/?user=${speaker.id}`">{{ speaker.Name || 'Спикер' }}</a>
+                <div class="ed-meta">
+                    <div v-if="whenText" class="ed-meta__row">🕐 {{ whenText }}</div>
+                    <div v-if="event.location" class="ed-meta__row">📍 {{ event.location }}</div>
+                    <div v-if="speaker" class="ed-meta__row">
+                        🎤 <a class="ed-speaker" :href="`/profile_page/?user=${speaker.id}`">{{ speaker.Name || 'Спикер' }}</a>
+                    </div>
+                    <div v-if="event.capacity != null" class="ed-meta__row">
+                        👥 {{ seatsLeft > 0 ? `Осталось мест: ${seatsLeft}` : 'Мест нет' }}
+                    </div>
                 </div>
-                <div v-if="event.capacity != null" class="ed-meta__row">
-                    👥 {{ seatsLeft > 0 ? `Осталось мест: ${seatsLeft}` : 'Мест нет' }}
-                </div>
+
+                <p v-if="event.description" class="ed-desc">{{ event.description }}</p>
             </div>
-
-            <p v-if="event.description" class="ed-desc">{{ event.description }}</p>
-            </div><!-- /ed-narrow (hero) -->
 
             <!-- Marketing blocks — LITERALLY the CoursePage structure/classes (full 1200px width) -->
             <section v-if="learnItems.length" class="pd-section pd-section--tint">
@@ -58,20 +58,19 @@
                 </div>
             </section>
 
-            <div class="ed-narrow">
-            <!-- Venue map: Google embed by the free-text address — centers on the address with a
-                 marker immediately, no intermediate "found N" click, no API key. -->
-            <div v-if="event.location" class="ed-map">
-                <h2 class="ed-map__title">Как добраться</h2>
-                <div class="ed-map__addr">📍 {{ event.location }}</div>
-                <iframe
-                    class="ed-map__frame"
-                    :src="`https://www.google.com/maps?q=${encodeURIComponent(event.location)}&output=embed`"
-                    loading="lazy"
-                    allowfullscreen
-                ></iframe>
-            </div>
-            </div><!-- /ed-narrow (hero + map) -->
+            <!-- Venue map: Google embed by the free-text address — instant marker, no click, no key. -->
+            <section v-if="event.location" class="pd-section">
+                <div class="pd-wrap">
+                    <h2 class="pd-h2">Как добраться</h2>
+                    <div class="ed-map__addr">📍 {{ event.location }}</div>
+                    <iframe
+                        class="ed-map__frame"
+                        :src="`https://www.google.com/maps?q=${encodeURIComponent(event.location)}&output=embed`"
+                        loading="lazy"
+                        allowfullscreen
+                    ></iframe>
+                </div>
+            </section>
 
             <!-- Registration — CoursePage pd-price layout (blue "what's included" + white price/CTA) -->
             <section class="pd-price-wrap">
@@ -246,34 +245,24 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.ed { max-width: 1200px; margin: 0 auto; padding: 24px 40px 64px; font-family: 'Raleway', sans-serif; color: #091747; }
-/* Hero / map / registration stay in a comfortable reading column; pd-sections go full 1200px. */
-.ed-narrow { max-width: 820px; margin: 0 auto; }
+/* Full-width page (like course main.pd); EVERY block sits in a pd-wrap (1200/40) → same width. */
+.ed { width: 100%; font-family: 'Raleway', sans-serif; color: #091747; }
 .ed-center { text-align: center; color: #64748b; padding: 64px 0; }
-.ed-cover { border-radius: 16px; overflow: hidden; margin-bottom: 18px; }
+.ed-hero { padding-top: 24px; }
+.ed-cover { border-radius: 16px; overflow: hidden; margin-bottom: 22px; }
 .ed-cover img { width: 100%; display: block; }
-.ed-title { font-size: 28px; font-weight: 800; margin: 0 0 6px; }
+.ed-title { margin: 0 0 6px; font-weight: 700; font-size: clamp(1.9rem, 3.4vw, 2.9rem); line-height: 1.08; letter-spacing: -0.02em; }
 .ed-draft { display: inline-block; font-size: 12px; color: #b45309; background: #fef3c7; padding: 2px 8px; border-radius: 999px; margin-bottom: 12px; }
-.ed-meta { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; color: #334155; }
+.ed-meta { display: flex; flex-direction: column; gap: 6px; margin: 16px 0; color: #5b6472; font-size: 1.05rem; }
 .ed-speaker { color: #2563eb; text-decoration: none; font-weight: 600; }
 .ed-speaker:hover { text-decoration: underline; }
-.ed-desc { line-height: 1.6; color: #334155; white-space: pre-line; margin: 16px 0; }
-.ed-map { margin: 24px 0; }
-.ed-map__title { font-size: 20px; font-weight: 700; margin: 0 0 8px; }
-.ed-map__addr { color: #334155; margin-bottom: 10px; }
-.ed-map__frame { width: 100%; height: 340px; border: 0; border-radius: 16px; box-shadow: 0 6px 20px rgba(15,23,42,.06); }
-.ed-card { border: 1px solid #eceef1; border-radius: 18px; padding: 22px; margin-top: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 28px rgba(15,23,42,.07); }
-.ed-price { font-size: 24px; font-weight: 800; }
-.ed-ok { font-size: 18px; font-weight: 700; color: #16a34a; }
-.ed-note { font-size: 14px; color: #64748b; }
+.ed-desc { line-height: 1.6; color: #5b6472; white-space: pre-line; margin: 16px 0; font-size: 1.1rem; }
+.ed-map__addr { color: #5b6472; margin-bottom: 14px; }
+.ed-map__frame { width: 100%; height: 380px; border: 0; border-radius: 16px; box-shadow: 0 6px 20px rgba(15,23,42,.06); }
 .ed-choices { display: flex; flex-direction: column; gap: 8px; }
 .ed-choice { border: 1px solid #d1d5db; border-radius: 12px; padding: 12px 14px; cursor: pointer; font-size: 15px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ed-choice.on { border-color: #2563eb; background: #eff6ff; }
 .ed-choice__sub { flex-basis: 100%; color: #94a3b8; font-size: 13px; padding-left: 24px; }
-.ed-btn { display: inline-block; text-align: center; border: 1px solid #d1d5db; background: #fff; border-radius: 12px; padding: 12px 20px; cursor: pointer; font-size: 15px; text-decoration: none; color: #0f172a; }
-.ed-btn--primary { background: #2563eb; color: #fff; border-color: #2563eb; }
-.ed-btn:disabled { opacity: .5; cursor: default; }
-.ed-error { color: #dc2626; font-size: 14px; }
 
 /* ── Marketing blocks — pd-* structure copied verbatim from CoursePage (exact values) ── */
 .pd-section { padding: 80px 0; }

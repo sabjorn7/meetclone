@@ -22,6 +22,40 @@
 
             <p v-if="event.description" class="ed-desc">{{ event.description }}</p>
 
+            <!-- Marketing blocks — LITERALLY the CoursePage structure/classes -->
+            <section v-if="learnItems.length" class="pd-section pd-section--tint">
+                <div class="pd-wrap">
+                    <h2 class="pd-h2">Чему научитесь</h2>
+                    <ul class="pd-learn">
+                        <li v-for="(t, i) in learnItems" :key="i" class="pd-learn__item">
+                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 12l5 5L20 6" /></svg>
+                            <span>{{ t }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </section>
+
+            <section v-if="aboutParagraphs.length" class="pd-section">
+                <div class="pd-wrap pd-about">
+                    <h2 class="pd-h2">О мероприятии</h2>
+                    <div class="pd-about__body">
+                        <p v-for="(p, i) in aboutParagraphs" :key="i">{{ p }}</p>
+                    </div>
+                </div>
+            </section>
+
+            <section v-if="forItems.length" class="pd-section pd-section--tint">
+                <div class="pd-wrap">
+                    <h2 class="pd-h2">Для кого</h2>
+                    <div class="pd-cards pd-cards--for">
+                        <article v-for="(t, i) in forItems" :key="i" class="pd-forcard">
+                            <span class="pd-forcard__dot" aria-hidden="true"></span>
+                            <p>{{ t }}</p>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
             <!-- Venue map (Yandex embed by the free-text address; no API key, no stored coords) -->
             <div v-if="event.location" class="ed-map">
                 <h2 class="ed-map__title">Как добраться</h2>
@@ -139,6 +173,15 @@ const seatsFull = computed(() => event.value?.capacity != null && seatsLeft.valu
 
 function money(v) { return (Number(v) || 0).toLocaleString('ru-RU'); }
 
+// Marketing blocks — same storage/parsing as CoursePage: about = paragraphs split on blank lines;
+// what_you_learn / for_whom = one bullet per line ("- item" markers stripped).
+function bullets(text) {
+    return (text || '').split(/\n+/).map((l) => l.replace(/^[\s•\-–—*]+/, '').trim()).filter(Boolean);
+}
+const aboutParagraphs = computed(() => (event.value?.about || '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean));
+const learnItems = computed(() => bullets(event.value?.what_you_learn));
+const forItems = computed(() => bullets(event.value?.for_whom));
+
 async function loadReg() {
     if (!me.value || !event.value) { reg.value = null; return; }
     reg.value = await getMyEventRegistration(sb(), event.value.id, me.value.id).catch(() => null);
@@ -214,4 +257,23 @@ onMounted(async () => {
 .ed-btn--primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .ed-btn:disabled { opacity: .5; cursor: default; }
 .ed-error { color: #dc2626; font-size: 14px; }
+
+/* ── Marketing blocks — pd-* structure copied verbatim from CoursePage (values inlined) ── */
+.pd-section { padding: 40px 0; }
+.pd-section--tint { background: #f1f6fd; border-radius: 20px; }
+.pd-wrap { max-width: 820px; margin: 0 auto; padding: 0 16px; }
+.pd-h2 { font-size: 24px; font-weight: 800; color: #091747; margin: 0 0 22px; }
+.pd-learn { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 32px; }
+.pd-learn__item { display: flex; align-items: flex-start; gap: 12px; font-size: 1.06rem; color: #091747; }
+.pd-learn__item .pd-ic { flex: none; width: 24px; height: 24px; stroke-width: 2.6; stroke: #21a366; fill: none; margin-top: 2px; }
+.pd-about { max-width: 820px; }
+.pd-about__body p { margin: 0 0 16px; font-size: 1.1rem; color: #5b6472; line-height: 1.6; }
+.pd-cards--for { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.pd-forcard { position: relative; background: #fff; border: 1px solid #e4e9f1; border-radius: 16px; padding: 24px 24px 24px 28px; }
+.pd-forcard__dot { position: absolute; left: 24px; top: 30px; width: 10px; height: 10px; border-radius: 50%; background: #5495f3; }
+.pd-forcard p { margin: 0 0 0 22px; color: #5b6472; font-size: 1rem; }
+@media (max-width: 640px) {
+    .pd-learn { grid-template-columns: 1fr; }
+    .pd-cards--for { grid-template-columns: 1fr; }
+}
 </style>

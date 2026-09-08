@@ -44,8 +44,17 @@
                 <label class="em-field"><span>Название *</span>
                     <input v-model.trim="form.title" type="text" minlength="3" maxlength="120" placeholder="Название мероприятия" />
                 </label>
-                <label class="em-field"><span>Описание</span>
-                    <textarea v-model.trim="form.description" rows="3" placeholder="О чём мероприятие"></textarea>
+                <label class="em-field"><span>Краткое описание (для карточек)</span>
+                    <textarea v-model.trim="form.description" rows="2" placeholder="Короткий анонс для карточки и превью"></textarea>
+                </label>
+                <label class="em-field"><span>О чём мероприятие</span>
+                    <textarea v-model="form.about" rows="4" placeholder="Подробно, абзацы разделяйте пустой строкой"></textarea>
+                </label>
+                <label class="em-field"><span>Чему научитесь</span>
+                    <textarea v-model="form.what_you_learn" rows="4" placeholder="Каждый пункт — с новой строки"></textarea>
+                </label>
+                <label class="em-field"><span>Для кого</span>
+                    <textarea v-model="form.for_whom" rows="4" placeholder="Каждый пункт — с новой строки"></textarea>
                 </label>
                 <label class="em-field"><span>Дата и время начала</span>
                     <input v-model="form.starts_at_local" type="datetime-local" />
@@ -178,13 +187,13 @@ function isoToLocal(iso) {
 function localToIso(local) { return local ? new Date(local).toISOString() : null; }
 
 function blankForm() {
-    return { id: null, title: '', description: '', starts_at_local: '', ends_at_local: '', location: '', speaker_id: null, speaker_name: '', price: null, deposit_percent: '', capacity: '', cover_url: null };
+    return { id: null, title: '', description: '', about: '', what_you_learn: '', for_whom: '', starts_at_local: '', ends_at_local: '', location: '', speaker_id: null, speaker_name: '', price: null, deposit_percent: '', capacity: '', cover_url: null };
 }
 function resetSpeakerPicker() { speakerQuery.value = ''; speakerResults.value = []; clearTimeout(speakerTimer); }
 function openCreate() { form.value = blankForm(); resetSpeakerPicker(); dialogError.value = ''; dialog.value = true; }
 async function openEdit(ev) {
     form.value = {
-        id: ev.id, title: ev.title || '', description: ev.description || '', starts_at_local: isoToLocal(ev.starts_at), ends_at_local: isoToLocal(ev.ends_at),
+        id: ev.id, title: ev.title || '', description: ev.description || '', about: ev.about || '', what_you_learn: ev.what_you_learn || '', for_whom: ev.for_whom || '', starts_at_local: isoToLocal(ev.starts_at), ends_at_local: isoToLocal(ev.ends_at),
         location: ev.location || '', speaker_id: ev.speaker_id || null, speaker_name: '', price: ev.price,
         deposit_percent: ev.deposit_percent ?? '', capacity: ev.capacity ?? '', cover_url: ev.cover_url || null,
     };
@@ -231,7 +240,7 @@ async function save() {
     busy.value = true; dialogError.value = '';
     const f = form.value;
     const payload = {
-        title: f.title, description: f.description, starts_at: localToIso(f.starts_at_local), ends_at: localToIso(f.ends_at_local),
+        title: f.title, description: f.description, about: f.about, what_you_learn: f.what_you_learn, for_whom: f.for_whom, starts_at: localToIso(f.starts_at_local), ends_at: localToIso(f.ends_at_local),
         location: f.location, speaker_id: f.speaker_id, cover_url: f.cover_url,
         price: Number(f.price),
         deposit_percent: f.deposit_percent === '' || f.deposit_percent == null ? null : Number(f.deposit_percent),

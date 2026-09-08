@@ -45,7 +45,7 @@ export function isEventsOrganizer(userId) {
 // ── CRUD (creator/organizer only; the page gates access) ─────────────────────
 
 const EVENT_FIELDS =
-    'id, created_at, slug, title, description, starts_at, ends_at, location, speaker_id, cover_url, price, deposit_percent, capacity, chat, backing_course_id, owner, status';
+    'id, created_at, slug, title, description, about, what_you_learn, for_whom, starts_at, ends_at, location, speaker_id, cover_url, price, deposit_percent, capacity, chat, backing_course_id, owner, status';
 
 /**
  * Create an event. Order matters: create the hidden backing course FIRST so events.backing_course_id
@@ -62,6 +62,9 @@ export async function createEvent(supabase, input) {
             owner,
             title,
             description: (input.description || '').trim(),
+            about: (input.about || '').trim() || null,
+            what_you_learn: (input.what_you_learn || '').trim() || null,
+            for_whom: (input.for_whom || '').trim() || null,
             starts_at: input.starts_at || null,
             ends_at: input.ends_at || null,
             location: (input.location || '').trim() || null,
@@ -82,7 +85,7 @@ export async function createEvent(supabase, input) {
 /** Update editable event fields (never owner/chat/backing_course_id). */
 export async function updateEvent(supabase, eventId, fields) {
     const patch = {};
-    for (const k of ['title', 'description', 'starts_at', 'ends_at', 'location', 'speaker_id', 'cover_url', 'price', 'deposit_percent', 'capacity']) {
+    for (const k of ['title', 'description', 'about', 'what_you_learn', 'for_whom', 'starts_at', 'ends_at', 'location', 'speaker_id', 'cover_url', 'price', 'deposit_percent', 'capacity']) {
         if (k in fields) patch[k] = fields[k];
     }
     const { data, error } = await supabase.from('events').update(patch).eq('id', eventId).select(EVENT_FIELDS).limit(1);

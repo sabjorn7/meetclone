@@ -1,0 +1,84 @@
+# ---------------------------------------------------------------------------
+# Dependencies & build output
+# ---------------------------------------------------------------------------
+node_modules/
+dist/
+# generated build entry (source is template.html)
+/index.html
+
+# ---------------------------------------------------------------------------
+# Local tooling / agent config (not part of the app)
+# ---------------------------------------------------------------------------
+/.agents/
+/.claude/
+/.codex/
+/.github/agents/
+/.github/hooks/
+/.github/skills/
+/skills-lock.json
+
+# ---------------------------------------------------------------------------
+# WeWeb physical page-export folders at repo ROOT.
+# These are export artifacts — the real source is src/pages/<uuid>.js.
+# Anchored with a leading "/" so they only match the repo root and never
+# collide with tracked source paths (e.g. src/_front/streams, src/components).
+# ---------------------------------------------------------------------------
+/about_meet/
+/about-demo/
+/all_course/
+/all-course-demo/
+/article_page/
+/article-demo/
+/articles/
+/articles_manage/
+/articles-demo/
+/cert-demo/
+/chats/
+/chats-demo/
+/club/
+/clubs/
+/clubs-demo/
+/components/
+/contacts/
+/course_info/
+/course-demo/
+/courses_manage/
+/courses-manage-demo/
+/dashboard/
+/events/
+/events_manage/
+/faq/
+/feedback/
+/home-demo/
+/kinesis/
+/login/
+/login-demo/
+/my_courses/
+/my_finanse/
+/my-course-demo/
+/oferta/
+/ofertadogovor/
+/ofertauser/
+/osteo/
+/politica/
+/profile/
+/profile_page/
+/profile-demo/
+/profile-edit-demo/
+/promo/
+/promo-demo/
+/registration/
+/reset_pw/
+/soglasie/
+/streams/
+/superadmin/
+/testpage/
+/users/
+/users-demo/
+/welcome/
+
+# ---------------------------------------------------------------------------
+# OS / editor cruft
+# ---------------------------------------------------------------------------
+.DS_Store
+*.log

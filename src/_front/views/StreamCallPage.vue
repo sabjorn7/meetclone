@@ -219,6 +219,7 @@ const fileInput = ref(null);
 let pdfDoc = null; // pdf.js document (non-reactive)
 let presStream = null; // canvas.captureStream()
 let presMst = null; // its MediaStreamTrack (what we publish/unpublish)
+let presKeepAlive = null; // re-pushes the current static frame so late subscribers/egress get it
 
 const devices = ref({ cams: [], mics: [] });
 const selectedCam = ref('');
@@ -521,18 +522,29 @@ async function onPdfPicked(e) {
         pageNum.value = 1;
         await renderPage(1);
         // Publish the canvas as a screen-share-source track (spotlight everywhere, no egress change).
-        presStream = presCanvas.value.captureStream(5);
+        // Manual capture (fps 0): frames are emitted ONLY on requestFrame(), read straight from the
+        // canvas backing store — independent of rAF/compositing (an off-screen canvas may not tick
+        // rAF, which left the auto-sampled stream black). We push a frame after every render.
+        presStream = presCanvas.value.captureStream(0);
         presMst = presStream.getVideoTracks()[0];
-        if (typeof presMst.requestFrame === 'function') presMst.requestFrame(); // push the first slide now
+        pushFrame();
         await room.value.localParticipant.publishTrack(presMst, {
             source: Track.Source.ScreenShare,
             name: 'presentation',
         });
+        pushFrame(); // once more now that subscribers exist
+        // A static slide emits no frames on its own; re-push periodically so late subscribers and
+        // the egress composite always have the current slide.
+        presKeepAlive = setInterval(pushFrame, 2000);
         presenting.value = true;
     } catch {
         window.alert('Не удалось открыть PDF.');
         await stopPresentation();
     }
+}
+
+function pushFrame() {
+    if (presMst && typeof presMst.requestFrame === 'function') presMst.requestFrame();
 }
 
 async function renderPage(n) {
@@ -553,11 +565,15 @@ async function gotoPage(delta) {
     const next = pageNum.value + delta;
     if (next < 1 || next > pageCount.value) return;
     pageNum.value = next;
-    await renderPage(next); // the captureStream reflects the redraw → all viewers + composite update
-    if (presMst && typeof presMst.requestFrame === 'function') presMst.requestFrame();
+    await renderPage(next); // redraw → push the new frame to all viewers + composite
+    pushFrame();
 }
 
 async function stopPresentation() {
+    if (presKeepAlive) {
+        clearInterval(presKeepAlive);
+        presKeepAlive = null;
+    }
     try {
         if (presMst && room.value) room.value.localParticipant.unpublishTrack(presMst, true);
     } catch {

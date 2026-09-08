@@ -162,31 +162,44 @@ export async function publishEvent(supabase, eventId) {
 }
 
 /**
- * Delete an event.
- *  - REFUSED with a plain message if anyone PAID (money already taken) — never a raw DB error.
- *  - Otherwise clears leftover NON-paid registrations (pending/cancelled — no money moved) first,
- *    so the event_registrations_event_fkey (ON DELETE NO ACTION) doesn't reject the delete with a
- *    raw "violates foreign key constraint" error. This is what makes abandoned/test events deletable.
+ * Delete an event. Three tables FK-reference events (all ON DELETE NO ACTION), so ANY leftover
+ * child row raises a raw "violates foreign key constraint" error unless cleared first:
+ *   event_registrations.event · order.event_id · event_contact_requests.event
+ *
+ *  - REFUSED with a plain message if real money is attached — a PAID registration OR a PAID order.
+ *  - Otherwise clears the unpaid references (no money moved) so an abandoned/test event is deletable:
+ *      · registrations → delete non-paid rows
+ *      · orders        → DETACH unpaid orders (event_id → null): keep the payment record, drop the FK
+ *      · contact reqs  → DETACH (event → null): keep the phone lead, drop the FK
+ * No .select()/.limit() on any mutation — self-hosted PostgREST rejects UPDATE/DELETE+limit
+ * without an .order() (PGRST109).
  */
 export async function deleteEvent(supabase, eventId) {
-    const paid = await countPaidRegistrations(supabase, eventId);
-    if (paid > 0) {
-        throw new Error(`Нельзя удалить: у мероприятия есть оплатившие участники (${paid}). Сначала отмените их регистрации или возвраты.`);
+    const paidRegs = await countPaidRegistrations(supabase, eventId);
+    // A paid order also flips a registration to 'paid' via trg_event_order_paid, but check both.
+    const { count: paidOrders } = await supabase
+        .from('order')
+        .select('id', { count: 'exact', head: true })
+        .eq('event_id', eventId)
+        .eq('paid', true);
+    if (paidRegs > 0 || (paidOrders || 0) > 0) {
+        throw new Error(`Нельзя удалить: у мероприятия есть оплатившие участники (${paidRegs || paidOrders}). Сначала оформите возвраты.`);
     }
-    // Remove only unpaid registrations. .neq('status','paid') is a safety belt: even if a callback
-    // flips a row to 'paid' between the count above and here, that paid row is never deleted.
-    // No .select()/.limit() — self-hosted PostgREST rejects DELETE+limit without order (PGRST109).
-    const { error: regErr } = await supabase
-        .from('event_registrations')
-        .delete()
-        .eq('event', eventId)
-        .neq('status', 'paid');
-    if (regErr) throw new Error(`Не удалось очистить незавершённые регистрации: ${regErr.message}`);
+
+    // .neq('status','paid') / .eq('paid', false) are safety belts: a row flipped to paid by a
+    // callback mid-delete is never touched here.
+    const r1 = await supabase.from('event_registrations').delete().eq('event', eventId).neq('status', 'paid');
+    if (r1.error) throw new Error(`Не удалось очистить незавершённые регистрации: ${r1.error.message}`);
+    const r2 = await supabase.from('order').update({ event_id: null }).eq('event_id', eventId).eq('paid', false);
+    if (r2.error) throw new Error(`Не удалось отвязать незавершённые заказы: ${r2.error.message}`);
+    const r3 = await supabase.from('event_contact_requests').update({ event: null }).eq('event', eventId);
+    if (r3.error) throw new Error(`Не удалось отвязать заявки на звонок: ${r3.error.message}`);
 
     const { error } = await supabase.from('events').delete().eq('id', eventId);
     if (error) {
-        // A paid registration slipped in during the race above → FK still blocks. Show the plain message.
-        if (/event_registrations_event_fkey|foreign key/i.test(error.message)) {
+        // Everything unpaid was cleared above; a lingering registrations-FK means a paid row
+        // appeared mid-delete. Match ONLY that constraint — not any "foreign key" text.
+        if (/event_registrations_event_fkey/i.test(error.message)) {
             throw new Error('Нельзя удалить: у мероприятия появились оплатившие участники.');
         }
         throw new Error(`Не удалось удалить: ${error.message}`);

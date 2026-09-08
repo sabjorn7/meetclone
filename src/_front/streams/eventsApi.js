@@ -161,12 +161,36 @@ export async function publishEvent(supabase, eventId) {
     if (error) throw new Error(`Не удалось опубликовать: ${error.message}`);
 }
 
-/** Delete an event — REFUSED if anyone has a paid registration (money already taken). */
+/**
+ * Delete an event.
+ *  - REFUSED with a plain message if anyone PAID (money already taken) — never a raw DB error.
+ *  - Otherwise clears leftover NON-paid registrations (pending/cancelled — no money moved) first,
+ *    so the event_registrations_event_fkey (ON DELETE NO ACTION) doesn't reject the delete with a
+ *    raw "violates foreign key constraint" error. This is what makes abandoned/test events deletable.
+ */
 export async function deleteEvent(supabase, eventId) {
     const paid = await countPaidRegistrations(supabase, eventId);
-    if (paid > 0) throw new Error('Нельзя удалить мероприятие с оплаченными регистрациями.');
+    if (paid > 0) {
+        throw new Error(`Нельзя удалить: у мероприятия есть оплатившие участники (${paid}). Сначала отмените их регистрации или возвраты.`);
+    }
+    // Remove only unpaid registrations. .neq('status','paid') is a safety belt: even if a callback
+    // flips a row to 'paid' between the count above and here, that paid row is never deleted.
+    // No .select()/.limit() — self-hosted PostgREST rejects DELETE+limit without order (PGRST109).
+    const { error: regErr } = await supabase
+        .from('event_registrations')
+        .delete()
+        .eq('event', eventId)
+        .neq('status', 'paid');
+    if (regErr) throw new Error(`Не удалось очистить незавершённые регистрации: ${regErr.message}`);
+
     const { error } = await supabase.from('events').delete().eq('id', eventId);
-    if (error) throw new Error(`Не удалось удалить: ${error.message}`);
+    if (error) {
+        // A paid registration slipped in during the race above → FK still blocks. Show the plain message.
+        if (/event_registrations_event_fkey|foreign key/i.test(error.message)) {
+            throw new Error('Нельзя удалить: у мероприятия появились оплатившие участники.');
+        }
+        throw new Error(`Не удалось удалить: ${error.message}`);
+    }
 }
 
 /** How much this payment charges: full price, or the deposit share (rounded to the ruble). */

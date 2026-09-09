@@ -16,7 +16,7 @@
             <a class="mgh__logo" href="/" @click.prevent="go('/')">meetguru<span>.</span></a>
 
             <nav class="mgh__links" aria-label="Основная навигация">
-                <a v-for="i in menuItems.slice(0, 3)" :key="i.path" :href="i.path" @click.prevent="go(i.path)">{{ i.label }}</a>
+                <a v-for="i in menuItems.slice(0, 4)" :key="i.path" :href="i.path" @click.prevent="go(i.path)">{{ i.label }}</a>
             </nav>
 
             <div class="mgh__right">
@@ -77,7 +77,7 @@
         <div class="mgh__menu" :class="{ 'is-open': menuOpen }">
             <nav class="mgh__menu-nav" aria-label="Меню сайта">
                 <!-- primary nav is inline on desktop, so it only shows in the burger on mobile -->
-                <a v-for="i in menuItems.slice(0, 3)" :key="i.path" class="mgh__menu-top" :href="i.path" @click.prevent="go(i.path)">{{ i.label }}</a>
+                <a v-for="i in menuItems.slice(0, 4)" :key="i.path" class="mgh__menu-top" :href="i.path" @click.prevent="go(i.path)">{{ i.label }}</a>
                 <template v-if="user">
                     <a v-for="i in burgerItems" :key="i.path" :href="i.path" @click.prevent="go(i.path)">{{ i.label }}</a>
                 </template>
@@ -104,6 +104,7 @@ const props = defineProps({
     menuItems: {
         type: Array,
         default: () => ([
+            { label: 'Мероприятия', path: '/events' },
             { label: 'Курсы', path: '/all_course' },
             { label: 'Клуб', path: '/clubs' },
             { label: 'Трансляции', path: '/streams' },

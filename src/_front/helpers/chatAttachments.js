@@ -34,6 +34,11 @@ const FILE_EXT = {
     txt: 'text/plain',
     zip: 'application/zip',
 };
+// Voice messages (MediaRecorder output). All map to bucket-allowed mimes. NOT in
+// ACCEPT_ATTR — the 📎 picker stays image+doc; audio only arrives via recording.
+const AUDIO_EXT = {
+    webm: 'audio/webm', ogg: 'audio/ogg', mp4: 'audio/mp4', m4a: 'audio/mp4',
+};
 
 // The <input type="file"> accept attribute (explicit extensions — NOT image/*,
 // which would let heic/svg through).
@@ -47,12 +52,38 @@ export function validateFile(file) {
     let kind = null; let mime = null; let max = 0;
     if (IMAGE_EXT[ext]) { kind = 'image'; mime = IMAGE_EXT[ext]; max = MAX_IMAGE; }
     else if (FILE_EXT[ext]) { kind = 'file'; mime = FILE_EXT[ext]; max = MAX_FILE; }
+    else if (AUDIO_EXT[ext]) { kind = 'audio'; mime = AUDIO_EXT[ext]; max = MAX_FILE; }
     else return { ok: false, error: 'Недопустимый тип файла. Разрешены изображения и документы.' };
 
     if (file.size > max) {
         return { ok: false, error: `Файл слишком большой — максимум ${Math.round(max / MB)} МБ.` };
     }
     return { ok: true, kind, mime, ext };
+}
+
+// ── Voice recording (MediaRecorder) ─────────────────────────────────────────
+// Preference order: webm/opus (Chrome/Firefox/Edge) → mp4/aac (Safari) → ogg.
+const AUDIO_FORMATS = [
+    { mimeType: 'audio/webm', ext: 'webm' },
+    { mimeType: 'audio/mp4', ext: 'mp4' },
+    { mimeType: 'audio/ogg', ext: 'ogg' },
+];
+
+/** First MediaRecorder format this browser supports, or null. */
+export function pickAudioFormat() {
+    if (typeof MediaRecorder === 'undefined') return null;
+    for (const f of AUDIO_FORMATS) {
+        try { if (MediaRecorder.isTypeSupported(f.mimeType)) return f; } catch (e) { /* noop */ }
+    }
+    return null;
+}
+
+/** True only if the browser can capture + record + encode audio (else hide the mic button). */
+export function audioRecordingSupported() {
+    return typeof navigator !== 'undefined'
+        && !!navigator.mediaDevices?.getUserMedia
+        && typeof MediaRecorder !== 'undefined'
+        && !!pickAudioFormat();
 }
 
 /**

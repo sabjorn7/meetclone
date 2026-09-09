@@ -171,6 +171,7 @@
                                             <a v-if="m.attachment_url && m.attachment_type === 'image'" class="pd-msg__img" :href="m.attachment_url" target="_blank" rel="noopener">
                                                 <img :src="m.attachment_url" :alt="m.attachment_name || 'Изображение'" loading="lazy" />
                                             </a>
+                                            <audio v-else-if="m.attachment_url && m.attachment_type === 'audio'" class="pd-msg__audio" controls preload="metadata" :src="m.attachment_url"></audio>
                                             <a v-else-if="m.attachment_url" class="pd-msg__file" :href="m.attachment_url" target="_blank" rel="noopener" download>
                                                 <span class="pd-msg__file-ico" aria-hidden="true">📄</span>
                                                 <span class="pd-msg__file-meta">
@@ -193,19 +194,32 @@
                             </div>
                             <div class="pd-composer">
                                 <div v-if="pendingPreview" class="pd-attach">
-                                    <img v-if="pendingPreview.thumb" class="pd-attach__thumb" :src="pendingPreview.thumb" alt="" />
-                                    <span v-else class="pd-attach__ico" aria-hidden="true">📄</span>
-                                    <span class="pd-attach__meta">
-                                        <span class="pd-attach__name">{{ pendingPreview.name }}</span>
-                                        <span class="pd-attach__size">{{ pendingPreview.sizeLabel }}{{ uploading ? ' · загрузка…' : '' }}</span>
-                                    </span>
+                                    <audio v-if="pendingPreview.kind === 'audio'" class="pd-attach__audio" controls :src="pendingPreview.audioUrl"></audio>
+                                    <template v-else>
+                                        <img v-if="pendingPreview.thumb" class="pd-attach__thumb" :src="pendingPreview.thumb" alt="" />
+                                        <span v-else class="pd-attach__ico" aria-hidden="true">📄</span>
+                                        <span class="pd-attach__meta">
+                                            <span class="pd-attach__name">{{ pendingPreview.name }}</span>
+                                            <span class="pd-attach__size">{{ pendingPreview.sizeLabel }}{{ uploading ? ' · загрузка…' : '' }}</span>
+                                        </span>
+                                    </template>
                                     <button type="button" class="pd-attach__x" :disabled="uploading" aria-label="Убрать файл" @click="clearAttachment">×</button>
                                 </div>
                                 <p v-if="attachError" class="pd-attach__err">{{ attachError }}</p>
-                                <form class="pd-thread__input" @submit.prevent="send">
+                                <div v-if="recording" class="pd-recbar">
+                                    <span class="pd-recbar__dot" aria-hidden="true"></span>
+                                    <span class="pd-recbar__time">{{ recordLabel }}</span>
+                                    <span class="pd-recbar__hint">Идёт запись…</span>
+                                    <button type="button" class="pd-btn pd-btn--ghost pd-btn--sm" @click="cancelRecording">Отмена</button>
+                                    <button type="button" class="pd-btn pd-btn--sm" @click="stopRecording">Стоп</button>
+                                </div>
+                                <form v-else class="pd-thread__input" @submit.prevent="send">
                                     <input ref="fileInputEl" type="file" class="pd-hidden-file" :accept="ACCEPT_ATTR" @change="onPickFile" />
                                     <button type="button" class="pd-attach-btn" :disabled="sending || uploading" aria-label="Прикрепить файл" @click="fileInputEl?.click()">
                                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.49-8.49"/></svg>
+                                    </button>
+                                    <button v-if="audioSupported" type="button" class="pd-attach-btn" :disabled="sending || uploading || !!pendingFile" aria-label="Записать голосовое" @click="startRecording">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 19v3"/></svg>
                                     </button>
                                     <textarea
                                         ref="inputEl" v-model="text" rows="1" placeholder="Написать сообщение…" aria-label="Сообщение"
@@ -285,7 +299,7 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
 import { listBlockedUserIds, blockUser, unblockUser, reportContent } from '@/_front/moderation/moderationApi.js';
-import { uploadChatFile, validateFile, formatBytes, ACCEPT_ATTR } from '@/_front/helpers/chatAttachments.js';
+import { uploadChatFile, validateFile, formatBytes, ACCEPT_ATTR, pickAudioFormat, audioRecordingSupported } from '@/_front/helpers/chatAttachments.js';
 
 const CHAT_COLS = 'id, user_1, user_2, users, read, sort_date, is_group, title, creator';
 const MSG_COLS = 'id, chat, text, creator, created_at, attachment_url, attachment_type, attachment_name, attachment_size';
@@ -312,6 +326,21 @@ const pendingPreview = ref(null);    // { kind, name, sizeLabel, thumb? (objectU
 const attachError = ref('');
 const uploading = ref(false);
 const fileInputEl = ref(null);
+// voice recording (MediaRecorder)
+const MAX_REC_SECS = 300;                       // 5-minute hard cap (auto-stop)
+const audioSupported = audioRecordingSupported();
+const recording = ref(false);
+const recordSecs = ref(0);
+let mediaRecorder = null;
+let mediaStream = null;
+let recChunks = [];
+let recTimer = null;
+let recCancelled = false;
+let recFormat = null;
+const recordLabel = computed(() => {
+    const s = recordSecs.value;
+    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+});
 const searchQ = ref('');
 const searchResults = ref([]);
 const searching = ref(false);
@@ -512,7 +541,7 @@ async function send() {
         // LIVE triggers set chats.read=[me] (→ unread for everyone else) and sort_date=now on message insert;
         // we patch locally for a snappy list. (The explicit update keeps parity if triggers ever change.)
         const now = new Date().toISOString();
-        const preview = t || (attach?.attachment_type === 'image' ? '📷 Фото' : '📎 Файл');
+        const preview = t || (attach ? attachLabel(attach.attachment_type) : '');
         await sb.from('chats').update({ sort_date: now, mod_date: now, read: [myId.value] }).eq('id', activeChat.value.id);
         patchChat(activeChat.value.id, { sort_date: now, read: [myId.value], preview });
         reorderChats();
@@ -523,8 +552,11 @@ async function send() {
 }
 
 /* ── attachment picker (photo + document; one per message) ───────────────── */
+function attachLabel(type) { return type === 'image' ? '📷 Фото' : type === 'audio' ? '🎤 Голосовое' : '📎 Файл'; }
 function clearThumb() {
-    if (pendingPreview.value?.thumb) { try { URL.revokeObjectURL(pendingPreview.value.thumb); } catch (e) { /* noop */ } }
+    const p = pendingPreview.value;
+    if (p?.thumb) { try { URL.revokeObjectURL(p.thumb); } catch (e) { /* noop */ } }
+    if (p?.audioUrl) { try { URL.revokeObjectURL(p.audioUrl); } catch (e) { /* noop */ } }
 }
 function clearAttachment() { clearThumb(); pendingFile.value = null; pendingPreview.value = null; attachError.value = ''; }
 function onPickFile(e) {
@@ -543,7 +575,64 @@ function onPickFile(e) {
     };
     attachError.value = '';
 }
-onBeforeUnmount(() => clearThumb());
+onBeforeUnmount(() => { clearThumb(); teardownRecorder(); });
+
+/* ── voice recording (MediaRecorder → pending audio attachment) ──────────── */
+function teardownRecorder() {
+    clearInterval(recTimer); recTimer = null;
+    if (mediaStream) { try { mediaStream.getTracks().forEach((t) => t.stop()); } catch (e) { /* noop */ } mediaStream = null; }
+    mediaRecorder = null; recChunks = [];
+}
+async function startRecording() {
+    if (recording.value || sending.value || uploading.value || pendingFile.value) return;
+    recFormat = pickAudioFormat();
+    if (!recFormat) { attachError.value = 'Запись не поддерживается в этом браузере.'; return; }
+    attachError.value = '';
+    try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+        if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') attachError.value = 'Доступ к микрофону запрещён. Разрешите его в настройках браузера.';
+        else if (e?.name === 'NotFoundError') attachError.value = 'Микрофон не найден.';
+        else attachError.value = 'Не удалось получить доступ к микрофону.';
+        return;
+    }
+    recChunks = []; recCancelled = false;
+    try {
+        mediaRecorder = new MediaRecorder(mediaStream, { mimeType: recFormat.mimeType });
+        mediaRecorder.ondataavailable = (ev) => { if (ev.data && ev.data.size) recChunks.push(ev.data); };
+        mediaRecorder.onstop = () => {
+            const chunks = recChunks; const cancelled = recCancelled; const fmt = recFormat;
+            teardownRecorder();
+            recording.value = false;
+            if (cancelled || !chunks.length) return;
+            const blob = new Blob(chunks, { type: fmt.mimeType });
+            const file = new File([blob], `voice-message.${fmt.ext}`, { type: fmt.mimeType });
+            clearAttachment();
+            pendingFile.value = file;
+            pendingPreview.value = { kind: 'audio', name: 'Голосовое сообщение', sizeLabel: formatBytes(file.size), audioUrl: URL.createObjectURL(blob) };
+        };
+        mediaRecorder.start();
+    } catch (e) {
+        teardownRecorder();
+        attachError.value = 'Не удалось начать запись.';
+        return;
+    }
+    recording.value = true; recordSecs.value = 0;
+    recTimer = setInterval(() => {
+        recordSecs.value += 1;
+        if (recordSecs.value >= MAX_REC_SECS) stopRecording();
+    }, 1000);
+}
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') { try { mediaRecorder.stop(); } catch (e) { /* noop */ } }
+    clearInterval(recTimer); recTimer = null;
+}
+function cancelRecording() {
+    recCancelled = true;
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') { try { mediaRecorder.stop(); } catch (e) { /* onstop discards */ } }
+    else { teardownRecorder(); recording.value = false; }
+    clearInterval(recTimer); recTimer = null;
+}
 
 /* ── UGC moderation (report / block) ─────────────────────────────────────── */
 function flashNote(t) { modNote.value = t; clearTimeout(modNoteTimer); modNoteTimer = setTimeout(() => { modNote.value = ''; }, 2600); }
@@ -554,7 +643,7 @@ function reportSnapshot(m) {
     const parts = [];
     if (m.text) parts.push(m.text);
     if (m.attachment_url) {
-        const tag = m.attachment_type === 'image' ? '[фото]' : '[файл]';
+        const tag = m.attachment_type === 'image' ? '[фото]' : m.attachment_type === 'audio' ? '[голосовое]' : '[файл]';
         const name = m.attachment_name ? ` ${m.attachment_name}` : '';
         parts.push(`${tag}${name} ${m.attachment_url}`);
     }
@@ -945,6 +1034,14 @@ function ensureFonts() {
 .pd-msg.is-mine .pd-msg__file-name { color: #fff; }
 .pd-msg__file-size { font-size: 0.74rem; color: var(--ink-3); }
 .pd-msg.is-mine .pd-msg__file-size { color: rgba(255, 255, 255, 0.75); }
+.pd-msg__audio { display: block; width: 240px; max-width: 100%; height: 40px; margin-bottom: 4px; }
+.pd-attach__audio { flex: 1; min-width: 0; height: 40px; }
+.pd-recbar { display: flex; align-items: center; gap: 12px; padding: 14px 18px; }
+.pd-recbar__dot { width: 12px; height: 12px; border-radius: 50%; background: var(--red); flex: none; animation: pd-recpulse 1.2s ease-in-out infinite; }
+.pd-recbar__time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); font-size: 1rem; }
+.pd-recbar__hint { color: var(--ink-3); font-size: 0.86rem; flex: 1; }
+@keyframes pd-recpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .pd-recbar__dot { animation: none; } }
 .pd-thread__input textarea { flex: 1; border: 1px solid var(--line); outline: none; background: var(--bg-tint); border-radius: 20px; padding: 11px 18px; font-family: inherit; font-size: 15px; line-height: 1.4; color: var(--ink); min-width: 0; resize: none; max-height: 132px; overflow-y: auto; display: block; }
 .pd-thread__input textarea:focus { border-color: var(--blue-soft); background: var(--surface); }
 .pd-send { width: 46px; height: 46px; flex: none; border: none; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; cursor: pointer; transition: background 0.16s var(--ease-out), transform 0.16s var(--ease-out); }

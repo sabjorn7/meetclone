@@ -12,26 +12,47 @@
 
             <div v-if="!events.length" class="em-empty">Пока нет мероприятий. Создайте первое.</div>
 
-            <div v-for="ev in events" :key="ev.id" class="em-row">
-                <img v-if="ev.cover_url" :src="ev.cover_url" class="em-row__cover" alt="" />
-                <div v-else class="em-row__cover em-row__cover--empty">🗓</div>
-                <div class="em-row__main">
-                    <div class="em-row__title">{{ ev.title }}</div>
-                    <div class="em-row__meta">
-                        <span :class="['em-badge', ev.status === 'published' ? 'em-badge--pub' : 'em-badge--draft']">
-                            {{ ev.status === 'published' ? 'Опубликовано' : 'Черновик' }}
-                        </span>
-                        <span v-if="ev.starts_at">🕐 {{ fmtDate(ev.starts_at) }}</span>
-                        <span v-if="ev.location">📍 {{ ev.location }}</span>
-                        <span>{{ priceLabel(ev) }}</span>
-                        <span>👥 {{ paidCounts[ev.id] ?? '…' }}<span v-if="ev.capacity">/{{ ev.capacity }}</span></span>
+            <div v-for="ev in events" :key="ev.id" class="em-item">
+                <div class="em-row">
+                    <img v-if="ev.cover_url" :src="ev.cover_url" class="em-row__cover" alt="" />
+                    <div v-else class="em-row__cover em-row__cover--empty">🗓</div>
+                    <div class="em-row__main">
+                        <div class="em-row__title">{{ ev.title }}</div>
+                        <div class="em-row__meta">
+                            <span :class="['em-badge', ev.status === 'published' ? 'em-badge--pub' : 'em-badge--draft']">
+                                {{ ev.status === 'published' ? 'Опубликовано' : 'Черновик' }}
+                            </span>
+                            <span v-if="ev.starts_at">🕐 {{ fmtDate(ev.starts_at) }}</span>
+                            <span v-if="ev.location">📍 {{ ev.location }}</span>
+                            <span>{{ priceLabel(ev) }}</span>
+                            <button type="button" :class="['em-count', { 'em-count--open': expanded[ev.id] }]" @click="toggleRoster(ev)">
+                                👥 {{ paidCounts[ev.id] ?? '…' }}<span v-if="ev.capacity">/{{ ev.capacity }}</span>
+                                <span class="em-count__caret">{{ expanded[ev.id] ? '▲' : '▼' }}</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="em-row__actions">
+                        <button class="em-btn em-btn--sm" @click="openEdit(ev)">Изменить</button>
+                        <button v-if="ev.status !== 'published'" class="em-btn em-btn--sm em-btn--primary" :disabled="busy" @click="doPublish(ev)">Опубликовать</button>
+                        <button v-if="ev.chat" class="em-btn em-btn--sm" @click="openChat(ev)">Чат</button>
+                        <button class="em-btn em-btn--sm em-btn--danger" :disabled="busy" @click="doDelete(ev)">Удалить</button>
                     </div>
                 </div>
-                <div class="em-row__actions">
-                    <button class="em-btn em-btn--sm" @click="openEdit(ev)">Изменить</button>
-                    <button v-if="ev.status !== 'published'" class="em-btn em-btn--sm em-btn--primary" :disabled="busy" @click="doPublish(ev)">Опубликовать</button>
-                    <button v-if="ev.chat" class="em-btn em-btn--sm" @click="openChat(ev)">Чат</button>
-                    <button class="em-btn em-btn--sm em-btn--danger" :disabled="busy" @click="doDelete(ev)">Удалить</button>
+
+                <div v-if="expanded[ev.id]" class="em-roster">
+                    <div v-if="rosterLoading[ev.id]" class="em-roster__msg">Загрузка…</div>
+                    <div v-else-if="rosterError[ev.id]" class="em-roster__msg em-error">{{ rosterError[ev.id] }}</div>
+                    <div v-else-if="!(rosters[ev.id] || []).length" class="em-roster__msg">Пока никто не записался.</div>
+                    <ul v-else class="em-roster__list">
+                        <li v-for="r in rosters[ev.id]" :key="r.id" class="em-roster__item">
+                            <span class="em-roster__name">{{ r.user?.Name || 'Без имени' }}</span>
+                            <span class="em-roster__email">{{ r.user?.email || '—' }}</span>
+                            <span class="em-roster__pt">{{ r.payment_type === 'deposit' ? 'Депозит' : 'Полная' }}</span>
+                            <span :class="['em-rstatus', r.status === 'paid' ? 'em-rstatus--paid' : 'em-rstatus--pending']">
+                                {{ r.status === 'paid' ? 'Оплачено' : 'Ожидает' }}
+                            </span>
+                        </li>
+                    </ul>
                 </div>
             </div>
         </template>
@@ -122,6 +143,7 @@ import {
     isEventsOrganizer,
     listMyEvents,
     countPaidRegistrations,
+    listEventRegistrations,
     createEvent,
     updateEvent,
     publishEvent,
@@ -140,6 +162,12 @@ const events = ref([]);
 const paidCounts = ref({});
 const error = ref('');
 const busy = ref(false);
+
+// roster accordion (per-event, lazy)
+const expanded = ref({});
+const rosters = ref({});
+const rosterLoading = ref({});
+const rosterError = ref({});
 
 const dialog = ref(false);
 const dialogError = ref('');
@@ -268,6 +296,24 @@ async function doDelete(ev) {
 }
 function openChat(ev) { if (ev.chat) window.location.href = `/chats?chat=${ev.chat}`; }
 
+async function toggleRoster(ev) {
+    const id = ev.id;
+    const willOpen = !expanded.value[id];
+    expanded.value = { ...expanded.value, [id]: willOpen };
+    if (willOpen) await loadRoster(id);
+}
+async function loadRoster(id) {
+    rosterLoading.value = { ...rosterLoading.value, [id]: true };
+    rosterError.value = { ...rosterError.value, [id]: '' };
+    try {
+        rosters.value = { ...rosters.value, [id]: await listEventRegistrations(sb(), id) };
+    } catch (e) {
+        rosterError.value = { ...rosterError.value, [id]: e.message || String(e) };
+    } finally {
+        rosterLoading.value = { ...rosterLoading.value, [id]: false };
+    }
+}
+
 onMounted(async () => {
     me.value = await getCurrentUser(sb()).catch(() => null);
     if (!me.value || !isEventsOrganizer(me.value.id)) { window.location.href = '/'; return; }
@@ -313,4 +359,20 @@ onMounted(async () => {
 .em-cover { display: flex; align-items: center; gap: 12px; }
 .em-cover__img { width: 120px; height: 80px; object-fit: cover; border-radius: 10px; }
 .em-dialog__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+.em-count { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid #d8dbe0; background: #f8fafc; border-radius: 999px; font: inherit; font-size: 13px; color: #334155; cursor: pointer; }
+.em-count:hover { background: #eef2f7; }
+.em-count--open { background: #e6effe; border-color: #bcd4fb; color: #1d4ed8; }
+.em-count__caret { font-size: 9px; opacity: .7; }
+.em-roster { border: 1px solid #eceef1; border-top: none; border-radius: 0 0 14px 14px; margin: -10px 0 10px; padding: 6px 12px 10px; background: #fbfcfd; }
+.em-roster__msg { padding: 10px 4px; font-size: 14px; color: #64748b; }
+.em-roster__list { list-style: none; margin: 0; padding: 0; }
+.em-roster__item { display: grid; grid-template-columns: 1.2fr 1.6fr auto auto; gap: 12px; align-items: center; padding: 8px 4px; border-bottom: 1px solid #eef1f4; font-size: 14px; }
+.em-roster__item:last-child { border-bottom: none; }
+.em-roster__name { font-weight: 600; color: #0f172a; }
+.em-roster__email { color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.em-roster__pt { color: #475569; font-size: 13px; }
+.em-rstatus { justify-self: end; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.em-rstatus--paid { background: #dcfce7; color: #15803d; }
+.em-rstatus--pending { background: #fef3c7; color: #b45309; }
+@media (max-width: 560px) { .em-roster__item { grid-template-columns: 1fr auto; row-gap: 2px; } .em-roster__email { grid-column: 1 / -1; } }
 </style>

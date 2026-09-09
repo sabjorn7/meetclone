@@ -155,6 +155,21 @@ export async function countPaidRegistrations(supabase, eventId) {
     return count || 0;
 }
 
+/**
+ * Roster for the organizer: registrations joined to the buyer (users FK `user`), showing
+ * paid + pending (cancelled hidden as noise). Embeds via event_registrations_user_fkey.
+ */
+export async function listEventRegistrations(supabase, eventId) {
+    const { data, error } = await supabase
+        .from('event_registrations')
+        .select('id, status, payment_type, amount_paid, amount_total, created_at, user:users(id, "Name", email)')
+        .eq('event', eventId)
+        .in('status', ['paid', 'pending'])
+        .order('created_at', { ascending: true });
+    if (error) throw new Error(`Не удалось загрузить участников: ${error.message}`);
+    return data || [];
+}
+
 /** Publish (draft → published) — the organizer self-publishes (no admin moderation for events). */
 export async function publishEvent(supabase, eventId) {
     const { error } = await supabase.from('events').update({ status: 'published' }).eq('id', eventId);

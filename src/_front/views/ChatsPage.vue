@@ -171,7 +171,7 @@
                                             <a v-if="m.attachment_url && m.attachment_type === 'image'" class="pd-msg__img" :href="m.attachment_url" target="_blank" rel="noopener">
                                                 <img :src="m.attachment_url" :alt="m.attachment_name || 'Изображение'" loading="lazy" />
                                             </a>
-                                            <audio v-else-if="m.attachment_url && m.attachment_type === 'audio'" class="pd-msg__audio" controls preload="metadata" :src="m.attachment_url"></audio>
+                                            <VoiceMessagePlayer v-else-if="m.attachment_url && m.attachment_type === 'audio'" class="pd-msg__voice" :src="m.attachment_url" :mine="m.creator === myId" />
                                             <a v-else-if="m.attachment_url" class="pd-msg__file" :href="m.attachment_url" target="_blank" rel="noopener" download>
                                                 <span class="pd-msg__file-ico" aria-hidden="true">📄</span>
                                                 <span class="pd-msg__file-meta">
@@ -194,7 +194,7 @@
                             </div>
                             <div class="pd-composer">
                                 <div v-if="pendingPreview" class="pd-attach">
-                                    <audio v-if="pendingPreview.kind === 'audio'" class="pd-attach__audio" controls :src="pendingPreview.audioUrl"></audio>
+                                    <VoiceMessagePlayer v-if="pendingPreview.kind === 'audio'" class="pd-attach__voice" :src="pendingPreview.audioUrl" />
                                     <template v-else>
                                         <img v-if="pendingPreview.thumb" class="pd-attach__thumb" :src="pendingPreview.thumb" alt="" />
                                         <span v-else class="pd-attach__ico" aria-hidden="true">📄</span>
@@ -300,6 +300,7 @@ import { useRoute } from 'vue-router';
 import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
 import { listBlockedUserIds, blockUser, unblockUser, reportContent } from '@/_front/moderation/moderationApi.js';
 import { uploadChatFile, validateFile, formatBytes, ACCEPT_ATTR, pickAudioFormat, audioRecordingSupported } from '@/_front/helpers/chatAttachments.js';
+import VoiceMessagePlayer from '@/_front/components/VoiceMessagePlayer.vue';
 
 const CHAT_COLS = 'id, user_1, user_2, users, read, sort_date, is_group, title, creator';
 const MSG_COLS = 'id, chat, text, creator, created_at, attachment_url, attachment_type, attachment_name, attachment_size';
@@ -1034,8 +1035,8 @@ function ensureFonts() {
 .pd-msg.is-mine .pd-msg__file-name { color: #fff; }
 .pd-msg__file-size { font-size: 0.74rem; color: var(--ink-3); }
 .pd-msg.is-mine .pd-msg__file-size { color: rgba(255, 255, 255, 0.75); }
-.pd-msg__audio { display: block; width: 240px; max-width: 100%; height: 40px; margin-bottom: 4px; }
-.pd-attach__audio { flex: 1; min-width: 0; height: 40px; }
+.pd-msg__voice { width: 240px; max-width: 100%; margin-bottom: 4px; }
+.pd-attach__voice { flex: 1; min-width: 0; }
 .pd-recbar { display: flex; align-items: center; gap: 12px; padding: 14px 18px; }
 .pd-recbar__dot { width: 12px; height: 12px; border-radius: 50%; background: var(--red); flex: none; animation: pd-recpulse 1.2s ease-in-out infinite; }
 .pd-recbar__time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); font-size: 1rem; }

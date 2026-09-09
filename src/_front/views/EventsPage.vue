@@ -16,7 +16,7 @@
                 <header class="pd-hero">
                     <div class="pd-wrap">
                         <h1 class="pd-hero__title">Мероприятия</h1>
-                        <p class="pd-hero__sub">Офлайн-семинары и встречи по кинезиологии.</p>
+                        <p class="pd-hero__sub">Очные семинары и встречи.</p>
                     </div>
                 </header>
 

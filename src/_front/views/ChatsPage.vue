@@ -168,7 +168,17 @@
                                     <div class="pd-msg__col">
                                         <span v-if="showSender(m)" class="pd-msg__sender">{{ senderName(m) }}</span>
                                         <div class="pd-msg__bubble">
-                                            <span class="pd-msg__text">{{ m.text }}</span>
+                                            <a v-if="m.attachment_url && m.attachment_type === 'image'" class="pd-msg__img" :href="m.attachment_url" target="_blank" rel="noopener">
+                                                <img :src="m.attachment_url" :alt="m.attachment_name || 'Изображение'" loading="lazy" />
+                                            </a>
+                                            <a v-else-if="m.attachment_url" class="pd-msg__file" :href="m.attachment_url" target="_blank" rel="noopener" download>
+                                                <span class="pd-msg__file-ico" aria-hidden="true">📄</span>
+                                                <span class="pd-msg__file-meta">
+                                                    <span class="pd-msg__file-name">{{ m.attachment_name || 'Файл' }}</span>
+                                                    <span v-if="m.attachment_size" class="pd-msg__file-size">{{ formatBytes(m.attachment_size) }}</span>
+                                                </span>
+                                            </a>
+                                            <span v-if="m.text" class="pd-msg__text">{{ m.text }}</span>
                                             <span class="pd-msg__time">{{ fmtTime(m.created_at) }}</span>
                                         </div>
                                     </div>
@@ -181,15 +191,31 @@
                                     </div>
                                 </div>
                             </div>
-                            <form class="pd-thread__input" @submit.prevent="send">
-                                <textarea
-                                    ref="inputEl" v-model="text" rows="1" placeholder="Написать сообщение…" aria-label="Сообщение"
-                                    :disabled="sending" @keydown.enter.exact="onEnter" @input="autogrow"
-                                ></textarea>
-                                <button class="pd-send" type="submit" :disabled="sending || !text.trim()" aria-label="Отправить">
-                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 16-3-6-7-2z"/></svg>
-                                </button>
-                            </form>
+                            <div class="pd-composer">
+                                <div v-if="pendingPreview" class="pd-attach">
+                                    <img v-if="pendingPreview.thumb" class="pd-attach__thumb" :src="pendingPreview.thumb" alt="" />
+                                    <span v-else class="pd-attach__ico" aria-hidden="true">📄</span>
+                                    <span class="pd-attach__meta">
+                                        <span class="pd-attach__name">{{ pendingPreview.name }}</span>
+                                        <span class="pd-attach__size">{{ pendingPreview.sizeLabel }}{{ uploading ? ' · загрузка…' : '' }}</span>
+                                    </span>
+                                    <button type="button" class="pd-attach__x" :disabled="uploading" aria-label="Убрать файл" @click="clearAttachment">×</button>
+                                </div>
+                                <p v-if="attachError" class="pd-attach__err">{{ attachError }}</p>
+                                <form class="pd-thread__input" @submit.prevent="send">
+                                    <input ref="fileInputEl" type="file" class="pd-hidden-file" :accept="ACCEPT_ATTR" @change="onPickFile" />
+                                    <button type="button" class="pd-attach-btn" :disabled="sending || uploading" aria-label="Прикрепить файл" @click="fileInputEl?.click()">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.49-8.49"/></svg>
+                                    </button>
+                                    <textarea
+                                        ref="inputEl" v-model="text" rows="1" placeholder="Написать сообщение…" aria-label="Сообщение"
+                                        :disabled="sending" @keydown.enter.exact="onEnter" @input="autogrow"
+                                    ></textarea>
+                                    <button class="pd-send" type="submit" :disabled="sending || uploading || (!text.trim() && !pendingFile)" aria-label="Отправить">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 16-3-6-7-2z"/></svg>
+                                    </button>
+                                </form>
+                            </div>
                         </template>
 
                         <div v-else class="pd-thread__none">
@@ -259,8 +285,10 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
 import { listBlockedUserIds, blockUser, unblockUser, reportContent } from '@/_front/moderation/moderationApi.js';
+import { uploadChatFile, validateFile, formatBytes, ACCEPT_ATTR } from '@/_front/helpers/chatAttachments.js';
 
 const CHAT_COLS = 'id, user_1, user_2, users, read, sort_date, is_group, title, creator';
+const MSG_COLS = 'id, chat, text, creator, created_at, attachment_url, attachment_type, attachment_name, attachment_size';
 
 const route = useRoute();
 const myId = ref(null);
@@ -278,6 +306,12 @@ let modNoteTimer = null;
 // A blocked user's messages disappear from the thread immediately (1-on-1 and groups alike).
 const visibleMessages = computed(() => messages.value.filter((m) => m.creator === myId.value || !blockedIds.value.has(m.creator)));
 const sending = ref(false);
+// pending file attachment (selected but not yet sent)
+const pendingFile = ref(null);       // the File object
+const pendingPreview = ref(null);    // { kind, name, sizeLabel, thumb? (objectURL) }
+const attachError = ref('');
+const uploading = ref(false);
+const fileInputEl = ref(null);
 const searchQ = ref('');
 const searchResults = ref([]);
 const searching = ref(false);
@@ -437,7 +471,7 @@ async function afterOpen(chat) {
 }
 
 async function loadMessages(chatId) {
-    const { data } = await sb.from('messages').select('id, chat, text, creator, created_at').eq('chat', chatId).order('created_at', { ascending: true });
+    const { data } = await sb.from('messages').select(MSG_COLS).eq('chat', chatId).order('created_at', { ascending: true });
     messages.value = data || [];
     // resolve any senders not yet known (former members etc.) so group sender labels render
     await ensureUsers([...new Set((data || []).map((m) => m.creator))]);
@@ -454,27 +488,78 @@ async function markRead(chat) {
 
 async function send() {
     const t = text.value.trim();
-    if (!t || !activeChat.value || sending.value) return;
+    const file = pendingFile.value;
+    // a message needs text OR a file
+    if ((!t && !file) || !activeChat.value || sending.value || uploading.value) return;
     sending.value = true;
-    text.value = '';
-    resetInputHeight();
     try {
+        // 1) upload the attachment first (if any) — validated + explicit contentType in the helper
+        let attach = null;
+        if (file) {
+            uploading.value = true;
+            attach = await uploadChatFile(sb, file);
+            uploading.value = false;
+        }
+        // 2) optimistic clear (snappy input); restore text on failure below
+        text.value = '';
+        clearAttachment();
+        resetInputHeight();
         const { data } = await sb.from('messages')
-            .insert({ chat: activeChat.value.id, text: t, creator: myId.value })
-            .select('id, chat, text, creator, created_at').limit(1);
+            .insert({ chat: activeChat.value.id, text: t || null, creator: myId.value, ...(attach || {}) })
+            .select(MSG_COLS).limit(1);
         const row = data?.[0];
         if (row && !messages.value.some((m) => m.id === row.id)) { messages.value.push(row); scrollBottom(); }
         // LIVE triggers set chats.read=[me] (→ unread for everyone else) and sort_date=now on message insert;
         // we patch locally for a snappy list. (The explicit update keeps parity if triggers ever change.)
         const now = new Date().toISOString();
+        const preview = t || (attach?.attachment_type === 'image' ? '📷 Фото' : '📎 Файл');
         await sb.from('chats').update({ sort_date: now, mod_date: now, read: [myId.value] }).eq('id', activeChat.value.id);
-        patchChat(activeChat.value.id, { sort_date: now, read: [myId.value], preview: t });
+        patchChat(activeChat.value.id, { sort_date: now, read: [myId.value], preview });
         reorderChats();
-    } catch (e) { text.value = t; /* restore on failure */ } finally { sending.value = false; }
+    } catch (e) {
+        if (t) text.value = t; /* restore text on failure (an uploaded file is not re-attached) */
+        attachError.value = e.message || 'Не удалось отправить сообщение.';
+    } finally { sending.value = false; uploading.value = false; }
 }
+
+/* ── attachment picker (photo + document; one per message) ───────────────── */
+function clearThumb() {
+    if (pendingPreview.value?.thumb) { try { URL.revokeObjectURL(pendingPreview.value.thumb); } catch (e) { /* noop */ } }
+}
+function clearAttachment() { clearThumb(); pendingFile.value = null; pendingPreview.value = null; attachError.value = ''; }
+function onPickFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';  // allow re-picking the same file
+    if (!file) return;
+    const v = validateFile(file);
+    if (!v.ok) { clearAttachment(); attachError.value = v.error; return; }
+    clearThumb();
+    pendingFile.value = file;
+    pendingPreview.value = {
+        kind: v.kind,
+        name: file.name,
+        sizeLabel: formatBytes(file.size),
+        thumb: v.kind === 'image' ? URL.createObjectURL(file) : null,
+    };
+    attachError.value = '';
+}
+onBeforeUnmount(() => clearThumb());
 
 /* ── UGC moderation (report / block) ─────────────────────────────────────── */
 function flashNote(t) { modNote.value = t; clearTimeout(modNoteTimer); modNoteTimer = setTimeout(() => { modNote.value = ''; }, 2600); }
+// Snapshot for the moderator queue. For an attachment the text is often empty, so
+// include the file kind / name / URL — the report rides the SAME message path
+// (target_type='message', target_id=m.id), just with a richer snapshot.
+function reportSnapshot(m) {
+    const parts = [];
+    if (m.text) parts.push(m.text);
+    if (m.attachment_url) {
+        const tag = m.attachment_type === 'image' ? '[фото]' : '[файл]';
+        const name = m.attachment_name ? ` ${m.attachment_name}` : '';
+        parts.push(`${tag}${name} ${m.attachment_url}`);
+    }
+    return parts.join('\n') || null;
+}
 async function reportMessage(m) {
     msgMenuId.value = null;
     if (!m || m.creator === myId.value) return;
@@ -483,7 +568,7 @@ async function reportMessage(m) {
             reporter: myId.value,
             surface: isGroup(activeChat.value) ? 'group' : 'chat',
             targetType: 'message', targetId: m.id, targetUser: m.creator,
-            textSnapshot: m.text,
+            textSnapshot: reportSnapshot(m),
         });
         flashNote('Жалоба отправлена — мы рассмотрим её в течение 24 часов.');
     } catch (e) { flashNote('Не удалось отправить жалобу.'); }
@@ -833,7 +918,33 @@ function ensureFonts() {
 @media (hover: hover) and (pointer: fine) { .pd-msg__menu button:hover { background: var(--bg-tint); } }
 .pd-modnote { flex: none; margin: 0; padding: 9px 16px; background: var(--blue-tint); color: var(--blue-ink); font-size: 0.86rem; font-weight: 600; text-align: center; }
 
-.pd-thread__input { display: flex; align-items: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); flex: none; }
+.pd-composer { flex: none; border-top: 1px solid var(--line); }
+.pd-thread__input { display: flex; align-items: flex-end; gap: 8px; padding: 12px 18px; }
+.pd-hidden-file { display: none; }
+.pd-attach-btn { width: 42px; height: 46px; flex: none; border: none; background: none; color: var(--ink-3); display: grid; place-items: center; cursor: pointer; border-radius: 12px; transition: color 0.14s, background 0.14s; }
+.pd-attach-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pd-attach-btn:disabled { opacity: 0.5; cursor: default; }
+@media (hover: hover) and (pointer: fine) { .pd-attach-btn:not(:disabled):hover { color: var(--blue); background: var(--bg-tint); } }
+.pd-attach { display: flex; align-items: center; gap: 10px; margin: 12px 18px 0; padding: 8px 10px; background: var(--bg-tint); border: 1px solid var(--line); border-radius: 12px; }
+.pd-attach__thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 8px; flex: none; }
+.pd-attach__ico { width: 40px; height: 40px; display: grid; place-items: center; font-size: 20px; background: var(--surface); border-radius: 8px; flex: none; }
+.pd-attach__meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.pd-attach__name { font-size: 0.88rem; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-attach__size { font-size: 0.75rem; color: var(--ink-3); }
+.pd-attach__x { border: none; background: none; color: var(--ink-3); font-size: 1.35rem; line-height: 1; cursor: pointer; padding: 0 6px; border-radius: 50%; flex: none; }
+.pd-attach__x:disabled { opacity: 0.4; cursor: default; }
+@media (hover: hover) and (pointer: fine) { .pd-attach__x:not(:disabled):hover { color: var(--red); } }
+.pd-attach__err { margin: 8px 18px 0; color: var(--red); font-size: 0.82rem; }
+.pd-msg__img { display: block; margin-bottom: 6px; }
+.pd-msg__img img { display: block; max-width: 240px; max-height: 280px; width: auto; height: auto; border-radius: 10px; }
+.pd-msg__file { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; padding: 8px 10px; border-radius: 10px; background: var(--bg-tint); text-decoration: none; max-width: 260px; }
+.pd-msg.is-mine .pd-msg__file { background: rgba(255, 255, 255, 0.16); }
+.pd-msg__file-ico { font-size: 22px; flex: none; }
+.pd-msg__file-meta { display: flex; flex-direction: column; min-width: 0; }
+.pd-msg__file-name { font-size: 0.9rem; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-msg.is-mine .pd-msg__file-name { color: #fff; }
+.pd-msg__file-size { font-size: 0.74rem; color: var(--ink-3); }
+.pd-msg.is-mine .pd-msg__file-size { color: rgba(255, 255, 255, 0.75); }
 .pd-thread__input textarea { flex: 1; border: 1px solid var(--line); outline: none; background: var(--bg-tint); border-radius: 20px; padding: 11px 18px; font-family: inherit; font-size: 15px; line-height: 1.4; color: var(--ink); min-width: 0; resize: none; max-height: 132px; overflow-y: auto; display: block; }
 .pd-thread__input textarea:focus { border-color: var(--blue-soft); background: var(--surface); }
 .pd-send { width: 46px; height: 46px; flex: none; border: none; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; cursor: pointer; transition: background 0.16s var(--ease-out), transform 0.16s var(--ease-out); }

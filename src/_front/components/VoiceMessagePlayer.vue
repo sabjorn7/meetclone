@@ -1,24 +1,29 @@
 <template>
     <div class="vmp" :class="{ 'vmp--mine': mine, 'vmp--failed': decodeFailed }">
-        <button type="button" class="vmp__btn" :aria-label="playing ? 'Пауза' : 'Воспроизвести'" @click="toggle">
+        <button type="button" class="vmp__btn" :disabled="unsupported" :aria-label="playing ? 'Пауза' : 'Воспроизвести'" @click="toggle">
             <svg v-if="!playing" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
             <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
         </button>
-        <div
-            ref="barsEl" class="vmp__wave" role="slider" aria-label="Перемотка"
-            :aria-valuenow="Math.round(progress * 100)" aria-valuemin="0" aria-valuemax="100"
-            @click="onSeek"
-        >
-            <span
-                v-for="(h, i) in displayBars" :key="i" class="vmp__bar"
-                :class="{ 'is-played': (i + 0.5) / displayBars.length <= progress }"
-                :style="{ height: (18 + h * 82) + '%' }"
-            ></span>
+        <div class="vmp__body">
+            <p v-if="unsupported" class="vmp__unsupported">Формат не поддерживается в этом браузере</p>
+            <template v-else>
+                <div
+                    ref="barsEl" class="vmp__wave" role="slider" aria-label="Перемотка"
+                    :aria-valuenow="Math.round(progress * 100)" aria-valuemin="0" aria-valuemax="100"
+                    @click="onSeek"
+                >
+                    <span
+                        v-for="(h, i) in displayBars" :key="i" class="vmp__bar"
+                        :class="{ 'is-played': (i + 0.5) / displayBars.length <= progress }"
+                        :style="{ height: (18 + h * 82) + '%' }"
+                    ></span>
+                </div>
+                <span class="vmp__time">{{ timeLabel }}</span>
+            </template>
         </div>
-        <span class="vmp__time">{{ timeLabel }}</span>
         <audio
             ref="audioEl" class="vmp__audio" :src="src" preload="none"
-            @timeupdate="onTimeUpdate" @play="onPlay" @pause="onPause" @ended="onEnded" @loadedmetadata="onLoadedMeta"
+            @timeupdate="onTimeUpdate" @play="onPlay" @pause="onPause" @ended="onEnded" @loadedmetadata="onLoadedMeta" @error="onAudioError"
         ></audio>
     </div>
 </template>
@@ -31,7 +36,7 @@ import { setActive, clearActive, getAudioContext, decodeAudio } from '@/_front/h
 const props = defineProps({
     src: { type: String, required: true },
     mine: { type: Boolean, default: false },
-    bars: { type: Number, default: 56 },
+    bars: { type: Number, default: 48 },
 });
 
 const audioEl = ref(null);
@@ -41,11 +46,12 @@ const currentTime = ref(0);
 const duration = ref(0);          // authoritative — from the decoded buffer
 const waveBars = ref([]);
 const decodeFailed = ref(false);
+const unsupported = ref(false);   // browser can't play this format (e.g. Safari + a legacy webm/opus)
 let decodeStarted = false;
 let abort = null;
 let io = null;
 
-const PLACEHOLDER = Array.from({ length: 56 }, () => 0.3);
+const PLACEHOLDER = Array.from({ length: 48 }, () => 0.3);
 const displayBars = computed(() => (waveBars.value.length ? waveBars.value : PLACEHOLDER));
 const progress = computed(() => (duration.value > 0 ? Math.min(1, currentTime.value / duration.value) : 0));
 
@@ -87,6 +93,7 @@ function toggle() {
 function onPlay() { playing.value = true; }
 function onPause() { playing.value = false; clearActive(stop); }
 function onEnded() { playing.value = false; currentTime.value = 0; const el = audioEl.value; if (el) el.currentTime = 0; clearActive(stop); }
+function onAudioError() { unsupported.value = true; playing.value = false; clearActive(stop); }
 function onTimeUpdate() { const el = audioEl.value; if (el) currentTime.value = el.currentTime; }
 function onLoadedMeta() {
     // Fallback duration if decode hasn't set it and the element reports a finite one
@@ -124,15 +131,19 @@ onBeforeUnmount(() => {
 <style scoped>
 .vmp { display: flex; align-items: center; gap: 10px; width: 100%; }
 .vmp__btn { width: 34px; height: 34px; flex: none; border: none; border-radius: 50%; background: var(--blue, #2563eb); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.vmp__btn:disabled { opacity: 0.5; cursor: default; }
 .vmp--mine .vmp__btn { background: #fff; color: var(--blue, #2563eb); }
 .vmp__btn svg { width: 18px; height: 18px; fill: currentColor; }
-.vmp__wave { flex: 1; min-width: 0; height: 34px; display: flex; align-items: center; gap: 2px; cursor: pointer; }
-.vmp__bar { flex: 1; min-width: 2px; border-radius: 2px; background: var(--ink-3, #94a3b8); opacity: 0.45; }
+.vmp__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.vmp__wave { width: 100%; height: 30px; display: flex; align-items: center; gap: 1px; cursor: pointer; overflow: hidden; }
+.vmp__bar { flex: 1 1 0; min-width: 2px; border-radius: 2px; background: var(--ink-3, #94a3b8); opacity: 0.45; }
 .vmp__bar.is-played { opacity: 1; background: var(--blue, #2563eb); }
 .vmp--mine .vmp__bar { opacity: 1; background: rgba(255, 255, 255, 0.55); }
 .vmp--mine .vmp__bar.is-played { background: #fff; }
 .vmp--failed .vmp__wave { cursor: default; }
-.vmp__time { flex: none; font-size: 0.72rem; color: var(--ink-3, #94a3b8); font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
+.vmp__time { font-size: 0.72rem; color: var(--ink-3, #94a3b8); font-variant-numeric: tabular-nums; }
 .vmp--mine .vmp__time { color: rgba(255, 255, 255, 0.8); }
+.vmp__unsupported { margin: 0; font-size: 0.8rem; color: var(--ink-3, #94a3b8); }
+.vmp--mine .vmp__unsupported { color: rgba(255, 255, 255, 0.85); }
 .vmp__audio { display: none; }
 </style>

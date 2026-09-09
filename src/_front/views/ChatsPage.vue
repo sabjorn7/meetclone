@@ -213,12 +213,16 @@
                                     <button type="button" class="pd-btn pd-btn--ghost pd-btn--sm" @click="cancelRecording">Отмена</button>
                                     <button type="button" class="pd-btn pd-btn--sm" @click="stopRecording">Стоп</button>
                                 </div>
+                                <div v-else-if="encoding" class="pd-recbar">
+                                    <span class="pd-recbar__dot" aria-hidden="true"></span>
+                                    <span class="pd-recbar__hint">Обработка записи…</span>
+                                </div>
                                 <form v-else class="pd-thread__input" @submit.prevent="send">
                                     <input ref="fileInputEl" type="file" class="pd-hidden-file" :accept="ACCEPT_ATTR" @change="onPickFile" />
                                     <button type="button" class="pd-attach-btn" :disabled="sending || uploading" aria-label="Прикрепить файл" @click="fileInputEl?.click()">
                                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.49-8.49"/></svg>
                                     </button>
-                                    <button v-if="audioSupported" type="button" class="pd-attach-btn" :disabled="sending || uploading || !!pendingFile" aria-label="Записать голосовое" @click="startRecording">
+                                    <button v-if="audioSupported" type="button" class="pd-attach-btn" :disabled="sending || uploading || encoding || !!pendingFile" aria-label="Записать голосовое" @click="startRecording">
                                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 19v3"/></svg>
                                     </button>
                                     <textarea
@@ -301,6 +305,7 @@ import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js
 import { listBlockedUserIds, blockUser, unblockUser, reportContent } from '@/_front/moderation/moderationApi.js';
 import { uploadChatFile, validateFile, formatBytes, ACCEPT_ATTR, pickAudioFormat, audioRecordingSupported } from '@/_front/helpers/chatAttachments.js';
 import VoiceMessagePlayer from '@/_front/components/VoiceMessagePlayer.vue';
+import { encodeBlobToMp3 } from '@/_front/helpers/mp3Encode.js';
 
 const CHAT_COLS = 'id, user_1, user_2, users, read, sort_date, is_group, title, creator';
 const MSG_COLS = 'id, chat, text, creator, created_at, attachment_url, attachment_type, attachment_name, attachment_size';
@@ -332,6 +337,7 @@ const MAX_REC_SECS = 300;                       // 5-minute hard cap (auto-stop)
 const audioSupported = audioRecordingSupported();
 const recording = ref(false);
 const recordSecs = ref(0);
+const encoding = ref(false);   // transcoding the finished recording → MP3
 let mediaRecorder = null;
 let mediaStream = null;
 let recChunks = [];
@@ -607,10 +613,7 @@ async function startRecording() {
             recording.value = false;
             if (cancelled || !chunks.length) return;
             const blob = new Blob(chunks, { type: fmt.mimeType });
-            const file = new File([blob], `voice-message.${fmt.ext}`, { type: fmt.mimeType });
-            clearAttachment();
-            pendingFile.value = file;
-            pendingPreview.value = { kind: 'audio', name: 'Голосовое сообщение', sizeLabel: formatBytes(file.size), audioUrl: URL.createObjectURL(blob) };
+            finalizeRecording(blob, fmt);
         };
         mediaRecorder.start();
     } catch (e) {
@@ -633,6 +636,21 @@ function cancelRecording() {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') { try { mediaRecorder.stop(); } catch (e) { /* onstop discards */ } }
     else { teardownRecorder(); recording.value = false; }
     clearInterval(recTimer); recTimer = null;
+}
+// Transcode the recording to universal MP3 (plays in every browser incl. Safari).
+// On failure keep the original recording so it at least plays same-browser.
+async function finalizeRecording(blob, fmt) {
+    encoding.value = true;
+    let file;
+    try {
+        const mp3 = await encodeBlobToMp3(blob);
+        file = new File([mp3], 'voice-message.mp3', { type: 'audio/mpeg' });
+    } catch (e) {
+        file = new File([blob], `voice-message.${fmt.ext}`, { type: fmt.mimeType });
+    } finally { encoding.value = false; }
+    clearAttachment();
+    pendingFile.value = file;
+    pendingPreview.value = { kind: 'audio', name: 'Голосовое сообщение', sizeLabel: formatBytes(file.size), audioUrl: URL.createObjectURL(file) };
 }
 
 /* ── UGC moderation (report / block) ─────────────────────────────────────── */

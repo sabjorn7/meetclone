@@ -37,7 +37,7 @@ const FILE_EXT = {
 // Voice messages (MediaRecorder output). All map to bucket-allowed mimes. NOT in
 // ACCEPT_ATTR — the 📎 picker stays image+doc; audio only arrives via recording.
 const AUDIO_EXT = {
-    webm: 'audio/webm', ogg: 'audio/ogg', mp4: 'audio/mp4', m4a: 'audio/mp4',
+    webm: 'audio/webm', ogg: 'audio/ogg', mp4: 'audio/mp4', m4a: 'audio/mp4', mp3: 'audio/mpeg',
 };
 
 // The <input type="file"> accept attribute (explicit extensions — NOT image/*,

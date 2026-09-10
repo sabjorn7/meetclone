@@ -95,6 +95,17 @@ export function defaultSeo(origin = SITE_ORIGIN) {
     return { title: DEFAULT_TITLE, desc: DEFAULT_DESC, image: DEFAULT_IMAGE, url: origin };
 }
 
+// Events HAVE a cover image (events.cover_url, an absolute Storage URL) — unlike
+// courses, no PeerTube thumbnail lookup needed.
+export function eventSeo(e, origin = SITE_ORIGIN) {
+    return {
+        title: `${e.title || ''} — МитГуру`,
+        desc: truncate(e.description || ''),
+        image: e.cover_url || DEFAULT_IMAGE,
+        url: `${origin}/event/${e.slug}`,
+    };
+}
+
 export function fillTemplate(template, seo) {
     return template
         .replaceAll('__SEO_TITLE__', escapeHtml(seo.title))
@@ -129,5 +140,14 @@ export function fetchCourseBySlug(slug) {
         `slug=eq.${encodeURIComponent(slug)}` +
             `&ModStatus=eq.${encodeURIComponent('Опубликовано')}` +
             `&select=Title,Decription,slug,video_id`
+    );
+}
+
+export function fetchEventBySlug(slug) {
+    return restOne(
+        'events',
+        `slug=eq.${encodeURIComponent(slug)}` +
+            `&status=eq.${encodeURIComponent('published')}` +
+            `&select=title,description,cover_url,slug`
     );
 }

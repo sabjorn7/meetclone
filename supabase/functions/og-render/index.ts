@@ -17,10 +17,12 @@ import {
     SITE_ORIGIN,
     articleSeo,
     courseSeo,
+    eventSeo,
     defaultSeo,
     fillTemplate,
     fetchArticleBySlug,
     fetchCourseBySlug,
+    fetchEventBySlug,
 } from '../_shared/og.mjs';
 
 const TMPL_TTL_MS = 5 * 60 * 1000;
@@ -47,7 +49,9 @@ function resolveOrigin(req: Request): string {
 // it live keeps the function in lock-step with the current build's asset hashes
 // — nothing hardcoded here to drift.
 async function getTemplate(origin: string, type: string): Promise<string> {
-    const coll = type === 'course' ? 'course_info' : 'article_page';
+    // events reuse the course_info shell (any SPA shell boots the same app; only
+    // the __SEO_*__ meta differs, which we fill below).
+    const coll = type === 'course' || type === 'event' ? 'course_info' : 'article_page';
     const key = `${origin}/${coll}`;
     const hit = tmplCache.get(key);
     if (hit && Date.now() - hit.at < TMPL_TTL_MS) return hit.html;
@@ -77,8 +81,8 @@ Deno.serve(async (req: Request) => {
     // Public host (Kong-proof — see resolveOrigin / ALLOWED_ORIGIN_HOSTS).
     const origin = resolveOrigin(req);
 
-    if (type !== 'article' && type !== 'course') {
-        return htmlResponse('Bad request: type must be "article" or "course"', 400);
+    if (type !== 'article' && type !== 'course' && type !== 'event') {
+        return htmlResponse('Bad request: type must be "article", "course" or "event"', 400);
     }
 
     try {
@@ -87,6 +91,9 @@ Deno.serve(async (req: Request) => {
         if (type === 'article') {
             const a = slug ? await fetchArticleBySlug(slug) : null;
             seo = a ? articleSeo(a, origin) : defaultSeo(origin);
+        } else if (type === 'event') {
+            const e = slug ? await fetchEventBySlug(slug) : null;
+            seo = e ? eventSeo(e, origin) : defaultSeo(origin);
         } else {
             const c = slug ? await fetchCourseBySlug(slug) : null;
             seo = c ? await courseSeo(c, origin) : defaultSeo(origin);

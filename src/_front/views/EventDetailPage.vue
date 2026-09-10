@@ -124,8 +124,8 @@
                             <div v-if="speakerBio.length" class="ed-speaker__bio">
                                 <p v-for="(p, i) in speakerBio" :key="i">{{ p }}</p>
                             </div>
-                            <div v-if="speakerLinks.length" class="ed-speaker__links">
-                                <a v-for="l in speakerLinks" :key="l.href" class="ed-speaker__link" :href="l.href" target="_blank" rel="noopener">{{ l.label }}</a>
+                            <div v-if="speakerLinks.length" class="ed-speaker__socials">
+                                <a v-for="l in speakerLinks" :key="l.type" class="ed-speaker__social" :href="l.url" target="_blank" rel="noopener noreferrer" :aria-label="l.label" v-html="l.icon"></a>
                             </div>
                         </div>
                     </div>
@@ -260,14 +260,23 @@ const forItems = computed(() => bullets(event.value?.for_whom));
 
 // Speaker "О спикере" — pulled from the profile (bio + social links, only what exists).
 const speakerBio = computed(() => (speaker.value?.Description || '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean));
-const SPEAKER_LINKS = [
-    { key: 'website_url', label: 'Сайт' }, { key: 'telegram_url', label: 'Telegram' },
-    { key: 'whatsapp_url', label: 'WhatsApp' }, { key: 'youtube_url', label: 'YouTube' },
-    { key: 'vk_url', label: 'VK' }, { key: 'booking_url', label: 'Запись' },
-];
+// social icons — verbatim from ProfilePage.vue SOCIAL_ICONS (booking_url intentionally excluded)
+const SPEAKER_SOCIAL_ICONS = {
+    vk: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.8 16.3c-5 0-8-3.5-8.1-9.3h2.5c.1 4.3 2 6.1 3.5 6.5V7h2.4v3.6c1.5-.2 3-1.8 3.6-3.6h2.4c-.5 2.2-2.1 3.8-3.2 4.5 1.1.6 2.9 2 3.6 4.8h-2.6c-.5-1.7-1.9-3-3.8-3.2v3.2h-.3z"/></svg>',
+    telegram: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4.5 3.5 11.2c-.9.4-.9 1.6 0 1.9l4.2 1.4 1.6 4.9c.3.8 1.2 1 1.8.4l2.3-2.2 4.2 3.1c.7.5 1.7.1 1.9-.7L22.5 6c.2-1-.7-1.8-1.5-1.5zM9.6 14l7.7-4.8-6.3 5.9-.2 3.1-1.2-4.2z"/></svg>',
+    youtube: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 8.2a3 3 0 0 0-2.1-2.1C18 5.6 12 5.6 12 5.6s-6 0-7.9.5A3 3 0 0 0 2 8.2 31 31 0 0 0 1.7 12 31 31 0 0 0 2 15.8a3 3 0 0 0 2.1 2.1c1.9.5 7.9.5 7.9.5s6 0 7.9-.5a3 3 0 0 0 2.1-2.1c.3-1.2.3-3.8.3-3.8s0-2.6-.3-3.8zM10 15V9l5.2 3-5.2 3z"/></svg>',
+    whatsapp: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-7.7 13.6L3 21l4.5-1.2A9 9 0 1 0 12 3zm5.2 12.7c-.2.6-1.2 1.1-1.7 1.2-.5.1-1 .1-1.6-.1-.4-.1-.9-.3-1.5-.6-2.6-1.1-4.3-3.8-4.4-4-.1-.2-1-1.4-1-2.6 0-1.2.6-1.8.9-2 .2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.7 1.7c.1.2.1.4 0 .5l-.3.5-.3.3c-.1.1-.3.3-.1.6.1.3.7 1.1 1.5 1.8 1 .9 1.8 1.1 2 1.2.3.1.4.1.6-.1l.7-.8c.2-.2.3-.2.6-.1l1.6.8c.3.1.5.2.5.4 0 .1 0 .5-.2 1z"/></svg>',
+    website: '<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.7 3.8 9S14.5 18.5 12 21c-2.5-2.5-3.8-5.7-3.8-9S9.5 5.5 12 3z" fill="none"/></svg>',
+};
 const speakerLinks = computed(() => {
-    const s = speaker.value; if (!s) return [];
-    return SPEAKER_LINKS.filter((l) => (s[l.key] || '').trim()).map((l) => ({ href: s[l.key].trim(), label: l.label }));
+    const s = speaker.value || {};
+    return [
+        { type: 'vk', url: s.vk_url, label: 'ВКонтакте' },
+        { type: 'telegram', url: s.telegram_url, label: 'Telegram' },
+        { type: 'youtube', url: s.youtube_url, label: 'YouTube' },
+        { type: 'whatsapp', url: s.whatsapp_url, label: 'WhatsApp' },
+        { type: 'website', url: s.website_url, label: 'Сайт' },
+    ].filter((l) => (l.url || '').trim()).map((l) => ({ ...l, url: l.url.trim(), icon: SPEAKER_SOCIAL_ICONS[l.type] }));
 });
 
 async function loadReg() {
@@ -392,10 +401,11 @@ onMounted(async () => {
 }
 .ed-review { position: relative; aspect-ratio: 16 / 9; max-width: 860px; border-radius: 14px; overflow: hidden; background: #000; }
 .ed-review iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-.pd-video__poster { display: block; width: 100%; border: 0; padding: 0; cursor: pointer; position: relative; background: #000; }
-.pd-video__poster img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.pd-video__play { position: absolute; inset: 0; margin: auto; width: 72px; height: 72px; display: grid; place-items: center; background: rgba(0,0,0,.55); border-radius: 50%; }
-.pd-video__play svg { width: 30px; height: 30px; fill: #fff; }
+.pd-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.pd-video__poster { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; padding: 0; cursor: pointer; background: #091747; display: grid; place-items: center; }
+.pd-video__poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.pd-video__play { position: relative; width: 74px; height: 74px; border-radius: 50%; background: rgba(255,255,255,0.92); display: grid; place-items: center; box-shadow: 0 10px 30px -8px rgba(0,0,0,0.5); }
+.pd-video__play svg { width: 32px; height: 32px; fill: #2563eb; margin-left: 3px; }
 .ed-speaker { display: flex; gap: 18px; align-items: flex-start; }
 .ed-speaker__ava { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; flex: none; }
 .ed-speaker__ava--i { display: grid; place-items: center; background: #eef2f7; color: #2563eb; font-weight: 700; font-size: 34px; }
@@ -403,8 +413,9 @@ onMounted(async () => {
 .ed-speaker__city { color: #64748b; font-size: 14px; margin-top: 2px; }
 .ed-speaker__bio { margin-top: 10px; line-height: 1.6; }
 .ed-speaker__bio p { margin: 0 0 8px; }
-.ed-speaker__links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.ed-speaker__link { padding: 6px 14px; border: 1px solid #d8dbe0; border-radius: 999px; font-size: 14px; color: #2563eb; text-decoration: none; }
-.ed-speaker__link:hover { background: #eef2f7; }
+.ed-speaker__socials { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+.ed-speaker__social { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: #eef2f7; color: #2563eb; transition: transform .16s, background .16s, color .16s; }
+.ed-speaker__social :deep(svg) { width: 22px; height: 22px; fill: currentColor; }
+.ed-speaker__social:hover { transform: translateY(-2px); background: #2563eb; color: #fff; }
 @media (max-width: 560px) { .ed-speaker { flex-direction: column; } }
 </style>

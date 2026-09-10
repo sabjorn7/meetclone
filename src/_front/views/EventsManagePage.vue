@@ -128,7 +128,7 @@
                     <span>Видеотизер</span>
                     <p v-if="!form.id" class="em-hint">Сохраните мероприятие, затем добавьте видеотизер.</p>
                     <template v-else>
-                        <div v-if="videoUploading" class="em-vprog">Загрузка… {{ videoProgress }}%</div>
+                        <div v-if="videoUploading && videoTarget === 'teaser'" class="em-vprog">Загрузка… {{ videoProgress }}%</div>
                         <template v-else-if="form.video_id">
                             <div class="em-vframe"><iframe :src="teaserEmbed(form.video_id)" title="Видеотизер" frameborder="0" allowfullscreen allow="fullscreen; picture-in-picture"></iframe></div>
                             <div class="em-vactions">
@@ -138,6 +138,22 @@
                         </template>
                         <label v-else class="em-btn em-btn--sm">Загрузить видео<input type="file" accept="video/*" hidden :disabled="videoUploading" @change="onTeaserVideo" /></label>
                         <p v-if="videoError" class="em-error">{{ videoError }}</p>
+                    </template>
+                </div>
+
+                <div class="em-field">
+                    <span>Видео-отзыв (одним роликом)</span>
+                    <p v-if="!form.id" class="em-hint">Сохраните мероприятие, затем добавьте видео-отзыв.</p>
+                    <template v-else>
+                        <div v-if="videoUploading && videoTarget === 'review'" class="em-vprog">Загрузка… {{ videoProgress }}%</div>
+                        <template v-else-if="form.review_video_id">
+                            <div class="em-vframe"><iframe :src="teaserEmbed(form.review_video_id)" title="Видео-отзыв" frameborder="0" allowfullscreen allow="fullscreen; picture-in-picture"></iframe></div>
+                            <div class="em-vactions">
+                                <label class="em-btn em-btn--sm">Заменить<input type="file" accept="video/*" hidden :disabled="videoUploading" @change="onReviewVideo" /></label>
+                                <button type="button" class="em-btn em-btn--sm em-btn--danger" :disabled="videoBusy" @click="removeReview">Удалить</button>
+                            </div>
+                        </template>
+                        <label v-else class="em-btn em-btn--sm">Загрузить видео<input type="file" accept="video/*" hidden :disabled="videoUploading" @change="onReviewVideo" /></label>
                     </template>
                 </div>
 
@@ -240,7 +256,7 @@ function isoToLocal(iso) {
 function localToIso(local) { return local ? new Date(local).toISOString() : null; }
 
 function blankForm() {
-    return { id: null, title: '', description: '', about: '', what_you_learn: '', for_whom: '', starts_at_local: '', ends_at_local: '', location: '', speaker_id: null, speaker_name: '', price: null, deposit_percent: '', capacity: '', cover_url: null, video_id: null, video_size: null };
+    return { id: null, title: '', description: '', about: '', what_you_learn: '', for_whom: '', starts_at_local: '', ends_at_local: '', location: '', speaker_id: null, speaker_name: '', price: null, deposit_percent: '', capacity: '', cover_url: null, video_id: null, video_size: null, review_video_id: null, review_video_size: null };
 }
 function resetSpeakerPicker() { speakerQuery.value = ''; speakerResults.value = []; clearTimeout(speakerTimer); }
 function openCreate() { form.value = blankForm(); resetSpeakerPicker(); dialogError.value = ''; dialog.value = true; }
@@ -250,6 +266,7 @@ async function openEdit(ev) {
         location: ev.location || '', speaker_id: ev.speaker_id || null, speaker_name: '', price: ev.price,
         deposit_percent: ev.deposit_percent ?? '', capacity: ev.capacity ?? '', cover_url: ev.cover_url || null,
         video_id: ev.video_id || null, video_size: ev.video_size ?? null,
+        review_video_id: ev.review_video_id || null, review_video_size: ev.review_video_size ?? null,
     };
     resetSpeakerPicker();
     dialogError.value = ''; dialog.value = true;
@@ -280,34 +297,37 @@ function patchEvent(id, p) {
     events.value = events.value.map((ev) => (ev.id === id ? { ...ev, ...p } : ev));
     if (form.value?.id === id) Object.assign(form.value, p);
 }
-async function runVideoUpload(table, row, file, patch, which) {
+// prefix = '' for the teaser columns, 'review_' for the review-clip columns
+async function runVideoUpload(table, row, file, patch, which, prefix = '') {
     if (videoUploading.value) return;
     videoUploading.value = true; videoProgress.value = 0; videoTarget.value = which; videoError.value = '';
+    const C = { vid: `${prefix}video_id`, size: `${prefix}video_size`, rid: `${prefix}resume_video_id`, rchunk: `${prefix}resume_chunk`, rname: `${prefix}resume_name` };
     try {
         const token = await getUploadToken(sb());
-        await sb().from(table).update({ resume_name: file.name }).eq('id', row.id);
+        await sb().from(table).update({ [C.rname]: file.name }).eq('id', row.id);
         const result = await uploadVideo({
             token, file,
-            resumeUploadId: row.resume_video_id || null,
-            resumeStart: row.resume_video_id ? Number(row.resume_chunk || 0) : 0,
-            onInit: (uid) => sb().from(table).update({ resume_video_id: uid }).eq('id', row.id),
-            onChunk: (pos) => sb().from(table).update({ resume_chunk: String(pos) }).eq('id', row.id),
+            resumeUploadId: row[C.rid] || null,
+            resumeStart: row[C.rid] ? Number(row[C.rchunk] || 0) : 0,
+            onInit: (uid) => sb().from(table).update({ [C.rid]: uid }).eq('id', row.id),
+            onChunk: (pos) => sb().from(table).update({ [C.rchunk]: String(pos) }).eq('id', row.id),
             onProgress: (p) => { videoProgress.value = p; },
         });
         const size = await fetchVideoSize(result.uuid);
-        const done = { video_id: result.uuid, video_size: size, resume_video_id: null, resume_chunk: null, resume_name: null };
+        const done = { [C.vid]: result.uuid, [C.size]: size, [C.rid]: null, [C.rchunk]: null, [C.rname]: null };
         await sb().from(table).update(done).eq('id', row.id);
         patch(done);
     } catch (e) {
         if (e?.message !== 'cancelled') videoError.value = `Не удалось загрузить видео: ${e?.message || 'ошибка'}`;
     } finally { videoUploading.value = false; videoTarget.value = null; }
 }
-async function runVideoDelete(table, row, patch) {
+async function runVideoDelete(table, row, patch, prefix = '') {
     if (videoBusy.value) return;
     videoBusy.value = true; videoError.value = '';
+    const C = { vid: `${prefix}video_id`, size: `${prefix}video_size`, rid: `${prefix}resume_video_id`, rchunk: `${prefix}resume_chunk`, rname: `${prefix}resume_name` };
     try {
-        if (row.video_id) { try { await deleteLive(sb(), row.video_id); } catch (_) { /* already gone */ } }
-        const done = { video_id: null, video_size: null, resume_video_id: null, resume_chunk: null, resume_name: null };
+        if (row[C.vid]) { try { await deleteLive(sb(), row[C.vid]); } catch (_) { /* already gone */ } }
+        const done = { [C.vid]: null, [C.size]: null, [C.rid]: null, [C.rchunk]: null, [C.rname]: null };
         await sb().from(table).update(done).eq('id', row.id);
         patch(done);
     } catch (e) { videoError.value = 'Не удалось удалить видео.'; }
@@ -321,6 +341,15 @@ function onTeaserVideo(e) {
 function removeTeaser() {
     const id = form.value?.id;
     if (id) runVideoDelete('events', form.value, (p) => patchEvent(id, p));
+}
+function onReviewVideo(e) {
+    const f = e.target.files?.[0]; e.target.value = '';
+    const id = form.value?.id;
+    if (f && id) runVideoUpload('events', form.value, f, (p) => patchEvent(id, p), 'review', 'review_');
+}
+function removeReview() {
+    const id = form.value?.id;
+    if (id) runVideoDelete('events', form.value, (p) => patchEvent(id, p), 'review_');
 }
 function teaserEmbed(uuid) { return embedUrl(uuid, { autoplay: false }); }
 

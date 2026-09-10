@@ -146,6 +146,14 @@
                 </div>
             </section>
 
+            <!-- Отзывы — single stitched review clip -->
+            <section v-if="event.review_video_id" class="pd-section pd-section--tint">
+                <div class="pd-wrap">
+                    <h2 class="pd-h2">Отзывы</h2>
+                    <div class="ed-review"><iframe :src="reviewEmbed" title="Видео-отзывы" frameborder="0" allowfullscreen allow="fullscreen; picture-in-picture"></iframe></div>
+                </div>
+            </section>
+
             <!-- Contact form (call-back lead) -->
             <section class="pd-section pd-section--tint">
                 <div class="pd-wrap ed-contact">
@@ -193,6 +201,7 @@ const event = ref(null);
 const speaker = ref(null);
 const teaserStarted = ref(false);
 const teaserEmbed = computed(() => (event.value?.video_id ? embedUrl(event.value.video_id, { autoplay: true }) : ''));
+const reviewEmbed = computed(() => (event.value?.review_video_id ? embedUrl(event.value.review_video_id, { autoplay: false }) : ''));
 const me = ref(null);
 const reg = ref(null);
 const paidCount = ref(0);
@@ -381,6 +390,8 @@ onMounted(async () => {
     .pd-wrap { padding-inline: 22px; }
     .pd-section { padding: 56px 0; }
 }
+.ed-review { position: relative; aspect-ratio: 16 / 9; max-width: 860px; border-radius: 14px; overflow: hidden; background: #000; }
+.ed-review iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .pd-video__poster { display: block; width: 100%; border: 0; padding: 0; cursor: pointer; position: relative; background: #000; }
 .pd-video__poster img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .pd-video__play { position: absolute; inset: 0; margin: auto; width: 72px; height: 72px; display: grid; place-items: center; background: rgba(0,0,0,.55); border-radius: 50%; }

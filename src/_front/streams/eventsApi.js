@@ -7,6 +7,8 @@
 // KEY money-safety marker: order.event_id (nullable, invisible to BuyCourse) tags an order as an
 // event payment so the trigger fires only for events; course/stream orders are untouched.
 
+import { deleteLive } from '@/_front/streams/peertubeLive.js';
+
 /**
  * MONEY-ADJACENT: create the hidden backing `course` for an event (clone of streams'
  * createBackingCourse). owner = event creator → BuyCourse credits sales/balance to them on
@@ -45,7 +47,7 @@ export function isEventsOrganizer(userId) {
 // ── CRUD (creator/organizer only; the page gates access) ─────────────────────
 
 const EVENT_FIELDS =
-    'id, created_at, slug, title, description, about, what_you_learn, for_whom, starts_at, ends_at, location, speaker_id, cover_url, price, deposit_percent, capacity, chat, backing_course_id, owner, status, video_id, video_size, resume_video_id, resume_chunk, resume_name';
+    'id, created_at, slug, title, description, about, what_you_learn, for_whom, starts_at, ends_at, location, speaker_id, cover_url, price, deposit_percent, capacity, chat, backing_course_id, owner, status, video_id, video_size, resume_video_id, resume_chunk, resume_name, review_video_id, review_video_size, review_resume_video_id, review_resume_chunk, review_resume_name';
 
 /**
  * Create an event. Order matters: create the hidden backing course FIRST so events.backing_course_id
@@ -88,9 +90,10 @@ export async function updateEvent(supabase, eventId, fields) {
     for (const k of ['title', 'description', 'about', 'what_you_learn', 'for_whom', 'starts_at', 'ends_at', 'location', 'speaker_id', 'cover_url', 'price', 'deposit_percent', 'capacity']) {
         if (k in fields) patch[k] = fields[k];
     }
-    const { data, error } = await supabase.from('events').update(patch).eq('id', eventId).select(EVENT_FIELDS).limit(1);
+    // No .select()/.limit() on the UPDATE: self-hosted PostgREST rejects a mutation with
+    // .limit() and no .order() (PGRST109) and rolls it back. The caller refetches via load().
+    const { error } = await supabase.from('events').update(patch).eq('id', eventId);
     if (error) throw new Error(`Не удалось сохранить мероприятие: ${error.message}`);
-    return data?.[0];
 }
 
 /** Single event by id (public read). Returns null if not found. */
@@ -210,6 +213,12 @@ export async function deleteEvent(supabase, eventId) {
         .eq('paid', true);
     if (paidRegs > 0 || (paidOrders || 0) > 0) {
         throw new Error(`Нельзя удалить: у мероприятия есть оплатившие участники (${paidRegs || paidOrders}). Сначала оформите возвраты.`);
+    }
+
+    // best-effort: drop the event's PeerTube videos (teaser + reviews) so they don't orphan
+    const ev = await getEventById(supabase, eventId).catch(() => null);
+    for (const vid of [ev?.video_id, ev?.review_video_id]) {
+        if (vid) { try { await deleteLive(supabase, vid); } catch (_) { /* already gone */ } }
     }
 
     // .neq('status','paid') / .eq('paid', false) are safety belts: a row flipped to paid by a

@@ -178,6 +178,7 @@ import {
     countPaidRegistrations,
     listEventRegistrations,
     createEvent,
+    ensureEventSlug,
     updateEvent,
     publishEvent,
     deleteEvent,
@@ -239,6 +240,8 @@ async function load() {
     error.value = '';
     try {
         events.value = await listMyEvents(sb(), me.value.id);
+        // backfill slugs for any legacy events missing one (idempotent)
+        for (const ev of events.value) { if (!ev.slug) ev.slug = await ensureEventSlug(sb(), ev).catch(() => null); }
         const counts = {};
         await Promise.all(events.value.map(async (ev) => { counts[ev.id] = await countPaidRegistrations(sb(), ev.id).catch(() => 0); }));
         paidCounts.value = counts;

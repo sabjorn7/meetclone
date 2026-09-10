@@ -326,6 +326,12 @@ routes.push({
     name: 'events',
     component: EventsPage,
 });
+// Canonical path-based event detail (/event/:slug) — same EventsPage in detail mode.
+routes.push({
+    path: '/event/:slug',
+    name: 'event-detail',
+    component: EventsPage,
+});
 
 // Standalone alias for the public profile (same ProfilePage component as the /profile_page override
 // above). Kept so older /profile-demo?user=<uuid> links still resolve; a physical

@@ -49,6 +49,40 @@ export function isEventsOrganizer(userId) {
 const EVENT_FIELDS =
     'id, created_at, slug, title, description, about, what_you_learn, for_whom, starts_at, ends_at, location, speaker_id, cover_url, price, deposit_percent, capacity, chat, backing_course_id, owner, status, video_id, video_size, resume_video_id, resume_chunk, resume_name, review_video_id, review_video_size, review_resume_video_id, review_resume_chunk, review_resume_name';
 
+// Slug generation (ported verbatim from CoursesManagePage: Cyrillic → latin kebab).
+const TRANSLIT = {
+    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y',
+    к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+    х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+};
+export function slugify(str) {
+    return String(str || '')
+        .toLowerCase()
+        .split('').map((ch) => (ch in TRANSLIT ? TRANSLIT[ch] : ch)).join('')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 80) || 'event';
+}
+/** Unique slug across `events` (append -2, -3… on collision). */
+export async function uniqueEventSlug(supabase, base, excludeId = null) {
+    let slug = base, n = 1;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+        let q = supabase.from('events').select('id').eq('slug', slug).limit(1);
+        if (excludeId) q = q.neq('id', excludeId);
+        const { data } = await q;
+        if (!data || !data.length) return slug;
+        n += 1; slug = `${base}-${n}`;
+    }
+}
+/** Backfill: ensure an event has a slug (generate + persist if missing). Returns the slug. */
+export async function ensureEventSlug(supabase, ev) {
+    if (ev.slug) return ev.slug;
+    const slug = await uniqueEventSlug(supabase, slugify(ev.title), ev.id);
+    await supabase.from('events').update({ slug }).eq('id', ev.id);
+    return slug;
+}
+
 /**
  * Create an event. Order matters: create the hidden backing course FIRST so events.backing_course_id
  * is set on insert; the BEFORE INSERT trigger then auto-creates the group chat and fills events.chat.
@@ -58,11 +92,13 @@ export async function createEvent(supabase, input) {
     const title = (input.title || '').trim();
     const price = Number(input.price) || 0;
     const backingCourseId = await createEventBackingCourse(supabase, { owner, title, price });
+    const slug = await uniqueEventSlug(supabase, slugify(title), null);
     const { data, error } = await supabase
         .from('events')
         .insert({
             owner,
             title,
+            slug,
             description: (input.description || '').trim(),
             about: (input.about || '').trim() || null,
             what_you_learn: (input.what_you_learn || '').trim() || null,
@@ -103,11 +139,19 @@ export async function getEventById(supabase, id) {
     return data?.[0] || null;
 }
 
+/** Single event by slug (public read; page applies the draft-visibility gate). */
+export async function getEventBySlug(supabase, slug) {
+    if (!slug) return null;
+    const { data, error } = await supabase.from('events').select(EVENT_FIELDS).eq('slug', slug).limit(1);
+    if (error) throw new Error(error.message);
+    return data?.[0] || null;
+}
+
 /** Published events for the public calendar, earliest first. */
 export async function listPublishedEvents(supabase) {
     const { data, error } = await supabase
         .from('events')
-        .select('id, title, starts_at, ends_at, location, cover_url, price, deposit_percent, capacity, status')
+        .select('id, slug, title, starts_at, ends_at, location, cover_url, price, deposit_percent, capacity, status')
         .eq('status', 'published')
         .order('starts_at', { ascending: true, nullsFirst: false });
     if (error) throw new Error(`Не удалось загрузить мероприятия: ${error.message}`);

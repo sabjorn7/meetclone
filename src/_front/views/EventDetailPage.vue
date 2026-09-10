@@ -183,6 +183,7 @@ import { getCurrentUser } from '@/_front/streams/streamsApi.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
 import {
     getEventById,
+    getEventBySlug,
     getSpeakerProfile,
     getMyEventRegistration,
     countPaidRegistrations,
@@ -194,6 +195,7 @@ import {
 const sb = () => window.wwLib?.wwPlugins?.supabase?.instance;
 const route = useRoute();
 const eventId = String(route.query.event || '');
+const eventSlug = String(route.params.slug || '');
 
 const loading = ref(true);
 const notFound = ref(false);
@@ -288,7 +290,7 @@ async function load() {
     loading.value = true; notFound.value = false;
     try {
         me.value = await getCurrentUser(sb()).catch(() => null);
-        const ev = eventId ? await getEventById(sb(), eventId) : null;
+        const ev = eventSlug ? await getEventBySlug(sb(), eventSlug) : (eventId ? await getEventById(sb(), eventId) : null);
         // draft is visible only to its owner
         if (!ev || (ev.status !== 'published' && (!me.value || me.value.id !== ev.owner))) {
             notFound.value = true;

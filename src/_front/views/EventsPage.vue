@@ -3,11 +3,11 @@
         <!-- Detail view (?event=<id>) — reuse the E5 detail component; :key remounts on id change.
              NOT wrapped in the narrow .ev-inner: EventDetailPage manages its own 1200px width to
              match CoursePage exactly (the 960px .ev-inner was squeezing it to ~848px). -->
-        <template v-if="activeEventId">
+        <template v-if="activeEventId || activeEventSlug">
             <div class="ev-detailtop">
                 <a class="ev-back" href="/events" @click.prevent="backToList">← Все мероприятия</a>
             </div>
-            <EventDetailPage :key="activeEventId" />
+            <EventDetailPage :key="detailKey" />
         </template>
 
         <!-- Calendar (list) — pd-* system + full-width horizontal cards (like /articles brand) -->
@@ -29,7 +29,7 @@
                             <template v-if="upcoming.length">
                                 <h2 class="pd-grouphead">Предстоящие</h2>
                                 <div class="pd-list">
-                                    <a v-for="ev in upcoming" :key="ev.id" class="pd-erow" :href="`/events?event=${ev.id}`">
+                                    <a v-for="ev in upcoming" :key="ev.id" class="pd-erow" :href="ev.slug ? `/event/${ev.slug}` : `/events?event=${ev.id}`">
                                         <div class="pd-erow__cover">
                                             <img v-if="ev.cover_url" :src="ev.cover_url" :alt="ev.title" loading="lazy" />
                                             <div v-else class="pd-erow__cover--empty">🗓</div>
@@ -49,7 +49,7 @@
                             <template v-if="past.length">
                                 <h2 class="pd-grouphead">Прошедшие</h2>
                                 <div class="pd-list">
-                                    <a v-for="ev in past" :key="ev.id" class="pd-erow pd-erow--past" :href="`/events?event=${ev.id}`">
+                                    <a v-for="ev in past" :key="ev.id" class="pd-erow pd-erow--past" :href="ev.slug ? `/event/${ev.slug}` : `/events?event=${ev.id}`">
                                         <div class="pd-erow__cover">
                                             <img v-if="ev.cover_url" :src="ev.cover_url" :alt="ev.title" loading="lazy" />
                                             <div v-else class="pd-erow__cover--empty">🗓</div>
@@ -83,6 +83,8 @@ const sb = () => window.wwLib?.wwPlugins?.supabase?.instance;
 const route = useRoute();
 
 const activeEventId = computed(() => route.query.event || null);
+const activeEventSlug = computed(() => route.params.slug || null);
+const detailKey = computed(() => activeEventSlug.value || activeEventId.value);
 
 const loading = ref(true);
 const error = ref('');
@@ -120,7 +122,7 @@ function backToList() { window.location.href = '/events'; }
 
 onMounted(async () => {
     // In detail mode the child component loads itself; only the calendar needs the list.
-    if (activeEventId.value) { loading.value = false; return; }
+    if (activeEventId.value || activeEventSlug.value) { loading.value = false; return; }
     try {
         items.value = await listPublishedEvents(sb());
     } catch (e) {

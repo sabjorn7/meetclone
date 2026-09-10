@@ -126,6 +126,22 @@
                 <div class="pd-foot" data-reveal>
                     <a href="/" class="pd-btn pd-btn--ghost">Вернуться</a>
                     <a v-if="author && myId && author.id !== myId" class="pd-btn" :href="`/chats?user=${author.id}`">Написать куратору</a>
+                    <button v-if="certReady" type="button" class="pd-btn" :disabled="certBusy" @click="downloadCertificate">
+                        {{ certBusy ? 'Готовим PDF…' : 'Сертификат о прохождении' }}
+                    </button>
+                </div>
+
+                <!-- Offscreen certificate node captured by html2canvas → jsPDF (client-side). -->
+                <div v-if="certReady" aria-hidden="true" style="position: fixed; left: -100000px; top: 0; pointer-events: none;">
+                    <CourseCertificate
+                        ref="certEl"
+                        :name="me.Name"
+                        :course="course.Title"
+                        :issuer="author.Name"
+                        :issuerLogo="author.Photo || ''"
+                        :date="certDate()"
+                        :certNo="certNo"
+                    />
                 </div>
             </div>
         </section>
@@ -138,6 +154,8 @@ import { useRoute } from 'vue-router';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import { ownsCourse } from '@/_front/course/coursesApi.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
+import CourseCertificate from '@/_front/course/CourseCertificate.vue';
+import { certNumber, certDate, downloadCertificatePdf, certFilename } from '@/_front/course/certificate.js';
 
 const PEERTUBE = 'https://video.meetgu.ru';
 const route = useRoute();
@@ -149,6 +167,9 @@ const loading = ref(true);
 const ready = ref(false);
 const course = ref(null);
 const author = ref(null);
+const userCourseId = ref(null); // seed for the certificate № (fallback: course+user for free courses)
+const certEl = ref(null);       // CourseCertificate instance → .root DOM node for html2canvas
+const certBusy = ref(false);
 const lessons = ref([]);
 const currentLessonId = ref(null);
 const videoStarted = ref(false);
@@ -201,6 +222,23 @@ function courseHref() { return `/course/${course.value.slug || course.value.id}`
 function fmtDate(d) {
     try { return new Date(d).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }); }
     catch (e) { return ''; }
+}
+
+// Participation certificate (Variant A: any owner with valid access — access is the page's precondition).
+// Deterministic № from the user_course id (fallback: course+user for free courses). Client-side PDF.
+const certSeed = computed(() => userCourseId.value || `${course.value?.id || ''}${myId.value || ''}`);
+const certNo = computed(() => certNumber(certSeed.value));
+// Need a real learner name + an issuer (course author) to issue a meaningful certificate.
+const certReady = computed(() => !!(course.value && me.value?.Name && author.value));
+async function downloadCertificate() {
+    if (certBusy.value || !certReady.value) return;
+    certBusy.value = true;
+    try {
+        await nextTick();
+        await downloadCertificatePdf(certEl.value?.root, certFilename(course.value.Title));
+    } finally {
+        certBusy.value = false;
+    }
 }
 
 // Submit a review: rating is upserted per user (one entry), a non-empty comment is appended.
@@ -257,6 +295,7 @@ async function load() {
         const { data: uc } = await sb.from('user_course').select('id, buy, end_period, created_at').eq('course', course.value.id).eq('user', myId.value).limit(1);
         const row = uc?.[0];
         if (!row) { window.location.href = courseHref(); return; }   // paid + not owned → buy page
+        userCourseId.value = row.id;
         // expired: time-limited access (DurationLong≠0), a real end_period (≠ created_at) in the past
         const dur = Number(course.value.DurationLong || 0);
         if (dur !== 0 && row.end_period && !sameDay(row.end_period, row.created_at) && new Date(row.end_period) < new Date()) {

@@ -73,24 +73,21 @@
                 </div>
             </header>
 
-            <!-- Marketing blocks — LITERALLY the CoursePage structure/classes (full 1200px width) -->
-            <section v-if="learnItems.length" class="pd-section pd-section--tint">
-                <div class="pd-wrap">
-                    <h2 class="pd-h2">Чему научитесь</h2>
-                    <ul class="pd-learn">
-                        <li v-for="(t, i) in learnItems" :key="i" class="pd-learn__item">
-                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 12l5 5L20 6" /></svg>
-                            <span>{{ t }}</span>
-                        </li>
-                    </ul>
-                </div>
-            </section>
-
+            <!-- Marketing blocks — CoursePage structure/classes (full 1200px width) -->
             <section v-if="aboutParagraphs.length" class="pd-section">
                 <div class="pd-wrap pd-about">
                     <h2 class="pd-h2">О мероприятии</h2>
                     <div class="pd-about__body">
                         <p v-for="(p, i) in aboutParagraphs" :key="i">{{ p }}</p>
+                    </div>
+                </div>
+            </section>
+
+            <section v-if="learnParagraphs.length" class="pd-section pd-section--tint">
+                <div class="pd-wrap pd-about">
+                    <h2 class="pd-h2">Чему научитесь</h2>
+                    <div class="pd-about__body">
+                        <p v-for="(p, i) in learnParagraphs" :key="i">{{ p }}</p>
                     </div>
                 </div>
             </section>
@@ -103,6 +100,27 @@
                             <span class="pd-forcard__dot" aria-hidden="true"></span>
                             <p>{{ t }}</p>
                         </article>
+                    </div>
+                </div>
+            </section>
+
+            <!-- О спикере — auto-pulled from the speaker's profile -->
+            <section v-if="speaker && (speakerBio.length || speakerLinks.length)" class="pd-section">
+                <div class="pd-wrap">
+                    <h2 class="pd-h2">О спикере</h2>
+                    <div class="ed-speaker">
+                        <img v-if="speaker.Photo" class="ed-speaker__ava" :src="speaker.Photo" :alt="speaker.Name || 'Спикер'" />
+                        <span v-else class="ed-speaker__ava ed-speaker__ava--i">{{ (speaker.Name || '?').slice(0, 1) }}</span>
+                        <div class="ed-speaker__body">
+                            <div class="ed-speaker__name">{{ speaker.Name || 'Спикер' }}</div>
+                            <div v-if="speaker.city" class="ed-speaker__city">📍 {{ speaker.city }}</div>
+                            <div v-if="speakerBio.length" class="ed-speaker__bio">
+                                <p v-for="(p, i) in speakerBio" :key="i">{{ p }}</p>
+                            </div>
+                            <div v-if="speakerLinks.length" class="ed-speaker__links">
+                                <a v-for="l in speakerLinks" :key="l.href" class="ed-speaker__link" :href="l.href" target="_blank" rel="noopener">{{ l.label }}</a>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -149,7 +167,7 @@ import { useRoute } from 'vue-router';
 import { getCurrentUser } from '@/_front/streams/streamsApi.js';
 import {
     getEventById,
-    getUserBrief,
+    getSpeakerProfile,
     getMyEventRegistration,
     countPaidRegistrations,
     purchaseEvent,
@@ -218,8 +236,20 @@ function bullets(text) {
     return (text || '').split(/\n+/).map((l) => l.replace(/^[\s•\-–—*]+/, '').trim()).filter(Boolean);
 }
 const aboutParagraphs = computed(() => (event.value?.about || '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean));
-const learnItems = computed(() => bullets(event.value?.what_you_learn));
+const learnParagraphs = computed(() => (event.value?.what_you_learn || '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean));
 const forItems = computed(() => bullets(event.value?.for_whom));
+
+// Speaker "О спикере" — pulled from the profile (bio + social links, only what exists).
+const speakerBio = computed(() => (speaker.value?.Description || '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean));
+const SPEAKER_LINKS = [
+    { key: 'website_url', label: 'Сайт' }, { key: 'telegram_url', label: 'Telegram' },
+    { key: 'whatsapp_url', label: 'WhatsApp' }, { key: 'youtube_url', label: 'YouTube' },
+    { key: 'vk_url', label: 'VK' }, { key: 'booking_url', label: 'Запись' },
+];
+const speakerLinks = computed(() => {
+    const s = speaker.value; if (!s) return [];
+    return SPEAKER_LINKS.filter((l) => (s[l.key] || '').trim()).map((l) => ({ href: s[l.key].trim(), label: l.label }));
+});
 
 async function loadReg() {
     if (!me.value || !event.value) { reg.value = null; return; }
@@ -238,7 +268,7 @@ async function load() {
         }
         event.value = ev;
         choice.value = 'full';
-        if (ev.speaker_id) speaker.value = await getUserBrief(sb(), ev.speaker_id).catch(() => null);
+        if (ev.speaker_id) speaker.value = await getSpeakerProfile(sb(), ev.speaker_id).catch(() => null);
         if (ev.capacity != null) paidCount.value = await countPaidRegistrations(sb(), ev.id).catch(() => 0);
         await loadReg();
     } catch {
@@ -341,4 +371,15 @@ onMounted(async () => {
     .pd-wrap { padding-inline: 22px; }
     .pd-section { padding: 56px 0; }
 }
+.ed-speaker { display: flex; gap: 18px; align-items: flex-start; }
+.ed-speaker__ava { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; flex: none; }
+.ed-speaker__ava--i { display: grid; place-items: center; background: #eef2f7; color: #2563eb; font-weight: 700; font-size: 34px; }
+.ed-speaker__name { font-weight: 800; font-size: 20px; }
+.ed-speaker__city { color: #64748b; font-size: 14px; margin-top: 2px; }
+.ed-speaker__bio { margin-top: 10px; line-height: 1.6; }
+.ed-speaker__bio p { margin: 0 0 8px; }
+.ed-speaker__links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ed-speaker__link { padding: 6px 14px; border: 1px solid #d8dbe0; border-radius: 999px; font-size: 14px; color: #2563eb; text-decoration: none; }
+.ed-speaker__link:hover { background: #eef2f7; }
+@media (max-width: 560px) { .ed-speaker { flex-direction: column; } }
 </style>

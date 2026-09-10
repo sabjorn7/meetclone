@@ -118,6 +118,17 @@ export async function getUserBrief(supabase, userId) {
     return data?.[0] || null;
 }
 
+/** Fuller speaker profile for the event detail "О спикере" section (bio + socials). */
+export async function getSpeakerProfile(supabase, userId) {
+    if (!userId) return null;
+    const { data } = await supabase
+        .from('users')
+        .select('id, "Name", "Photo", "Description", city, vk_url, youtube_url, whatsapp_url, telegram_url, website_url, booking_url')
+        .eq('id', userId)
+        .limit(1);
+    return data?.[0] || null;
+}
+
 /** Save a call-back request (phone lead). n8n polls status='new' → emails adv@meetgu.ru → marks notified. */
 export async function submitContactRequest(supabase, { event, phone }) {
     const p = (phone || '').trim();

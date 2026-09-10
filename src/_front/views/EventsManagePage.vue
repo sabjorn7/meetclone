@@ -72,7 +72,7 @@
                     <textarea v-model="form.about" rows="4" placeholder="Подробно, абзацы разделяйте пустой строкой"></textarea>
                 </label>
                 <label class="em-field"><span>Чему научитесь</span>
-                    <textarea v-model="form.what_you_learn" rows="4" placeholder="Каждый пункт — с новой строки"></textarea>
+                    <textarea v-model="form.what_you_learn" rows="4" placeholder="Свободный текст, абзацы разделяйте пустой строкой"></textarea>
                 </label>
                 <label class="em-field"><span>Для кого</span>
                     <textarea v-model="form.for_whom" rows="4" placeholder="Каждый пункт — с новой строки"></textarea>

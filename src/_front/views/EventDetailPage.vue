@@ -19,7 +19,14 @@
                             <span class="pd-author-mini__text"><span class="muted">Спикер</span><b>{{ speaker.Name || 'Спикер' }}</b></span>
                         </a>
 
-                        <div v-if="event.cover_url" class="pd-video pd-video--static">
+                        <div v-if="event.video_id" class="pd-video">
+                            <iframe v-if="teaserStarted" :src="teaserEmbed" title="Видео о мероприятии" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>
+                            <button v-else type="button" class="pd-video__poster" aria-label="Смотреть видео о мероприятии" @click="teaserStarted = true">
+                                <img v-if="event.cover_url" :src="event.cover_url" alt="" />
+                                <span class="pd-video__play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg></span>
+                            </button>
+                        </div>
+                        <div v-else-if="event.cover_url" class="pd-video pd-video--static">
                             <img :src="event.cover_url" :alt="event.title" />
                         </div>
                     </div>
@@ -165,6 +172,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { getCurrentUser } from '@/_front/streams/streamsApi.js';
+import { embedUrl } from '@/_front/streams/peertubeLive.js';
 import {
     getEventById,
     getSpeakerProfile,
@@ -183,6 +191,8 @@ const loading = ref(true);
 const notFound = ref(false);
 const event = ref(null);
 const speaker = ref(null);
+const teaserStarted = ref(false);
+const teaserEmbed = computed(() => (event.value?.video_id ? embedUrl(event.value.video_id, { autoplay: true }) : ''));
 const me = ref(null);
 const reg = ref(null);
 const paidCount = ref(0);
@@ -371,6 +381,10 @@ onMounted(async () => {
     .pd-wrap { padding-inline: 22px; }
     .pd-section { padding: 56px 0; }
 }
+.pd-video__poster { display: block; width: 100%; border: 0; padding: 0; cursor: pointer; position: relative; background: #000; }
+.pd-video__poster img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.pd-video__play { position: absolute; inset: 0; margin: auto; width: 72px; height: 72px; display: grid; place-items: center; background: rgba(0,0,0,.55); border-radius: 50%; }
+.pd-video__play svg { width: 30px; height: 30px; fill: #fff; }
 .ed-speaker { display: flex; gap: 18px; align-items: flex-start; }
 .ed-speaker__ava { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; flex: none; }
 .ed-speaker__ava--i { display: grid; place-items: center; background: #eef2f7; color: #2563eb; font-weight: 700; font-size: 34px; }

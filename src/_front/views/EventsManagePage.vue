@@ -124,6 +124,23 @@
                     </div>
                 </div>
 
+                <div class="em-field">
+                    <span>Видеотизер</span>
+                    <p v-if="!form.id" class="em-hint">Сохраните мероприятие, затем добавьте видеотизер.</p>
+                    <template v-else>
+                        <div v-if="videoUploading" class="em-vprog">Загрузка… {{ videoProgress }}%</div>
+                        <template v-else-if="form.video_id">
+                            <div class="em-vframe"><iframe :src="teaserEmbed(form.video_id)" title="Видеотизер" frameborder="0" allowfullscreen allow="fullscreen; picture-in-picture"></iframe></div>
+                            <div class="em-vactions">
+                                <label class="em-btn em-btn--sm">Заменить<input type="file" accept="video/*" hidden :disabled="videoUploading" @change="onTeaserVideo" /></label>
+                                <button type="button" class="em-btn em-btn--sm em-btn--danger" :disabled="videoBusy" @click="removeTeaser">Удалить</button>
+                            </div>
+                        </template>
+                        <label v-else class="em-btn em-btn--sm">Загрузить видео<input type="file" accept="video/*" hidden :disabled="videoUploading" @change="onTeaserVideo" /></label>
+                        <p v-if="videoError" class="em-error">{{ videoError }}</p>
+                    </template>
+                </div>
+
                 <p v-if="dialogError" class="em-error">{{ dialogError }}</p>
                 <div class="em-dialog__actions">
                     <button class="em-btn" @click="closeDialog">Отмена</button>
@@ -151,6 +168,8 @@ import {
     searchUsers,
     getUserBrief,
 } from '@/_front/streams/eventsApi.js';
+import { getUploadToken, uploadVideo, fetchVideoSize } from '@/_front/streams/peertubeUpload.js';
+import { deleteLive, embedUrl } from '@/_front/streams/peertubeLive.js';
 
 const BUCKET = 'profile';
 const STORAGE_URL = 'https://sb.meetgu.ru/storage/v1/object/public/profile//';
@@ -173,6 +192,12 @@ const dialog = ref(false);
 const dialogError = ref('');
 const coverBusy = ref(false);
 const form = ref(null);
+// PeerTube teaser upload (reused for event_reviews in phase 3)
+const videoUploading = ref(false);
+const videoProgress = ref(0);
+const videoBusy = ref(false);
+const videoError = ref('');
+const videoTarget = ref(null);
 
 // speaker picker
 const speakerQuery = ref('');
@@ -215,7 +240,7 @@ function isoToLocal(iso) {
 function localToIso(local) { return local ? new Date(local).toISOString() : null; }
 
 function blankForm() {
-    return { id: null, title: '', description: '', about: '', what_you_learn: '', for_whom: '', starts_at_local: '', ends_at_local: '', location: '', speaker_id: null, speaker_name: '', price: null, deposit_percent: '', capacity: '', cover_url: null };
+    return { id: null, title: '', description: '', about: '', what_you_learn: '', for_whom: '', starts_at_local: '', ends_at_local: '', location: '', speaker_id: null, speaker_name: '', price: null, deposit_percent: '', capacity: '', cover_url: null, video_id: null, video_size: null };
 }
 function resetSpeakerPicker() { speakerQuery.value = ''; speakerResults.value = []; clearTimeout(speakerTimer); }
 function openCreate() { form.value = blankForm(); resetSpeakerPicker(); dialogError.value = ''; dialog.value = true; }
@@ -224,6 +249,7 @@ async function openEdit(ev) {
         id: ev.id, title: ev.title || '', description: ev.description || '', about: ev.about || '', what_you_learn: ev.what_you_learn || '', for_whom: ev.for_whom || '', starts_at_local: isoToLocal(ev.starts_at), ends_at_local: isoToLocal(ev.ends_at),
         location: ev.location || '', speaker_id: ev.speaker_id || null, speaker_name: '', price: ev.price,
         deposit_percent: ev.deposit_percent ?? '', capacity: ev.capacity ?? '', cover_url: ev.cover_url || null,
+        video_id: ev.video_id || null, video_size: ev.video_size ?? null,
     };
     resetSpeakerPicker();
     dialogError.value = ''; dialog.value = true;
@@ -248,6 +274,55 @@ function pickSpeaker(u) {
     resetSpeakerPicker();
 }
 function clearSpeaker() { form.value.speaker_id = null; form.value.speaker_name = ''; }
+
+// ── PeerTube video (teaser now; event_reviews rows in phase 3) ──────────────
+function patchEvent(id, p) {
+    events.value = events.value.map((ev) => (ev.id === id ? { ...ev, ...p } : ev));
+    if (form.value?.id === id) Object.assign(form.value, p);
+}
+async function runVideoUpload(table, row, file, patch, which) {
+    if (videoUploading.value) return;
+    videoUploading.value = true; videoProgress.value = 0; videoTarget.value = which; videoError.value = '';
+    try {
+        const token = await getUploadToken(sb());
+        await sb().from(table).update({ resume_name: file.name }).eq('id', row.id);
+        const result = await uploadVideo({
+            token, file,
+            resumeUploadId: row.resume_video_id || null,
+            resumeStart: row.resume_video_id ? Number(row.resume_chunk || 0) : 0,
+            onInit: (uid) => sb().from(table).update({ resume_video_id: uid }).eq('id', row.id),
+            onChunk: (pos) => sb().from(table).update({ resume_chunk: String(pos) }).eq('id', row.id),
+            onProgress: (p) => { videoProgress.value = p; },
+        });
+        const size = await fetchVideoSize(result.uuid);
+        const done = { video_id: result.uuid, video_size: size, resume_video_id: null, resume_chunk: null, resume_name: null };
+        await sb().from(table).update(done).eq('id', row.id);
+        patch(done);
+    } catch (e) {
+        if (e?.message !== 'cancelled') videoError.value = `Не удалось загрузить видео: ${e?.message || 'ошибка'}`;
+    } finally { videoUploading.value = false; videoTarget.value = null; }
+}
+async function runVideoDelete(table, row, patch) {
+    if (videoBusy.value) return;
+    videoBusy.value = true; videoError.value = '';
+    try {
+        if (row.video_id) { try { await deleteLive(sb(), row.video_id); } catch (_) { /* already gone */ } }
+        const done = { video_id: null, video_size: null, resume_video_id: null, resume_chunk: null, resume_name: null };
+        await sb().from(table).update(done).eq('id', row.id);
+        patch(done);
+    } catch (e) { videoError.value = 'Не удалось удалить видео.'; }
+    finally { videoBusy.value = false; }
+}
+function onTeaserVideo(e) {
+    const f = e.target.files?.[0]; e.target.value = '';
+    const id = form.value?.id;
+    if (f && id) runVideoUpload('events', form.value, f, (p) => patchEvent(id, p), 'teaser');
+}
+function removeTeaser() {
+    const id = form.value?.id;
+    if (id) runVideoDelete('events', form.value, (p) => patchEvent(id, p));
+}
+function teaserEmbed(uuid) { return embedUrl(uuid, { autoplay: false }); }
 
 async function onCover(e) {
     const file = e.target.files?.[0]; e.target.value = '';
@@ -359,6 +434,11 @@ onMounted(async () => {
 .em-cover { display: flex; align-items: center; gap: 12px; }
 .em-cover__img { width: 120px; height: 80px; object-fit: cover; border-radius: 10px; }
 .em-dialog__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+.em-hint { color: #64748b; font-size: 13px; margin: 4px 0 0; }
+.em-vprog { padding: 10px 0; color: #2563eb; font-weight: 600; }
+.em-vframe { position: relative; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000; }
+.em-vframe iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.em-vactions { display: flex; gap: 8px; margin-top: 8px; }
 .em-count { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid #d8dbe0; background: #f8fafc; border-radius: 999px; font: inherit; font-size: 13px; color: #334155; cursor: pointer; }
 .em-count:hover { background: #eef2f7; }
 .em-count--open { background: #e6effe; border-color: #bcd4fb; color: #1d4ed8; }

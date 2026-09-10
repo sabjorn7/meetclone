@@ -45,7 +45,7 @@ export function isEventsOrganizer(userId) {
 // ── CRUD (creator/organizer only; the page gates access) ─────────────────────
 
 const EVENT_FIELDS =
-    'id, created_at, slug, title, description, about, what_you_learn, for_whom, starts_at, ends_at, location, speaker_id, cover_url, price, deposit_percent, capacity, chat, backing_course_id, owner, status';
+    'id, created_at, slug, title, description, about, what_you_learn, for_whom, starts_at, ends_at, location, speaker_id, cover_url, price, deposit_percent, capacity, chat, backing_course_id, owner, status, video_id, video_size, resume_video_id, resume_chunk, resume_name';
 
 /**
  * Create an event. Order matters: create the hidden backing course FIRST so events.backing_course_id

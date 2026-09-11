@@ -63,7 +63,14 @@
                                         <span class="ed-choice__sub">остаток {{ money(event.price - depositAmount) }} ₽ на месте</span>
                                     </label>
                                 </div>
-                                <button class="pd-btn pd-btn--lg pd-btn--block" :disabled="busy || seatsFull" @click="pay(choice)">
+                                <label class="ed-agree">
+                                    <input type="checkbox" v-model="agreed" />
+                                    <span>Я ознакомился(ась) и принимаю
+                                        <a href="/oferta?tab=meropriyatiya" target="_blank" rel="noopener">Публичную оферту на участие в очных мероприятиях Meetguru</a>,
+                                        включая <a href="/vozvrat" target="_blank" rel="noopener">Правила отмены участия и возврата денежных средств</a>.
+                                    </span>
+                                </label>
+                                <button class="pd-btn pd-btn--lg pd-btn--block" :disabled="busy || seatsFull || !agreed" @click="pay(choice)">
                                     {{ seatsFull ? 'Мест нет' : (busy ? 'Переход к оплате…' : 'Записаться') }}
                                 </button>
                             </template>
@@ -208,6 +215,7 @@ const me = ref(null);
 const reg = ref(null);
 const paidCount = ref(0);
 const choice = ref('full');
+const agreed = ref(false); // обязательное согласие с офертой + правилами отмены перед оплатой
 const busy = ref(false);
 const payError = ref('');
 const contactPhone = ref('');
@@ -401,6 +409,9 @@ onMounted(async () => {
     .pd-wrap { padding-inline: 22px; }
     .pd-section { padding: 56px 0; }
 }
+.ed-agree { display: flex; gap: 9px; align-items: flex-start; margin: 6px 0 14px; font-size: 13px; line-height: 1.45; color: #5b6472; cursor: pointer; }
+.ed-agree input { margin-top: 2px; flex: none; width: 16px; height: 16px; accent-color: #2563eb; }
+.ed-agree a { color: #2563eb; text-decoration: underline; }
 .ed-review { position: relative; aspect-ratio: 16 / 9; max-width: 860px; border-radius: 14px; overflow: hidden; background: #000; }
 .ed-review iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .pd-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }

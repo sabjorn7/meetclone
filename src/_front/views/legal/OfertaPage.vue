@@ -9,8 +9,8 @@ import licenziya from './oferta_licenziya.html?raw';
 import meropriyatiya from './oferta_meropriyatiya.html?raw';
 
 const docs = [
-    { label: 'Договор', html: dogovor },
-    { label: 'Продажа курсов', html: licenziya },
-    { label: 'Очные мероприятия', html: meropriyatiya },
+    { tab: 'dogovor', label: 'Договор', html: dogovor },
+    { tab: 'kursy', label: 'Продажа курсов', html: licenziya },
+    { tab: 'meropriyatiya', label: 'Очные мероприятия', html: meropriyatiya },
 ];
 </script>

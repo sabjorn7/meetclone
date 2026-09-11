@@ -36,14 +36,22 @@
 
 <script setup>
 import { ref } from 'vue';
+import { useRoute } from 'vue-router';
 
-defineProps({
+const props = defineProps({
     title: { type: String, required: true },
-    // [{ label, html }]. One item → no tabs; many → tabbed.
+    // [{ label, html, tab? }]. One item → no tabs; many → tabbed. Optional `tab` = deep-link slug.
     docs: { type: Array, required: true },
 });
 
-const active = ref(0);
+// ?tab=<slug> opens directly on the matching doc; default = first.
+const route = useRoute();
+const initialActive = () => {
+    const t = route.query.tab;
+    const i = t ? props.docs.findIndex((d) => d.tab === t) : -1;
+    return i >= 0 ? i : 0;
+};
+const active = ref(initialActive());
 </script>
 
 <style scoped>

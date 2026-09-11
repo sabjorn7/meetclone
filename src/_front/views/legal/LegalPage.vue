@@ -28,6 +28,7 @@
                 <a href="/politica">Политика конфиденциальности</a>
                 <a href="/oferta">Оферта</a>
                 <a href="/soglasie">Согласие на обработку ПД</a>
+                <a href="/vozvrat">Правила отмены и возврата</a>
             </nav>
         </main>
     </div>

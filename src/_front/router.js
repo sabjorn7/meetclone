@@ -22,6 +22,7 @@ import CoursesManagePage from './views/CoursesManagePage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
+import VozvratPage from './views/legal/VozvratPage.vue';
 import FaqPage from './views/FaqPage.vue';
 
 import {
@@ -233,6 +234,7 @@ const PAGE_OVERRIDES = [
     { path: '/oferta', name: 'legal-oferta', component: OfertaPage, wwPath: 'oferta' },
     // /soglasie is brand-new (no WeWeb page at that path), so no wwPath to skip.
     { path: '/soglasie', name: 'legal-soglasie', component: SoglasiePage },
+    { path: '/vozvrat', name: 'legal-vozvrat', component: VozvratPage },
     { path: '/faq', name: 'faq', component: FaqPage, wwPath: 'faq' },
     // Public profile: promo-styled ProfilePage replaces the WeWeb /profile_page (reads ?user=<uuid>).
     { path: '/profile_page', name: 'profile-page', component: ProfilePage, wwPath: 'profile_page' },

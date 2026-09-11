@@ -36,7 +36,7 @@ const columns = [
     { title: 'Курсы', links: [{ label: 'Все курсы', path: '/all_course' }, { label: 'Трансляции', path: '/streams' }, { label: 'Клуб', path: '/clubs' }] },
     { title: 'Поддержка', links: [{ label: 'Вопросы и ответы', path: '/faq' }, { label: 'Контакты', path: '/contacts' }] },
     { title: 'Компания', links: [{ label: 'О нас', path: '/about_meet' }, { label: 'Приветствие', path: '/welcome' }] },
-    { title: 'Документы', links: [{ label: 'Политика', path: '/politica' }, { label: 'Оферта', path: '/oferta' }, { label: 'Согласие', path: '/soglasie' }] },
+    { title: 'Документы', links: [{ label: 'Политика', path: '/politica' }, { label: 'Оферта', path: '/oferta' }, { label: 'Согласие', path: '/soglasie' }, { label: 'Правила отмены', path: '/vozvrat' }] },
 ];
 </script>
 

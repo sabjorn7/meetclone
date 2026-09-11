@@ -74,6 +74,23 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Hand-added standalone page (NOT WeWeb-generated): the /vozvrat legal page (cancellation &
+// refund rules, see src/_front/views/legal). Needs a physical dist/vozvrat/index.html for direct hits/refresh.
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['vozvrat-en'] = {
+            ..._tpl,
+            outputDir: './vozvrat',
+            title: 'Правила отмены участия и возврата денежных средств — МитГуру',
+            meta: [
+                { name: 'title', content: 'Правила отмены участия и возврата денежных средств — МитГуру' },
+                { name: 'description', content: 'Правила отмены участия и возврата денежных средств на платформе МитГуру.' },
+            ],
+        };
+    }
+}
+
 // Hand-added standalone page (NOT WeWeb-generated): the /promo-demo seminar landing (design
 // experiment; see src/_front/views/PromoDemoPage.vue). Needs a physical dist/promo-demo/index.html
 // for direct hits/refresh.

@@ -119,6 +119,69 @@
                 </div>
             </section>
 
+            <!-- LIVE: Курсы и мероприятия -->
+            <section v-else-if="active === 'content'" class="dash-panel">
+                <div v-if="contentLoading" class="panel-empty" style="height:160px">Загрузка…</div>
+                <template v-else>
+                    <div class="dash-subkpis">
+                        <div class="skpi"><span class="skpi__n">{{ fmt(content.total) }}</span><span class="skpi__l">Курсов всего</span></div>
+                        <div class="skpi"><span class="skpi__n">{{ fmt(content.published) }}</span><span class="skpi__l">Опубликовано</span></div>
+                        <div class="skpi"><span class="skpi__n">{{ fmt(content.drafts) }}</span><span class="skpi__l">Черновиков</span></div>
+                        <div class="skpi"><span class="skpi__n">{{ fmt(content.createdInRange) }}</span><span class="skpi__l">Создано за период</span></div>
+                    </div>
+
+                    <div class="panel-head"><h2>Статусы курсов</h2><span class="panel-note">снимок сейчас</span></div>
+                    <div class="statbars">
+                        <div v-for="s in content.statuses" :key="s.label" class="statbar">
+                            <span class="statbar__lbl">{{ s.label }}</span>
+                            <span class="statbar__track"><span class="statbar__fill" :style="{ width: s.pct + '%', background: s.color }"></span></span>
+                            <span class="statbar__n">{{ fmt(s.n) }}</span>
+                        </div>
+                    </div>
+
+                    <div class="two-col">
+                        <div class="two-col__c">
+                            <div class="panel-head"><h2>Топ по ученикам</h2><span class="panel-note">за период</span></div>
+                            <div v-if="content.topEnroll.length" class="dash-tablewrap">
+                                <table class="dash-table">
+                                    <thead><tr><th>Курс</th><th>Статус</th><th class="num">Учеников</th></tr></thead>
+                                    <tbody>
+                                        <tr v-for="c in content.topEnroll" :key="c.course_id || c.title">
+                                            <td><div class="ttl">{{ c.title || 'Без названия' }}</div><div class="sub">{{ c.owner }}</div></td>
+                                            <td><span class="role-badge" :class="statusCls(c.status)">{{ c.status || '—' }}</span></td>
+                                            <td class="num strong">{{ fmt(c.enroll_n) }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div v-else class="panel-empty" style="height:120px">Нет данных за период</div>
+                        </div>
+                        <div class="two-col__c">
+                            <div class="panel-head"><h2>Топ по выручке</h2><span class="panel-note">за период</span></div>
+                            <div v-if="content.topRevenue.length" class="dash-tablewrap">
+                                <table class="dash-table">
+                                    <thead><tr><th>Курс</th><th class="num">Продаж</th><th class="num">Выручка</th></tr></thead>
+                                    <tbody>
+                                        <tr v-for="c in content.topRevenue" :key="c.course_id || c.title">
+                                            <td><div class="ttl">{{ c.title || 'Без названия' }}</div></td>
+                                            <td class="num muted">{{ fmt(c.sales_n) }}</td>
+                                            <td class="num strong">{{ fmtRub(c.revenue) }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div v-else class="panel-empty" style="height:120px">Нет продаж за период</div>
+                        </div>
+                    </div>
+                    <p class="dash-foot">Ученики — все владения курсом (user_course), включая бесплатные и выданные доступы. Выручка по курсам считается из начислений (sales→shop) и покрывает не все продажи (подписки без привязки к курсу не учитываются).</p>
+
+                    <div class="ev-empty">
+                        <h2>Мероприятия</h2>
+                        <p>Мероприятий пока нет — раздел оживёт, когда появятся события и оплаченные регистрации.</p>
+                    </div>
+                </template>
+            </section>
+
             <!-- Placeholders for later phases -->
             <section v-else class="dash-panel dash-panel--soon">
                 <div class="soon">
@@ -215,6 +278,19 @@ const money = reactive({
     rev: { labels: [], datasets: [] },
     authors: [], roleSplit: { edu: 0, speaker: 0, other: 0 },
 });
+const contentLoading = ref(false);
+const contentKey = ref('');
+const content = reactive({
+    total: 0, published: 0, drafts: 0, statuses: [],
+    createdInRange: 0, topEnroll: [], topRevenue: [],
+});
+// Course ModStatus -> colour + badge class. Extras fall back to the "draft" grey.
+const STATUS_META = {
+    'Опубликовано': { color: '#3ba55d', cls: 'ok' },
+    'Черновик': { color: '#8a94a6', cls: 'draft' },
+    'Снято с публикации': { color: '#e2574c', cls: 'off' },
+    'Отправлено на доработку': { color: '#f0a92e', cls: 'fix' },
+};
 
 async function count(table, build) {
     let q = sb.from(table).select('id', { count: 'exact', head: true });
@@ -288,10 +364,46 @@ async function loadMoney() {
     }
     moneyLoading.value = false;
 }
+// Snapshot (current portfolio, not range-dependent): course statuses via a direct fetch.
+async function loadContentSnapshot() {
+    const { data } = await sb.from('course').select('ModStatus').limit(100000);
+    const rows = data || [];
+    const map = new Map();
+    for (const r of rows) { const k = r.ModStatus || '∅'; map.set(k, (map.get(k) || 0) + 1); }
+    content.total = rows.length;
+    content.published = map.get('Опубликовано') || 0;
+    content.drafts = map.get('Черновик') || 0;
+    const order = [...Object.keys(STATUS_META).filter((k) => map.has(k)), ...[...map.keys()].filter((k) => !STATUS_META[k])];
+    const max = Math.max(1, ...order.map((k) => map.get(k) || 0));
+    content.statuses = order.map((k) => ({
+        label: k, n: map.get(k) || 0,
+        color: STATUS_META[k]?.color || '#5495f3',
+        pct: Math.round((map.get(k) || 0) / max * 100),
+    }));
+}
+// Range-dependent: courses created in range (direct) + top courses (admin-gated RPC).
+async function loadContentRange() {
+    const f = new Date(from.value + 'T00:00:00'); const t = new Date(to.value + 'T23:59:59.999');
+    content.createdInRange = await count('course', (q) => q.gte('created_at', f.toISOString()).lte('created_at', t.toISOString()));
+    const { data, error } = await sb.rpc('admin_top_courses', { p_from: from.value, p_to: to.value, p_limit: 8 });
+    if (error) { console.warn('admin_top_courses failed', error); content.topEnroll = []; content.topRevenue = []; return; }
+    content.topEnroll = Array.isArray(data?.by_enroll) ? data.by_enroll : [];
+    content.topRevenue = Array.isArray(data?.by_revenue) ? data.by_revenue : [];
+}
+async function loadContent() {
+    contentLoading.value = true;
+    try {
+        if (!content.total) await loadContentSnapshot();
+        await loadContentRange();
+        contentKey.value = rangeKey();
+    } catch (e) { console.warn('loadContent failed', e); }
+    contentLoading.value = false;
+}
 async function reload() {
     await loadRegistrations();
     await loadDelta();
     if (active.value === 'money') await loadMoney();
+    if (active.value === 'content') await loadContent();
 }
 async function loadStatics() {
     [kpi.users, kpi.courses, kpi.events, kpi.sales, kpi.reports] = await Promise.all([
@@ -299,8 +411,11 @@ async function loadStatics() {
     ]);
 }
 
-// Lazy-load the money tab the first time it's opened for the current range.
-watch(active, (t) => { if (t === 'money' && moneyKey.value !== rangeKey()) loadMoney(); });
+// Lazy-load a tab's data the first time it's opened for the current range.
+watch(active, (t) => {
+    if (t === 'money' && moneyKey.value !== rangeKey()) loadMoney();
+    if (t === 'content' && contentKey.value !== rangeKey()) loadContent();
+});
 
 /* ---------- gate + boot ---------- */
 onMounted(async () => {
@@ -320,6 +435,7 @@ onMounted(async () => {
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
 const fmtRub = (n) => `${Math.round(Number(n) || 0).toLocaleString('ru-RU')} ₽`;
 const roleCls = (role) => role === 'Учебное заведение' ? 'edu' : (role === 'Спикер' ? 'speaker' : 'other');
+const statusCls = (s) => STATUS_META[s]?.cls || 'draft';
 </script>
 
 <style scoped>
@@ -389,6 +505,36 @@ const roleCls = (role) => role === 'Учебное заведение' ? 'edu' :
 .role-badge.speaker { background: #eaf2ff; color: #3d7ce0; }
 .role-badge.other { background: #eef1f5; color: #8a94a6; }
 .dash-foot { margin: 14px 0 0; color: #a4adba; font-size: 12px; line-height: 1.5; }
+
+/* status badges (course ModStatus) */
+.role-badge.ok { background: #e7f6ec; color: #2f9e57; }
+.role-badge.draft { background: #eef1f5; color: #8a94a6; }
+.role-badge.off { background: #fdeceb; color: #d1483d; }
+.role-badge.fix { background: #fef3e2; color: #c9871a; }
+
+/* course status horizontal bars */
+.statbars { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+.statbar { display: grid; grid-template-columns: 190px 1fr 56px; align-items: center; gap: 12px; }
+.statbar__lbl { font-size: 13px; color: #5b6472; }
+.statbar__track { height: 12px; border-radius: 999px; background: #f2f4f7; overflow: hidden; }
+.statbar__fill { display: block; height: 100%; border-radius: 999px; min-width: 3px; }
+.statbar__n { text-align: right; font-weight: 700; font-size: 14px; }
+
+/* two side-by-side top lists */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 22px; }
+.two-col__c { min-width: 0; }
+.dash-table .ttl { font-weight: 500; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-table .sub { font-size: 12px; color: #8a94a6; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ev-empty { margin-top: 24px; padding: 22px; border: 1px dashed #dde2ea; border-radius: 14px; text-align: center; }
+.ev-empty h2 { margin: 0 0 6px; font-size: 16px; }
+.ev-empty p { margin: 0; color: #8a94a6; font-size: 14px; }
+
+@media (max-width: 720px) {
+    .two-col { grid-template-columns: 1fr; gap: 20px; }
+    .statbar { grid-template-columns: 130px 1fr 48px; }
+    .statbar__lbl { font-size: 12px; }
+}
 
 .dash-panel--soon { padding: 0; }
 .soon { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 56px 24px; }

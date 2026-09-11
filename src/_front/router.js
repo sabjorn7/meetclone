@@ -19,6 +19,7 @@ import UsersPage from './views/UsersPage.vue';
 import ProfileEditPage from './views/ProfileEditPage.vue';
 import MyCoursePage from './views/MyCoursePage.vue';
 import CoursesManagePage from './views/CoursesManagePage.vue';
+import DashboardPage from './views/DashboardPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -281,6 +282,7 @@ const PAGE_OVERRIDES = [
     // Also removed from App.vue CHROME_EXCLUDE (gets shared chrome); coursesManageStyle.js goes inert here
     // (it keys on the WeWeb `page-16089944…` route, which this override skips). /courses-manage-demo is the rollback.
     { path: '/courses_manage', name: 'courses_manage', component: CoursesManagePage, wwPath: 'courses_manage' },
+    { path: '/dashboard', name: 'dashboard', component: DashboardPage, wwPath: 'dashboard' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

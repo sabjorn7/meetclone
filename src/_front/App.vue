@@ -23,7 +23,7 @@ import { isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
 // are content-only now and rely on this chrome, so they are intentionally NOT excluded.
 const CHROME_EXCLUDE = [
     // account / product ( /profile, /profile_page and /my_courses are redesigned — they get the new chrome)
-    '/my_finanse', '/dashboard', '/feedback',
+    '/my_finanse', '/feedback',
     // creator management (courses_manage is now the hand-written CoursesManagePage — gets the new chrome)
     '/articles_manage',
     // admin

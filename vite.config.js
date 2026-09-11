@@ -91,6 +91,23 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Hand-added standalone page (NOT WeWeb-generated): the /superadmin-demo admin back-office rebuild
+// (SuperadminPage.vue). Admin-gated at runtime; needs a physical dist/superadmin-demo/index.html so
+// a direct hit / refresh doesn't 404 (no SPA fallback). Becomes /superadmin once each tab is proven.
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['superadmin-demo-en'] = {
+            ..._tpl,
+            outputDir: './superadmin-demo',
+            title: 'Модерация — МитГуру',
+            meta: [
+                { name: 'robots', content: 'noindex' },
+            ],
+        };
+    }
+}
+
 // Hand-added standalone page (NOT WeWeb-generated): the /promo-demo seminar landing (design
 // experiment; see src/_front/views/PromoDemoPage.vue). Needs a physical dist/promo-demo/index.html
 // for direct hits/refresh.

@@ -20,6 +20,7 @@ import ProfileEditPage from './views/ProfileEditPage.vue';
 import MyCoursePage from './views/MyCoursePage.vue';
 import CoursesManagePage from './views/CoursesManagePage.vue';
 import DashboardPage from './views/DashboardPage.vue';
+import SuperadminPage from './views/SuperadminPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -283,6 +284,9 @@ const PAGE_OVERRIDES = [
     // (it keys on the WeWeb `page-16089944…` route, which this override skips). /courses-manage-demo is the rollback.
     { path: '/courses_manage', name: 'courses_manage', component: CoursesManagePage, wwPath: 'courses_manage' },
     { path: '/dashboard', name: 'dashboard', component: DashboardPage, wwPath: 'dashboard' },
+    // Hand-written /superadmin rebuild, built at a DEMO route first; the live WeWeb /superadmin
+    // (wwPath 'superadmin') stays untouched until each tab is proven, then this takes its path.
+    { path: '/superadmin-demo', name: 'superadmin-demo', component: SuperadminPage },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

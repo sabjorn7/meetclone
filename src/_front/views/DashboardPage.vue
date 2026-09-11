@@ -1,19 +1,21 @@
 <!--
   DashboardPage.vue — "/dashboard" admin analytics panel (Yandex.Metrika-style), hand-written
-  rebuild of the dead WeWeb dashboard. PHASE 0: access gate + shell (date range, tabs, KPI tiles)
-  + one LIVE tab ("Пользователи": daily registrations chart). Money / content / moderation tabs
-  are placeholders filled by later phases (Ф1 revenue RPC, Ф3 courses/events, Ф4 reports/chats).
+  rebuild of the dead WeWeb dashboard.
+    Ф0: access gate + shell (date range, tabs, KPI tiles) + "Пользователи" (registrations chart).
+    Ф1: "Деньги" tab — revenue over time (paid orders) + sales attribution by author, via two
+        SECURITY DEFINER RPCs (admin_revenue_daily / admin_sales_by_author, admin-gated inside).
+    Ф3/Ф4: "Курсы и мероприятия" / "Чаты и модерация" are still Фаза-N placeholders.
 
   ACCESS (admin-only): guest → /login; logged in but not admin (role!=='admin' && !superadmin) → /.
   Moderation actions live on /superadmin — cross-linked from the header here.
-  Data: direct read-only queries only (no migration in Ф0). RLS is off project-wide.
+  Data: simple counters + registrations = direct queries; money = admin-gated RPCs. RLS is off.
 -->
 <template>
     <main class="dash">
         <div v-if="loading" class="dash-boot">Загрузка панели…</div>
 
         <template v-else>
-            <!-- sub-header: title + range presets + moderation link -->
+            <!-- sub-header: title + moderation link -->
             <header class="dash-top">
                 <div class="dash-top__l">
                     <h1 class="dash-title">Аналитика</h1>
@@ -58,8 +60,55 @@
                         @click="active = t.key">{{ t.label }}</button>
             </nav>
 
+            <!-- LIVE: Деньги -->
+            <section v-if="active === 'money'" class="dash-panel">
+                <div v-if="moneyLoading" class="panel-empty" style="height:200px">Загрузка…</div>
+                <template v-else>
+                    <div class="dash-subkpis">
+                        <div class="skpi"><span class="skpi__n">{{ fmtRub(money.revenue) }}</span><span class="skpi__l">Выручка (оплаченные заказы)</span></div>
+                        <div class="skpi"><span class="skpi__n">{{ fmt(money.orders) }}</span><span class="skpi__l">Заказов</span></div>
+                        <div class="skpi"><span class="skpi__n">{{ fmtRub(money.avg) }}</span><span class="skpi__l">Средний чек</span></div>
+                        <div class="skpi"><span class="skpi__n">{{ fmtRub(money.accrued) }}</span><span class="skpi__l">Начислено авторам</span></div>
+                    </div>
+
+                    <div class="panel-head">
+                        <h2>Выручка по {{ weekly ? 'неделям' : 'дням' }}</h2>
+                        <span class="panel-note">оплаченные заказы за период</span>
+                    </div>
+                    <div class="panel-chart">
+                        <MetricChart v-if="money.rev.labels.length && money.revenue" :labels="money.rev.labels" :datasets="money.rev.datasets" />
+                        <div v-else class="panel-empty">Нет оплат в этом периоде</div>
+                    </div>
+
+                    <div class="panel-head" style="margin-top:24px">
+                        <h2>Продажи по авторам</h2>
+                        <span class="panel-note">
+                            Учебные заведения {{ fmtRub(money.roleSplit.edu) }} · Спикеры {{ fmtRub(money.roleSplit.speaker) }}<template v-if="money.roleSplit.other"> · Прочее {{ fmtRub(money.roleSplit.other) }}</template>
+                        </span>
+                    </div>
+                    <div v-if="money.authors.length" class="dash-tablewrap">
+                        <table class="dash-table">
+                            <thead>
+                                <tr><th>Автор</th><th>Роль</th><th class="num">Продаж</th><th class="num">Выручка</th><th class="num">Начислено</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="a in money.authors" :key="a.author_id || a.name || Math.random()">
+                                    <td>{{ a.name || 'Не указан' }}</td>
+                                    <td><span class="role-badge" :class="roleCls(a.role)">{{ a.role }}</span></td>
+                                    <td class="num">{{ fmt(a.sales_n) }}</td>
+                                    <td class="num strong">{{ fmtRub(a.gross) }}</td>
+                                    <td class="num muted">{{ fmtRub(a.accrued) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="panel-empty">Нет продаж в этом периоде</div>
+                    <p class="dash-foot">Атрибуция по авторам считается из начислений (sales) и может немного отличаться от суммы оплаченных заказов из-за возвратов и подписок.</p>
+                </template>
+            </section>
+
             <!-- LIVE: Пользователи -->
-            <section v-if="active === 'users'" class="dash-panel">
+            <section v-else-if="active === 'users'" class="dash-panel">
                 <div class="panel-head">
                     <h2>Регистрации по {{ weekly ? 'неделям' : 'дням' }}</h2>
                     <span class="panel-note">{{ fmt(kpi.newInRange) }} за выбранный период</span>
@@ -84,7 +133,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { getSupabase, loadUser, isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
 import MetricChart from './MetricChart.vue';
@@ -110,6 +159,7 @@ const preset = ref('30');
 const from = ref(daysAgo(30));
 const to = ref(today);
 const ALL_FROM = '2025-01-01';
+const rangeKey = () => `${from.value}_${to.value}`;
 
 function applyPreset(p) {
     preset.value = p.key;
@@ -122,26 +172,15 @@ function onTo(e) { to.value = e.target.value; preset.value = ''; reload(); }
 
 /* ---------- tabs ---------- */
 const TABS = [
-    { key: 'money', label: 'Деньги', phase: 1, soon: 'Выручка и продажи, разбивка по спикерам и учебным заведениям. Считается через SECURITY DEFINER RPC.' },
+    { key: 'money', label: 'Деньги', phase: 1, soon: '' },
     { key: 'users', label: 'Пользователи', phase: 2, soon: '' },
     { key: 'content', label: 'Курсы и мероприятия', phase: 3, soon: 'Сколько создано и продано, самые популярные курсы и мероприятия, черновики против опубликованных.' },
     { key: 'moder', label: 'Чаты и модерация', phase: 4, soon: 'Динамика жалоб (stream_reports), активные чаты и объём сообщений.' },
 ];
-const active = ref('users');
+const active = ref('money');
 const activeTab = computed(() => TABS.find((t) => t.key === active.value) || TABS[0]);
 
-/* ---------- data ---------- */
-let sb = null;
-const kpi = reactive({ users: 0, newInRange: 0, delta: null, courses: 0, events: 0, sales: 0, reports: 0 });
-const reg = reactive({ labels: [], datasets: [] });
-const weekly = ref(false);
-
-async function count(table, build) {
-    let q = sb.from(table).select('id', { count: 'exact', head: true });
-    if (build) q = build(q);
-    const { count: n } = await q;
-    return n || 0;
-}
+/* ---------- shared bucketing ---------- */
 function startOfWeek(d) { const x = new Date(d); const wd = (x.getDay() + 6) % 7; x.setDate(x.getDate() - wd); return x; }
 function bucketKeys(f, t, byWeek) {
     const keys = []; let cur = byWeek ? startOfWeek(f) : new Date(f); const end = new Date(t);
@@ -149,31 +188,55 @@ function bucketKeys(f, t, byWeek) {
     return keys;
 }
 const label = (k) => { const [, m, d] = k.split('-'); return `${d}.${m}`; };
+// dayMap: 'YYYY-MM-DD' -> number. Buckets by day, or by week (sum) when the span > 92 days.
+function seriesFromDayMap(dayMap) {
+    const f = new Date(from.value + 'T00:00:00');
+    const t = new Date(to.value + 'T23:59:59.999');
+    const byWeek = Math.round((t - f) / 86400000) > 92;
+    const keys = bucketKeys(f, t, byWeek);
+    const data = keys.map((k) => {
+        if (!byWeek) return dayMap.get(k) || 0;
+        let sum = 0; const ws = new Date(k + 'T00:00:00');
+        for (let i = 0; i < 7; i++) { const d = new Date(ws); d.setDate(d.getDate() + i); sum += dayMap.get(ymd(d)) || 0; }
+        return sum;
+    });
+    return { byWeek, labels: keys.map((k) => label(k)), data };
+}
+
+/* ---------- data ---------- */
+let sb = null;
+const kpi = reactive({ users: 0, newInRange: 0, delta: null, courses: 0, events: 0, sales: 0, reports: 0 });
+const reg = reactive({ labels: [], datasets: [] });
+const weekly = ref(false);
+const moneyLoading = ref(false);
+const moneyKey = ref('');
+const money = reactive({
+    revenue: 0, orders: 0, avg: 0, accrued: 0,
+    rev: { labels: [], datasets: [] },
+    authors: [], roleSplit: { edu: 0, speaker: 0, other: 0 },
+});
+
+async function count(table, build) {
+    let q = sb.from(table).select('id', { count: 'exact', head: true });
+    if (build) q = build(q);
+    const { count: n } = await q;
+    return n || 0;
+}
 
 async function loadRegistrations() {
     const f = new Date(from.value + 'T00:00:00');
     const t = new Date(to.value + 'T23:59:59.999');
-    const span = Math.round((t - f) / 86400000);
-    weekly.value = span > 92;
-
     const { data } = await sb.from('users').select('created_at')
         .gte('created_at', f.toISOString()).lte('created_at', t.toISOString()).limit(100000);
     const rows = data || [];
-
-    const keys = bucketKeys(f, t, weekly.value);
-    const idx = new Map(keys.map((k, i) => [k, i]));
-    const counts = new Array(keys.length).fill(0);
-    for (const r of rows) {
-        if (!r.created_at) continue;
-        const d = new Date(r.created_at);
-        const key = ymd(weekly.value ? startOfWeek(d) : d);
-        const i = idx.get(key);
-        if (i != null) counts[i] += 1;
-    }
-    reg.labels = keys.map((k) => label(k));
+    const dayMap = new Map();
+    for (const r of rows) { if (!r.created_at) continue; const k = ymd(new Date(r.created_at)); dayMap.set(k, (dayMap.get(k) || 0) + 1); }
+    const s = seriesFromDayMap(dayMap);
+    weekly.value = s.byWeek;
+    reg.labels = s.labels;
     reg.datasets = [{
-        label: 'Регистрации', data: counts, borderColor: '#5495f3', backgroundColor: 'rgba(84,149,243,0.14)',
-        fill: true, tension: 0.35, borderWidth: 2, pointRadius: keys.length > 40 ? 0 : 3, pointHoverRadius: 4,
+        label: 'Регистрации', data: s.data, borderColor: '#5495f3', backgroundColor: 'rgba(84,149,243,0.14)',
+        fill: true, tension: 0.35, borderWidth: 2, pointRadius: s.labels.length > 40 ? 0 : 3, pointHoverRadius: 4,
     }];
     kpi.newInRange = rows.length;
 }
@@ -184,15 +247,60 @@ async function loadDelta() {
     const prev = await count('users', (q) => q.gte('created_at', prevFrom.toISOString()).lte('created_at', prevTo.toISOString()));
     kpi.delta = prev > 0 ? Math.round((kpi.newInRange - prev) / prev * 100) : (kpi.newInRange > 0 ? 100 : 0);
 }
+async function loadMoney() {
+    moneyLoading.value = true;
+    try {
+        const p_from = from.value, p_to = to.value;
+        const [rev, auth] = await Promise.all([
+            sb.rpc('admin_revenue_daily', { p_from, p_to }),
+            sb.rpc('admin_sales_by_author', { p_from, p_to }),
+        ]);
+        if (rev.error) throw rev.error;
+        if (auth.error) throw auth.error;
+
+        const daily = Array.isArray(rev.data) ? rev.data : [];
+        const dayMap = new Map();
+        let revenue = 0, orders = 0;
+        for (const r of daily) { const v = Number(r.revenue) || 0; dayMap.set(r.d, v); revenue += v; orders += Number(r.orders) || 0; }
+        const s = seriesFromDayMap(dayMap);
+        money.revenue = revenue; money.orders = orders; money.avg = orders ? Math.round(revenue / orders) : 0;
+        money.rev = { labels: s.labels, datasets: [{
+            label: 'Выручка', data: s.data, borderColor: '#2fa971', backgroundColor: 'rgba(47,169,113,0.14)',
+            fill: true, tension: 0.35, borderWidth: 2, pointRadius: s.labels.length > 40 ? 0 : 3, pointHoverRadius: 4,
+        }] };
+
+        const authors = Array.isArray(auth.data) ? auth.data : [];
+        const split = { edu: 0, speaker: 0, other: 0 };
+        let accrued = 0;
+        for (const a of authors) {
+            accrued += Number(a.accrued) || 0;
+            const g = Number(a.gross) || 0;
+            if (a.role === 'Учебное заведение') split.edu += g;
+            else if (a.role === 'Спикер') split.speaker += g;
+            else split.other += g;
+        }
+        money.accrued = accrued; money.authors = authors; money.roleSplit = split;
+        moneyKey.value = rangeKey();
+    } catch (e) {
+        console.warn('loadMoney failed', e);
+        money.revenue = 0; money.orders = 0; money.avg = 0; money.accrued = 0;
+        money.rev = { labels: [], datasets: [] }; money.authors = []; money.roleSplit = { edu: 0, speaker: 0, other: 0 };
+    }
+    moneyLoading.value = false;
+}
 async function reload() {
     await loadRegistrations();
     await loadDelta();
+    if (active.value === 'money') await loadMoney();
 }
 async function loadStatics() {
     [kpi.users, kpi.courses, kpi.events, kpi.sales, kpi.reports] = await Promise.all([
         count('users'), count('course'), count('events'), count('sales'), count('stream_reports'),
     ]);
 }
+
+// Lazy-load the money tab the first time it's opened for the current range.
+watch(active, (t) => { if (t === 'money' && moneyKey.value !== rangeKey()) loadMoney(); });
 
 /* ---------- gate + boot ---------- */
 onMounted(async () => {
@@ -210,6 +318,8 @@ onMounted(async () => {
 });
 
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
+const fmtRub = (n) => `${Math.round(Number(n) || 0).toLocaleString('ru-RU')} ₽`;
+const roleCls = (role) => role === 'Учебное заведение' ? 'edu' : (role === 'Спикер' ? 'speaker' : 'other');
 </script>
 
 <style scoped>
@@ -256,9 +366,29 @@ const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
 .dash-panel { background: #fff; border: 1px solid #eceef2; border-radius: 16px; padding: 20px; }
 .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .panel-head h2 { font-size: 17px; font-weight: 700; margin: 0; }
-.panel-note { color: #8a94a6; font-size: 13px; }
+.panel-note { color: #8a94a6; font-size: 13px; text-align: right; }
 .panel-chart { height: 320px; }
 .panel-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: #8a94a6; }
+
+/* Деньги sub-KPIs */
+.dash-subkpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.skpi { background: #f7f9fc; border: 1px solid #eef1f5; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 4px; }
+.skpi__n { font-size: 21px; font-weight: 800; letter-spacing: -0.02em; }
+.skpi__l { font-size: 12px; color: #8a94a6; }
+
+/* authors table */
+.dash-tablewrap { overflow-x: auto; }
+.dash-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.dash-table th { text-align: left; font-weight: 600; color: #8a94a6; font-size: 12px; padding: 8px 10px; border-bottom: 1px solid #eceef2; }
+.dash-table td { padding: 10px; border-bottom: 1px solid #f2f4f7; }
+.dash-table .num { text-align: right; white-space: nowrap; }
+.dash-table .strong { font-weight: 700; }
+.dash-table .muted { color: #8a94a6; }
+.role-badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.role-badge.edu { background: #f0eafe; color: #7c4dff; }
+.role-badge.speaker { background: #eaf2ff; color: #3d7ce0; }
+.role-badge.other { background: #eef1f5; color: #8a94a6; }
+.dash-foot { margin: 14px 0 0; color: #a4adba; font-size: 12px; line-height: 1.5; }
 
 .dash-panel--soon { padding: 0; }
 .soon { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 56px 24px; }
@@ -267,6 +397,6 @@ const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
 .soon p { margin: 0; max-width: 460px; color: #8a94a6; font-size: 14px; line-height: 1.5; }
 .soon__tag { margin-top: 6px; padding: 4px 12px; border-radius: 999px; background: #eef4ff; color: #5495f3; font-weight: 700; font-size: 12px; }
 
-@media (max-width: 900px) { .dash-kpis { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 900px) { .dash-kpis { grid-template-columns: repeat(3, 1fr); } .dash-subkpis { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 560px) { .dash-kpis { grid-template-columns: repeat(2, 1fr); } .dash-title { font-size: 22px; } }
 </style>

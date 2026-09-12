@@ -50,10 +50,12 @@ grant execute on function public.admin_delete_reported_message(uuid) to authenti
 
 -- ── TEST FIXTURE (chat + message + report in one statement) ──────────────────
 -- All owned by the admin. Returns the report id + the message id (target_id).
--- If chats/messages have a NOT NULL column without default, add it to the column list.
+-- NB: chats.is_group is a GENERATED ALWAYS STORED column (array_length(users,1)>2 OR forced_group)
+--     — it must NOT appear in the INSERT column list. Here it computes to false (1 user), which is fine.
+-- If chats/messages have another NOT NULL column without default, add it to the column list.
 with c as (
-  insert into public.chats (creator, is_group, title, users, sort_date, mod_date)
-    values ('b689d683-f143-47db-a5b0-5940d7f52b02', true, '[ТЕСТ] чат модерации',
+  insert into public.chats (creator, title, users, sort_date, mod_date)
+    values ('b689d683-f143-47db-a5b0-5940d7f52b02', '[ТЕСТ] чат модерации',
             array['b689d683-f143-47db-a5b0-5940d7f52b02']::uuid[], now(), now())
   returning id
 ), m as (

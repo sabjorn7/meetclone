@@ -143,6 +143,40 @@
                 </div>
             </section>
 
+            <!-- LIVE: Выплаты -->
+            <section v-else-if="active === 'payouts'" class="sa-panel sa-pad">
+                <div class="sa-panelhead">
+                    <h2>Заявки на вывод</h2>
+                    <span class="sa-note">status='Запрошено' · перевод делается вручную через банк</span>
+                </div>
+                <div v-if="pqueue.loading" class="sa-empty">Загрузка…</div>
+                <div v-else-if="!pqueue.rows.length" class="sa-empty">Заявок нет</div>
+                <div v-else class="sa-cards">
+                    <div v-for="r in pqueue.rows" :key="r.id" class="pcard">
+                        <div class="pcard__head">
+                            <span><b>{{ r.authorName }}</b> · <b>{{ fmtRub(r.amount) }}</b></span>
+                            <span class="rcard__meta">{{ fmtDate(r.created_at) }}</span>
+                        </div>
+                        <div class="pcard__bank">
+                            <span class="pcard__label">Банк: {{ r.name_bank || '—' }}</span>
+                            <button v-if="!r.revealed" type="button" class="pcard__reveal" @click="r.revealed = true">Показать реквизиты</button>
+                            <div v-else class="pcard__reqs">
+                                <div>ИНН: {{ r.inn || '—' }}</div>
+                                <div>КПП: {{ r.kpp || '—' }}</div>
+                                <div>БИК: {{ r.bik || '—' }}</div>
+                                <div>Р/С: {{ r.pc || '—' }}</div>
+                                <div>К/С: {{ r.kc || '—' }}</div>
+                                <button type="button" class="pcard__reveal" @click="r.revealed = false">Скрыть</button>
+                            </div>
+                        </div>
+                        <div class="rcard__acts">
+                            <button type="button" class="btn btn-ok" @click="askPayout('approve', r)">Одобрить</button>
+                            <button type="button" class="btn btn-danger" @click="askPayout('reject', r)">Отклонить</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Placeholders for the other phases -->
             <section v-else class="sa-panel sa-soon">
                 <div class="soon">
@@ -165,7 +199,7 @@
                             <input type="number" v-model.number="modal.value" min="0" max="100" step="1" class="sa-modal__num" />
                         </label>
                     </template>
-                    <template v-if="modalCfg.needsComment">
+                    <template v-if="modalCfg.needsComment || modalCfg.optionalComment">
                         <p class="sa-modal__hint">{{ modalCfg.commentHint }}</p>
                         <textarea v-model="modal.comment" class="sa-modal__ta" rows="3" :placeholder="modalCfg.commentPlaceholder"></textarea>
                     </template>
@@ -234,9 +268,12 @@ const queue = reactive({ loading: false, rows: [] });
 const aqueue = reactive({ loading: false, rows: [] });
 const rqueue = reactive({ loading: false, rows: [] });
 const authors = reactive({ loading: false, rows: [], search: '' });
+const pqueue = reactive({ loading: false, rows: [] });
 const modal = reactive({ open: false, entity: null, mode: null, item: null, value: null, comment: '', busy: false, error: '' });
 const modalCfg = computed(() => {
     const e = modal.entity, m = modal.mode;
+    if (e === 'payout' && m === 'approve') return { title: 'Подтвердить выплату?', warn: '⚠️ Это НЕ автоматический перевод. Отмечайте «Подтверждено» только ПОСЛЕ того, как сделали перевод вручную через банк.', confirm: 'Подтвердить выплату', btn: 'btn-ok', needsComment: false, needsValue: false, optionalComment: true, commentHint: 'Комментарий (необязательно) — сохранится в аудит-лог.', commentPlaceholder: 'Например: перевод сделан 12.09' };
+    if (e === 'payout' && m === 'reject') return { title: 'Отклонить заявку на вывод?', warn: `Сумма ${fmtRub(modal.item?.amount)} вернётся на баланс автора.`, confirm: 'Отклонить и вернуть', btn: 'btn-danger', needsComment: false, needsValue: false, optionalComment: true, commentHint: 'Комментарий (необязательно) — сохранится в аудит-лог.', commentPlaceholder: 'Причина отклонения' };
     if (e === 'report' && m === 'delete') return { title: 'Удалить сообщение?', warn: '⚠️ Сообщение будет удалено безвозвратно для всех участников чата.', confirm: 'Удалить', btn: 'btn-danger', needsComment: false, needsValue: false };
     if (e === 'report' && m === 'dismiss') return { title: 'Отклонить жалобу?', warn: '', confirm: 'Отклонить', btn: 'btn-primary', needsComment: false, needsValue: false };
     if (e === 'commission') return { title: 'Изменить комиссию автора?', warn: 'Влияет только на будущие продажи — прошлые начисления не меняются.', confirm: 'Сохранить', btn: 'btn-ok', needsComment: true, needsValue: true, commentHint: 'Причина изменения — сохранится в аудит-логе.', commentPlaceholder: 'Например: договорённость о новой ставке' };
@@ -246,6 +283,7 @@ const modalCfg = computed(() => {
 const modalItemLabel = computed(() => {
     if (!modal.item) return '';
     if (modal.entity === 'report') return modal.item.targetUserName ? `сообщение пользователя ${modal.item.targetUserName}` : 'сообщение';
+    if (modal.entity === 'payout') return `${modal.item.authorName || '—'} · ${fmtRub(modal.item.amount)}`;
     if (modal.entity === 'commission') return modal.item.Name || '—';
     return modal.item.Title || '';
 });
@@ -270,6 +308,22 @@ const authorsFiltered = computed(() => {
     return q ? authors.rows.filter((a) => (a.Name || '').toLowerCase().includes(q)) : authors.rows;
 });
 function askCommission(a) { modal.open = true; modal.entity = 'commission'; modal.mode = 'set'; modal.item = a; modal.value = (a.authorCommission ?? 100); modal.comment = ''; modal.error = ''; }
+
+async function loadPayoutQueue() {
+    pqueue.loading = true;
+    try {
+        const { data } = await sb.from('sales').select('id,"user",amount,created_at,name_bank,inn,kpp,bik,pc,kc')
+            .eq('status', 'Запрошено').order('created_at', { ascending: true });
+        const rows = data || [];
+        const ids = [...new Set(rows.map((r) => r.user).filter(Boolean))];
+        const users = {};
+        if (ids.length) { const { data: us } = await sb.from('users').select('id,"Name"').in('id', ids); for (const u of (us || [])) users[u.id] = u.Name; }
+        pqueue.rows = rows.map((r) => ({ ...r, authorName: users[r.user] || (r.user ? 'Автор' : '— (нет user)'), revealed: false }));
+        counts.payouts = pqueue.rows.length;
+    } catch (e) { console.warn('loadPayoutQueue failed', e); }
+    pqueue.loading = false;
+}
+function askPayout(mode, item) { modal.open = true; modal.entity = 'payout'; modal.mode = mode; modal.item = item; modal.comment = ''; modal.error = ''; }
 
 async function loadQueue() {
     queue.loading = true;
@@ -356,7 +410,11 @@ async function confirmAction() {
     try {
         const id = modal.item.id; const comment = modal.comment.trim();
         let res, done;
-        if (modal.entity === 'commission') {
+        if (modal.entity === 'payout') {
+            res = modal.mode === 'approve'
+                ? await sb.rpc('admin_approve_withdrawal', { p_sale: id, p_comment: comment || null })
+                : await sb.rpc('admin_reject_withdrawal', { p_sale: id, p_comment: comment || null });
+        } else if (modal.entity === 'commission') {
             res = await sb.rpc('admin_set_commission', { p_user: id, p_value: modal.value, p_reason: comment });
         } else if (modal.entity === 'report') {
             res = modal.mode === 'dismiss'
@@ -372,7 +430,10 @@ async function confirmAction() {
                 : await sb.rpc('admin_return_article', { p_article: id, p_comment: comment });
         }
         if (res.error) throw res.error;
-        if (modal.entity === 'commission') {
+        if (modal.entity === 'payout') {
+            pqueue.rows = pqueue.rows.filter((r) => r.id !== id); counts.payouts = pqueue.rows.length;
+            done = modal.mode === 'approve' ? 'Выплата подтверждена' : 'Заявка отклонена, средства возвращены';
+        } else if (modal.entity === 'commission') {
             const row = authors.rows.find((r) => r.id === id); if (row) row.authorCommission = modal.value;
             done = 'Комиссия обновлена';
         } else if (modal.entity === 'report') {
@@ -397,6 +458,7 @@ watch(active, (t) => {
     if (t === 'articles') loadArticleQueue();
     if (t === 'reports') loadReportQueue();
     if (t === 'commission') loadAuthors();
+    if (t === 'payouts') loadPayoutQueue();
 });
 
 onMounted(async () => {
@@ -492,6 +554,14 @@ onMounted(async () => {
 .sa-table .strong { font-weight: 700; }
 .sa-modal__field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #5b6472; margin-bottom: 10px; }
 .sa-modal__num { width: 120px; height: 40px; border: 1px solid #e1e5ea; border-radius: 10px; padding: 0 12px; font: inherit; font-size: 16px; }
+
+/* S5 Выплаты — payout cards */
+.pcard { border: 1px solid #eceef2; border-radius: 14px; padding: 16px; }
+.pcard__head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; font-size: 15px; }
+.pcard__bank { background: #f7f9fc; border: 1px solid #eef1f5; border-radius: 10px; padding: 12px; margin-bottom: 12px; font-size: 14px; }
+.pcard__label { color: #5b6472; }
+.pcard__reveal { margin-left: 12px; appearance: none; border: none; background: none; color: #5495f3; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; }
+.pcard__reqs { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; color: #1b1f27; }
 
 .sa-modal { position: fixed; inset: 0; z-index: 1000; background: rgba(11, 31, 77, .38); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .sa-modal__box { background: #fff; border-radius: 16px; padding: 24px; max-width: 440px; width: 100%; box-shadow: 0 20px 60px rgba(11, 31, 77, .25); }

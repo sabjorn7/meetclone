@@ -177,29 +177,45 @@
                 </div>
             </section>
 
-            <!-- LIVE: Видео (read-only diagnostic) -->
+            <!-- LIVE: Видео — storage by author (read-only) -->
             <section v-else-if="active === 'video'" class="sa-panel sa-pad">
                 <div class="sa-panelhead">
-                    <h2>Видеоинфраструктура (PeerTube)</h2>
-                    <span class="sa-note">только диагностика · значения токенов не показываются</span>
+                    <h2>Видеохранилище по авторам</h2>
+                    <span class="sa-note">курсы: тизер + видео уроков · из полей video_size</span>
                 </div>
-                <div v-if="video.loading" class="sa-empty">Загрузка…</div>
-                <div v-else-if="!video.status" class="sa-empty">Нет данных</div>
-                <div v-else class="vstat">
-                    <div class="vstat__row">
-                        <span class="vstat__label">Токен загрузки видео</span>
-                        <span class="vstat__badge" :class="video.status.expired ? 'is-bad' : 'is-ok'">{{ video.status.expired ? 'Истёк' : 'Активен' }}</span>
+                <div v-if="storage.loading" class="sa-empty">Загрузка…</div>
+                <template v-else>
+                    <div class="stotal">Общий размер видео: <b>{{ fmtSize(storage.total) }}</b> · {{ storage.owners.length }} владельцев курсов ({{ storage.withVideo }} с видео)</div>
+                    <div class="sa-tablewrap">
+                        <table class="sa-table">
+                            <thead><tr><th>Автор</th><th class="ta-r">Курсов</th><th class="ta-r">Размер видео</th></tr></thead>
+                            <tbody>
+                                <template v-for="o in storage.owners" :key="o.owner_id || 'none'">
+                                    <tr class="srow" @click="o.expanded = !o.expanded">
+                                        <td><span class="scaret">{{ o.expanded ? '▾' : '▸' }}</span> {{ o.owner_name }}</td>
+                                        <td class="ta-r muted">{{ o.courses.length }}</td>
+                                        <td class="ta-r strong">{{ fmtSize(o.bytes) }}</td>
+                                    </tr>
+                                    <template v-if="o.expanded">
+                                        <tr v-for="c in o.courses" :key="c.id" class="ssub">
+                                            <td class="ssub__title">{{ c.title }}</td>
+                                            <td></td>
+                                            <td class="ta-r muted">{{ fmtSize(c.bytes) }}</td>
+                                        </tr>
+                                    </template>
+                                </template>
+                            </tbody>
+                        </table>
                     </div>
-                    <div class="vstat__row">
-                        <span class="vstat__label">{{ video.status.expired ? 'Истёк' : 'Истекает' }}</span>
-                        <span>{{ fmtDateTime(video.status.next_update) }} <span class="vstat__rel">({{ relTime(video.status.expires_in_seconds) }})</span></span>
+
+                    <div v-if="video.status" class="vstat" style="margin-top: 26px;">
+                        <div class="vstat__row">
+                            <span class="vstat__label">Токен загрузки видео (PeerTube)</span>
+                            <span class="vstat__badge" :class="video.status.expired ? 'is-bad' : 'is-ok'">{{ video.status.expired ? 'Истёк' : 'Активен' }}</span>
+                        </div>
+                        <p class="vstat__note">Значения токенов не показываются. Обновление токена и сброс видео уроков — на старой панели (WeWeb).</p>
                     </div>
-                    <div class="vstat__row">
-                        <span class="vstat__label">Токен / refresh-токен</span>
-                        <span>{{ video.status.has_token ? '✓ есть' : '✗ нет' }} / {{ video.status.has_refresh ? '✓ есть' : '✗ нет' }}</span>
-                    </div>
-                    <p class="vstat__note">Токен нужен для <b>загрузки</b> видео (просмотр от него не зависит). Обновление токена и сброс видео уроков выполняются на старой панели (WeWeb). Значения токенов здесь не показываются намеренно.</p>
-                </div>
+                </template>
             </section>
 
             <!-- Placeholders for the other phases -->
@@ -295,6 +311,7 @@ const rqueue = reactive({ loading: false, rows: [] });
 const authors = reactive({ loading: false, rows: [], search: '' });
 const pqueue = reactive({ loading: false, rows: [] });
 const video = reactive({ loading: false, status: null });
+const storage = reactive({ loading: false, owners: [], total: 0, withVideo: 0 });
 const modal = reactive({ open: false, entity: null, mode: null, item: null, value: null, comment: '', busy: false, error: '' });
 const modalCfg = computed(() => {
     const e = modal.entity, m = modal.mode;
@@ -360,12 +377,44 @@ async function loadVideoStatus() {
     } catch (e) { console.warn('loadVideoStatus failed', e); video.status = null; }
     video.loading = false;
 }
-function fmtDateTime(iso) { if (!iso) return '—'; const d = new Date(iso); const p = (n) => String(n).padStart(2, '0'); return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; }
-function relTime(sec) {
-    if (sec == null) return '';
-    const abs = Math.abs(sec), past = sec < 0;
-    const s = abs < 3600 ? `${Math.round(abs / 60)} мин` : abs < 86400 ? `${Math.round(abs / 3600)} ч` : `${Math.round(abs / 86400)} дн`;
-    return past ? `${s} назад` : `через ${s}`;
+function fmtSize(bytes) {
+    const b = Number(bytes) || 0;
+    if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' ГБ';
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + ' МБ';
+    if (b >= 1024) return (b / 1024).toFixed(0) + ' КБ';
+    return b + ' Б';
+}
+async function loadStorage() {
+    storage.loading = true;
+    try {
+        const [{ data: courses }, { data: lessons }] = await Promise.all([
+            sb.from('course').select('id,"Title",owner,video_size'),
+            sb.from('lessons').select('"Course",video_size').limit(100000),
+        ]);
+        const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+        const lessonBytes = {};
+        for (const l of (lessons || [])) { if (!l.Course) continue; lessonBytes[l.Course] = (lessonBytes[l.Course] || 0) + num(l.video_size); }
+        const owners = {};
+        for (const c of (courses || [])) {
+            const bytes = num(c.video_size) + (lessonBytes[c.id] || 0);
+            const oid = c.owner || 'none';
+            if (!owners[oid]) owners[oid] = { owner_id: c.owner, owner_name: '—', bytes: 0, courses: [], expanded: false };
+            owners[oid].bytes += bytes;
+            owners[oid].courses.push({ id: c.id, title: c.Title || 'Без названия', bytes });
+        }
+        const ids = Object.values(owners).map((o) => o.owner_id).filter(Boolean);
+        if (ids.length) {
+            const { data: us } = await sb.from('users').select('id,"Name"').in('id', ids);
+            const nm = {}; for (const u of (us || [])) nm[u.id] = u.Name;
+            for (const o of Object.values(owners)) o.owner_name = nm[o.owner_id] || (o.owner_id ? 'Автор' : '— (без владельца)');
+        }
+        const list = Object.values(owners).sort((a, b) => b.bytes - a.bytes);
+        for (const o of list) o.courses.sort((a, b) => b.bytes - a.bytes);
+        storage.owners = list;
+        storage.total = list.reduce((s, o) => s + o.bytes, 0);
+        storage.withVideo = list.filter((o) => o.bytes > 0).length;
+    } catch (e) { console.warn('loadStorage failed', e); }
+    storage.loading = false;
 }
 
 async function loadQueue() {
@@ -502,7 +551,7 @@ watch(active, (t) => {
     if (t === 'reports') loadReportQueue();
     if (t === 'commission') loadAuthors();
     if (t === 'payouts') loadPayoutQueue();
-    if (t === 'video') loadVideoStatus();
+    if (t === 'video') { loadStorage(); loadVideoStatus(); }
 });
 
 onMounted(async () => {
@@ -616,6 +665,14 @@ onMounted(async () => {
 .vstat__badge.is-ok { background: #e7f6ec; color: #2f9e57; }
 .vstat__badge.is-bad { background: #fdeceb; color: #d1483d; }
 .vstat__note { margin: 16px 0 0; color: #a4adba; font-size: 12px; line-height: 1.5; }
+
+/* S6 — video storage by author */
+.stotal { margin-bottom: 14px; font-size: 15px; color: #1b1f27; }
+.srow { cursor: pointer; }
+.srow:hover { background: #f7f9fc; }
+.scaret { display: inline-block; width: 14px; color: #8a94a6; }
+.ssub td { background: #fafbfc; font-size: 13px; }
+.ssub__title { padding-left: 26px !important; color: #5b6472; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .sa-modal { position: fixed; inset: 0; z-index: 1000; background: rgba(11, 31, 77, .38); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .sa-modal__box { background: #fff; border-radius: 16px; padding: 24px; max-width: 440px; width: 100%; box-shadow: 0 20px 60px rgba(11, 31, 77, .25); }

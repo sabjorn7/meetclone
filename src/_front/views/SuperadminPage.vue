@@ -87,6 +87,37 @@
                 </div>
             </section>
 
+            <!-- LIVE: Жалобы (UGC) -->
+            <section v-else-if="active === 'reports'" class="sa-panel sa-pad">
+                <div class="sa-panelhead">
+                    <h2>Очередь жалоб</h2>
+                    <span class="sa-note">UGC · открытые (new / notified)</span>
+                </div>
+                <div v-if="rqueue.loading" class="sa-empty">Загрузка…</div>
+                <div v-else-if="!rqueue.rows.length" class="sa-empty">Жалоб нет</div>
+                <div v-else class="sa-cards">
+                    <div v-for="r in rqueue.rows" :key="r.id" class="rcard">
+                        <div class="rcard__head">
+                            <span><b>{{ r.reporterName }}</b> → <b>{{ r.targetUserName }}</b></span>
+                            <span class="rcard__meta">{{ r.surface || '—' }} · {{ fmtDate(r.created_at) }}</span>
+                        </div>
+                        <div class="rcard__block">
+                            <div class="rcard__label">Снимок жалобы</div>
+                            <div class="rcard__text">{{ r.text_snapshot || '—' }}</div>
+                        </div>
+                        <div class="rcard__block">
+                            <div class="rcard__label">Сообщение сейчас</div>
+                            <div v-if="r.msgExists" class="rcard__text">{{ r.msgText || (r.msgAttachment ? '[вложение: ' + r.msgAttachment + ']' : '—') }}</div>
+                            <div v-else class="rcard__text rcard__text--gone">Сообщение больше не существует</div>
+                        </div>
+                        <div class="rcard__acts">
+                            <button type="button" class="btn btn-ghost" @click="askReport('dismiss', r)">Отклонить</button>
+                            <button type="button" class="btn btn-danger" :disabled="!r.msgExists" @click="askReport('delete', r)">Удалить сообщение</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Placeholders for the other phases -->
             <section v-else class="sa-panel sa-soon">
                 <div class="soon">
@@ -101,23 +132,19 @@
             <!-- Confirmation modal (mandatory before any mutation) -->
             <div v-if="modal.open" class="sa-modal" @click.self="closeModal">
                 <div class="sa-modal__box" role="dialog" aria-modal="true">
-                    <template v-if="modal.mode === 'approve'">
-                        <h3>Опубликовать {{ modalNoun }}?</h3>
-                        <p class="sa-modal__course">«{{ modal.item?.Title }}»</p>
-                        <p class="sa-modal__warn">⚠️ {{ modalWarn }}</p>
-                    </template>
-                    <template v-else>
-                        <h3>Вернуть на доработку?</h3>
-                        <p class="sa-modal__course">«{{ modal.item?.Title }}»</p>
+                    <h3>{{ modalCfg.title }}</h3>
+                    <p v-if="modalItemLabel" class="sa-modal__course">«{{ modalItemLabel }}»</p>
+                    <p v-if="modalCfg.warn" class="sa-modal__warn">{{ modalCfg.warn }}</p>
+                    <template v-if="modalCfg.needsComment">
                         <p class="sa-modal__hint">Автор увидит этот комментарий в своём кабинете.</p>
                         <textarea v-model="modal.comment" class="sa-modal__ta" rows="4" placeholder="Что нужно исправить"></textarea>
                     </template>
                     <p v-if="modal.error" class="sa-modal__err">{{ modal.error }}</p>
                     <div class="sa-modal__acts">
                         <button type="button" class="btn btn-ghost" :disabled="modal.busy" @click="closeModal">Отмена</button>
-                        <button type="button" class="btn" :class="modal.mode === 'approve' ? 'btn-ok' : 'btn-warn'"
-                                :disabled="modal.busy || (modal.mode === 'return' && !modal.comment.trim())" @click="confirmAction">
-                            {{ modal.busy ? 'Сохранение…' : (modal.mode === 'approve' ? 'Опубликовать' : 'Вернуть') }}
+                        <button type="button" class="btn" :class="modalCfg.btn"
+                                :disabled="modal.busy || (modalCfg.needsComment && !modal.comment.trim())" @click="confirmAction">
+                            {{ modal.busy ? 'Сохранение…' : modalCfg.confirm }}
                         </button>
                     </div>
                 </div>
@@ -166,7 +193,7 @@ async function loadCounts() {
     const [courses, articles, reports, payouts] = await Promise.all([
         countIn('course', 'ModStatus', ['Отправлено на модерацию', 'На модерации']),
         countIn('articles', 'Status', ['Отправлено на модерацию', 'На модерации']),
-        countEq('stream_reports'),
+        countIn('stream_reports', 'status', ['new', 'notified']),
         countEq('sales', 'status', 'Запрошено'),
     ]);
     counts.courses = courses; counts.articles = articles; counts.reports = reports; counts.payouts = payouts;
@@ -175,11 +202,20 @@ async function loadCounts() {
 /* ── S1: Курсы — moderation queue + actions ─────────────────────────────────── */
 const queue = reactive({ loading: false, rows: [] });
 const aqueue = reactive({ loading: false, rows: [] });
+const rqueue = reactive({ loading: false, rows: [] });
 const modal = reactive({ open: false, entity: null, mode: null, item: null, comment: '', busy: false, error: '' });
-const modalNoun = computed(() => modal.entity === 'article' ? 'статью' : 'курс');
-const modalWarn = computed(() => modal.entity === 'article'
-    ? 'Статья станет видна всем пользователям платформы.'
-    : 'Курс станет виден всем пользователям платформы.');
+const modalCfg = computed(() => {
+    const e = modal.entity, m = modal.mode;
+    if (e === 'report' && m === 'delete') return { title: 'Удалить сообщение?', warn: '⚠️ Сообщение будет удалено безвозвратно для всех участников чата.', confirm: 'Удалить', btn: 'btn-danger', needsComment: false };
+    if (e === 'report' && m === 'dismiss') return { title: 'Отклонить жалобу?', warn: '', confirm: 'Отклонить', btn: 'btn-primary', needsComment: false };
+    if (m === 'approve') return { title: `Опубликовать ${e === 'article' ? 'статью' : 'курс'}?`, warn: e === 'article' ? '⚠️ Статья станет видна всем пользователям платформы.' : '⚠️ Курс станет виден всем пользователям платформы.', confirm: 'Опубликовать', btn: 'btn-ok', needsComment: false };
+    return { title: 'Вернуть на доработку?', warn: '', confirm: 'Вернуть', btn: 'btn-warn', needsComment: true };
+});
+const modalItemLabel = computed(() => {
+    if (!modal.item) return '';
+    if (modal.entity === 'report') return modal.item.targetUserName ? `сообщение пользователя ${modal.item.targetUserName}` : 'сообщение';
+    return modal.item.Title || '';
+});
 const toastMsg = ref('');
 let toastTimer = null;
 function toast(m) { toastMsg.value = m; if (toastTimer) clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = ''; }, 3000); }
@@ -223,8 +259,33 @@ async function loadArticleQueue() {
     aqueue.loading = false;
 }
 
+async function loadReportQueue() {
+    rqueue.loading = true;
+    try {
+        const { data } = await sb.from('stream_reports')
+            .select('id,reporter,target_type,target_id,target_user,surface,reason,status,text_snapshot,created_at')
+            .in('status', ['new', 'notified']).order('created_at', { ascending: false });
+        const rows = data || [];
+        const uids = [...new Set(rows.flatMap((r) => [r.reporter, r.target_user]).filter(Boolean))];
+        const users = {};
+        if (uids.length) { const { data: us } = await sb.from('users').select('id,"Name"').in('id', uids); for (const u of (us || [])) users[u.id] = u.Name; }
+        const msgIds = [...new Set(rows.filter((r) => r.target_type === 'message').map((r) => r.target_id).filter(Boolean))];
+        const msgs = {};
+        if (msgIds.length) { const { data: ms } = await sb.from('messages').select('id,text,creator,attachment_name,attachment_type').in('id', msgIds); for (const m of (ms || [])) msgs[m.id] = m; }
+        rqueue.rows = rows.map((r) => {
+            const m = msgs[r.target_id];
+            return { ...r, reporterName: users[r.reporter] || 'Аноним', targetUserName: users[r.target_user] || '—',
+                msgExists: r.target_type === 'message' ? !!m : false,
+                msgText: m?.text || '', msgAttachment: m?.attachment_name || (m?.attachment_type ? 'файл' : '') };
+        });
+        counts.reports = rqueue.rows.length;
+    } catch (e) { console.warn('loadReportQueue failed', e); }
+    rqueue.loading = false;
+}
+
 function askApprove(entity, item) { modal.open = true; modal.entity = entity; modal.mode = 'approve'; modal.item = item; modal.comment = ''; modal.error = ''; }
 function askReturn(entity, item) { modal.open = true; modal.entity = entity; modal.mode = 'return'; modal.item = item; modal.comment = ''; modal.error = ''; }
+function askReport(mode, item) { modal.open = true; modal.entity = 'report'; modal.mode = mode; modal.item = item; modal.comment = ''; modal.error = ''; }
 function closeModal() { if (modal.busy) return; modal.open = false; modal.item = null; modal.comment = ''; modal.error = ''; }
 
 function friendlyError(e) {
@@ -242,8 +303,12 @@ async function confirmAction() {
     modal.busy = true; modal.error = '';
     try {
         const id = modal.item.id; const comment = modal.comment.trim();
-        let res;
-        if (modal.entity === 'course') {
+        let res, done;
+        if (modal.entity === 'report') {
+            res = modal.mode === 'dismiss'
+                ? await sb.rpc('admin_dismiss_report', { p_report: id })
+                : await sb.rpc('admin_delete_reported_message', { p_report: id });
+        } else if (modal.entity === 'course') {
             res = modal.mode === 'approve'
                 ? await sb.rpc('admin_approve_course', { p_course: id })
                 : await sb.rpc('admin_return_course', { p_course: id, p_comment: comment });
@@ -253,11 +318,16 @@ async function confirmAction() {
                 : await sb.rpc('admin_return_article', { p_article: id, p_comment: comment });
         }
         if (res.error) throw res.error;
-        const done = modal.entity === 'article'
-            ? (modal.mode === 'approve' ? 'Статья опубликована' : 'Статья возвращена на доработку')
-            : (modal.mode === 'approve' ? 'Курс опубликован' : 'Курс возвращён на доработку');
-        if (modal.entity === 'course') { queue.rows = queue.rows.filter((r) => r.id !== id); counts.courses = queue.rows.length; }
-        else { aqueue.rows = aqueue.rows.filter((r) => r.id !== id); counts.articles = aqueue.rows.length; }
+        if (modal.entity === 'report') {
+            rqueue.rows = rqueue.rows.filter((r) => r.id !== id); counts.reports = rqueue.rows.length;
+            done = modal.mode === 'dismiss' ? 'Жалоба отклонена' : 'Сообщение удалено, жалоба закрыта';
+        } else if (modal.entity === 'course') {
+            queue.rows = queue.rows.filter((r) => r.id !== id); counts.courses = queue.rows.length;
+            done = modal.mode === 'approve' ? 'Курс опубликован' : 'Курс возвращён на доработку';
+        } else {
+            aqueue.rows = aqueue.rows.filter((r) => r.id !== id); counts.articles = aqueue.rows.length;
+            done = modal.mode === 'approve' ? 'Статья опубликована' : 'Статья возвращена на доработку';
+        }
         modal.open = false; modal.item = null; modal.comment = '';
         toast(done);
     } catch (e) { modal.error = friendlyError(e); }
@@ -268,6 +338,7 @@ async function confirmAction() {
 watch(active, (t) => {
     if (t === 'courses') loadQueue();
     if (t === 'articles') loadArticleQueue();
+    if (t === 'reports') loadReportQueue();
 });
 
 onMounted(async () => {
@@ -343,6 +414,19 @@ onMounted(async () => {
 .btn-warn { background: #e2854c; color: #fff; }
 .btn-ghost { background: #fff; border-color: #e1e5ea; color: #5b6472; margin-left: 8px; }
 .btn-ghost:hover:not(:disabled) { border-color: #5495f3; color: #5495f3; }
+.btn-danger { background: #e2574c; color: #fff; }
+.btn-primary { background: #5495f3; color: #fff; }
+
+/* S3 Жалобы — report cards */
+.sa-cards { display: flex; flex-direction: column; gap: 14px; }
+.rcard { border: 1px solid #eceef2; border-radius: 14px; padding: 16px; }
+.rcard__head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; font-size: 14px; }
+.rcard__meta { color: #8a94a6; font-size: 13px; }
+.rcard__block { margin-bottom: 10px; }
+.rcard__label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #8a94a6; margin-bottom: 3px; }
+.rcard__text { font-size: 14px; background: #f7f9fc; border: 1px solid #eef1f5; border-radius: 10px; padding: 10px 12px; overflow-wrap: anywhere; }
+.rcard__text--gone { color: #8a94a6; font-style: italic; }
+.rcard__acts { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 
 .sa-modal { position: fixed; inset: 0; z-index: 1000; background: rgba(11, 31, 77, .38); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .sa-modal__box { background: #fff; border-radius: 16px; padding: 24px; max-width: 440px; width: 100%; box-shadow: 0 20px 60px rgba(11, 31, 77, .25); }

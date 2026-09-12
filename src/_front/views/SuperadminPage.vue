@@ -177,6 +177,31 @@
                 </div>
             </section>
 
+            <!-- LIVE: Видео (read-only diagnostic) -->
+            <section v-else-if="active === 'video'" class="sa-panel sa-pad">
+                <div class="sa-panelhead">
+                    <h2>Видеоинфраструктура (PeerTube)</h2>
+                    <span class="sa-note">только диагностика · значения токенов не показываются</span>
+                </div>
+                <div v-if="video.loading" class="sa-empty">Загрузка…</div>
+                <div v-else-if="!video.status" class="sa-empty">Нет данных</div>
+                <div v-else class="vstat">
+                    <div class="vstat__row">
+                        <span class="vstat__label">Токен загрузки видео</span>
+                        <span class="vstat__badge" :class="video.status.expired ? 'is-bad' : 'is-ok'">{{ video.status.expired ? 'Истёк' : 'Активен' }}</span>
+                    </div>
+                    <div class="vstat__row">
+                        <span class="vstat__label">{{ video.status.expired ? 'Истёк' : 'Истекает' }}</span>
+                        <span>{{ fmtDateTime(video.status.next_update) }} <span class="vstat__rel">({{ relTime(video.status.expires_in_seconds) }})</span></span>
+                    </div>
+                    <div class="vstat__row">
+                        <span class="vstat__label">Токен / refresh-токен</span>
+                        <span>{{ video.status.has_token ? '✓ есть' : '✗ нет' }} / {{ video.status.has_refresh ? '✓ есть' : '✗ нет' }}</span>
+                    </div>
+                    <p class="vstat__note">Токен нужен для <b>загрузки</b> видео (просмотр от него не зависит). Обновление токена и сброс видео уроков выполняются на старой панели (WeWeb). Значения токенов здесь не показываются намеренно.</p>
+                </div>
+            </section>
+
             <!-- Placeholders for the other phases -->
             <section v-else class="sa-panel sa-soon">
                 <div class="soon">
@@ -269,6 +294,7 @@ const aqueue = reactive({ loading: false, rows: [] });
 const rqueue = reactive({ loading: false, rows: [] });
 const authors = reactive({ loading: false, rows: [], search: '' });
 const pqueue = reactive({ loading: false, rows: [] });
+const video = reactive({ loading: false, status: null });
 const modal = reactive({ open: false, entity: null, mode: null, item: null, value: null, comment: '', busy: false, error: '' });
 const modalCfg = computed(() => {
     const e = modal.entity, m = modal.mode;
@@ -324,6 +350,23 @@ async function loadPayoutQueue() {
     pqueue.loading = false;
 }
 function askPayout(mode, item) { modal.open = true; modal.entity = 'payout'; modal.mode = mode; modal.item = item; modal.comment = ''; modal.error = ''; }
+
+async function loadVideoStatus() {
+    video.loading = true;
+    try {
+        const { data, error } = await sb.rpc('admin_peertube_status');
+        if (error) throw error;
+        video.status = (data && !data.empty) ? data : null;
+    } catch (e) { console.warn('loadVideoStatus failed', e); video.status = null; }
+    video.loading = false;
+}
+function fmtDateTime(iso) { if (!iso) return '—'; const d = new Date(iso); const p = (n) => String(n).padStart(2, '0'); return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+function relTime(sec) {
+    if (sec == null) return '';
+    const abs = Math.abs(sec), past = sec < 0;
+    const s = abs < 3600 ? `${Math.round(abs / 60)} мин` : abs < 86400 ? `${Math.round(abs / 3600)} ч` : `${Math.round(abs / 86400)} дн`;
+    return past ? `${s} назад` : `через ${s}`;
+}
 
 async function loadQueue() {
     queue.loading = true;
@@ -459,6 +502,7 @@ watch(active, (t) => {
     if (t === 'reports') loadReportQueue();
     if (t === 'commission') loadAuthors();
     if (t === 'payouts') loadPayoutQueue();
+    if (t === 'video') loadVideoStatus();
 });
 
 onMounted(async () => {
@@ -562,6 +606,16 @@ onMounted(async () => {
 .pcard__label { color: #5b6472; }
 .pcard__reveal { margin-left: 12px; appearance: none; border: none; background: none; color: #5495f3; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; }
 .pcard__reqs { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; color: #1b1f27; }
+
+/* S6 Видео — read-only PeerTube status */
+.vstat { display: flex; flex-direction: column; gap: 2px; max-width: 560px; }
+.vstat__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 4px; border-bottom: 1px solid #f2f4f7; font-size: 14px; }
+.vstat__label { color: #5b6472; }
+.vstat__rel { color: #8a94a6; }
+.vstat__badge { padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.vstat__badge.is-ok { background: #e7f6ec; color: #2f9e57; }
+.vstat__badge.is-bad { background: #fdeceb; color: #d1483d; }
+.vstat__note { margin: 16px 0 0; color: #a4adba; font-size: 12px; line-height: 1.5; }
 
 .sa-modal { position: fixed; inset: 0; z-index: 1000; background: rgba(11, 31, 77, .38); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .sa-modal__box { background: #fff; border-radius: 16px; padding: 24px; max-width: 440px; width: 100%; box-shadow: 0 20px 60px rgba(11, 31, 77, .25); }

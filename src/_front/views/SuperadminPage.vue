@@ -52,8 +52,34 @@
                                 <td>{{ c.ownerName }}<span v-if="c.ownerRole" class="role-chip">{{ c.ownerRole }}</span></td>
                                 <td class="muted">{{ fmtDate(c.created_at) }}</td>
                                 <td class="ta-r acts">
-                                    <button type="button" class="btn btn-ok" @click="askApprove(c)">Одобрить</button>
-                                    <button type="button" class="btn btn-ghost" @click="askReturn(c)">Вернуть</button>
+                                    <button type="button" class="btn btn-ok" @click="askApprove('course', c)">Одобрить</button>
+                                    <button type="button" class="btn btn-ghost" @click="askReturn('course', c)">Вернуть</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- LIVE: Статьи -->
+            <section v-else-if="active === 'articles'" class="sa-panel sa-pad">
+                <div class="sa-panelhead">
+                    <h2>Очередь на модерацию</h2>
+                    <span class="sa-note">Статьи · статус «Отправлено на модерацию»</span>
+                </div>
+                <div v-if="aqueue.loading" class="sa-empty">Загрузка…</div>
+                <div v-else-if="!aqueue.rows.length" class="sa-empty">Очередь пуста</div>
+                <div v-else class="sa-tablewrap">
+                    <table class="sa-table">
+                        <thead><tr><th>Название</th><th>Автор</th><th>Создан</th><th class="ta-r">Действия</th></tr></thead>
+                        <tbody>
+                            <tr v-for="a in aqueue.rows" :key="a.id">
+                                <td class="ttl">{{ a.Title || 'Без названия' }}</td>
+                                <td>{{ a.ownerName }}<span v-if="a.ownerRole" class="role-chip">{{ a.ownerRole }}</span></td>
+                                <td class="muted">{{ fmtDate(a.created_at) }}</td>
+                                <td class="ta-r acts">
+                                    <button type="button" class="btn btn-ok" @click="askApprove('article', a)">Одобрить</button>
+                                    <button type="button" class="btn btn-ghost" @click="askReturn('article', a)">Вернуть</button>
                                 </td>
                             </tr>
                         </tbody>
@@ -76,13 +102,13 @@
             <div v-if="modal.open" class="sa-modal" @click.self="closeModal">
                 <div class="sa-modal__box" role="dialog" aria-modal="true">
                     <template v-if="modal.mode === 'approve'">
-                        <h3>Опубликовать курс?</h3>
-                        <p class="sa-modal__course">«{{ modal.course?.Title }}»</p>
-                        <p class="sa-modal__warn">⚠️ Курс станет виден всем пользователям платформы.</p>
+                        <h3>Опубликовать {{ modalNoun }}?</h3>
+                        <p class="sa-modal__course">«{{ modal.item?.Title }}»</p>
+                        <p class="sa-modal__warn">⚠️ {{ modalWarn }}</p>
                     </template>
                     <template v-else>
                         <h3>Вернуть на доработку?</h3>
-                        <p class="sa-modal__course">«{{ modal.course?.Title }}»</p>
+                        <p class="sa-modal__course">«{{ modal.item?.Title }}»</p>
                         <p class="sa-modal__hint">Автор увидит этот комментарий в своём кабинете.</p>
                         <textarea v-model="modal.comment" class="sa-modal__ta" rows="4" placeholder="Что нужно исправить"></textarea>
                     </template>
@@ -123,7 +149,7 @@ const active = ref('courses');
 const activeTab = computed(() => TABS.find((t) => t.key === active.value) || TABS[0]);
 
 // Read-only queue counts (SELECT only — safe). Keyed by tab; only the ones we can define now.
-const counts = reactive({ courses: 0, reports: 0, payouts: 0 });
+const counts = reactive({ courses: 0, articles: 0, reports: 0, payouts: 0 });
 
 let sb = null;
 async function countEq(table, col, val) {
@@ -132,18 +158,28 @@ async function countEq(table, col, val) {
     const { count } = await q;
     return count || 0;
 }
+async function countIn(table, col, vals) {
+    const { count } = await sb.from(table).select('id', { count: 'exact', head: true }).in(col, vals);
+    return count || 0;
+}
 async function loadCounts() {
-    const [courses, reports, payouts] = await Promise.all([
-        countEq('course', 'ModStatus', 'Отправлено на модерацию'),
+    const [courses, articles, reports, payouts] = await Promise.all([
+        countIn('course', 'ModStatus', ['Отправлено на модерацию', 'На модерации']),
+        countIn('articles', 'Status', ['Отправлено на модерацию', 'На модерации']),
         countEq('stream_reports'),
         countEq('sales', 'status', 'Запрошено'),
     ]);
-    counts.courses = courses; counts.reports = reports; counts.payouts = payouts;
+    counts.courses = courses; counts.articles = articles; counts.reports = reports; counts.payouts = payouts;
 }
 
 /* ── S1: Курсы — moderation queue + actions ─────────────────────────────────── */
 const queue = reactive({ loading: false, rows: [] });
-const modal = reactive({ open: false, mode: null, course: null, comment: '', busy: false, error: '' });
+const aqueue = reactive({ loading: false, rows: [] });
+const modal = reactive({ open: false, entity: null, mode: null, item: null, comment: '', busy: false, error: '' });
+const modalNoun = computed(() => modal.entity === 'article' ? 'статью' : 'курс');
+const modalWarn = computed(() => modal.entity === 'article'
+    ? 'Статья станет видна всем пользователям платформы.'
+    : 'Курс станет виден всем пользователям платформы.');
 const toastMsg = ref('');
 let toastTimer = null;
 function toast(m) { toastMsg.value = m; if (toastTimer) clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = ''; }, 3000); }
@@ -168,9 +204,28 @@ async function loadQueue() {
     queue.loading = false;
 }
 
-function askApprove(c) { modal.open = true; modal.mode = 'approve'; modal.course = c; modal.comment = ''; modal.error = ''; }
-function askReturn(c) { modal.open = true; modal.mode = 'return'; modal.course = c; modal.comment = ''; modal.error = ''; }
-function closeModal() { if (modal.busy) return; modal.open = false; modal.course = null; modal.comment = ''; modal.error = ''; }
+async function loadArticleQueue() {
+    aqueue.loading = true;
+    try {
+        const { data } = await sb.from('articles').select('id,"Title","Creator",created_at')
+            .in('Status', ['Отправлено на модерацию', 'На модерации'])
+            .order('created_at', { ascending: true });
+        const rows = data || [];
+        const ids = [...new Set(rows.map((r) => r.Creator).filter(Boolean))];
+        const owners = {};
+        if (ids.length) {
+            const { data: us } = await sb.from('users').select('id,"Name",role').in('id', ids);
+            for (const u of (us || [])) owners[u.id] = u;
+        }
+        aqueue.rows = rows.map((r) => ({ ...r, ownerName: owners[r.Creator]?.Name || '—', ownerRole: owners[r.Creator]?.role || '' }));
+        counts.articles = aqueue.rows.length;
+    } catch (e) { console.warn('loadArticleQueue failed', e); }
+    aqueue.loading = false;
+}
+
+function askApprove(entity, item) { modal.open = true; modal.entity = entity; modal.mode = 'approve'; modal.item = item; modal.comment = ''; modal.error = ''; }
+function askReturn(entity, item) { modal.open = true; modal.entity = entity; modal.mode = 'return'; modal.item = item; modal.comment = ''; modal.error = ''; }
+function closeModal() { if (modal.busy) return; modal.open = false; modal.item = null; modal.comment = ''; modal.error = ''; }
 
 function friendlyError(e) {
     const m = e?.message || '';
@@ -182,25 +237,38 @@ function friendlyError(e) {
 }
 
 async function confirmAction() {
-    if (modal.busy || !modal.course) return;
+    if (modal.busy || !modal.item) return;
     if (modal.mode === 'return' && !modal.comment.trim()) { modal.error = 'Укажите комментарий для автора.'; return; }
     modal.busy = true; modal.error = '';
     try {
-        const id = modal.course.id;
-        const { error } = modal.mode === 'approve'
-            ? await sb.rpc('admin_approve_course', { p_course: id })
-            : await sb.rpc('admin_return_course', { p_course: id, p_comment: modal.comment.trim() });
-        if (error) throw error;
-        queue.rows = queue.rows.filter((r) => r.id !== id);
-        counts.courses = queue.rows.length;
-        modal.open = false; modal.course = null; modal.comment = '';
-        toast(modal.mode === 'approve' ? 'Курс опубликован' : 'Курс возвращён на доработку');
+        const id = modal.item.id; const comment = modal.comment.trim();
+        let res;
+        if (modal.entity === 'course') {
+            res = modal.mode === 'approve'
+                ? await sb.rpc('admin_approve_course', { p_course: id })
+                : await sb.rpc('admin_return_course', { p_course: id, p_comment: comment });
+        } else {
+            res = modal.mode === 'approve'
+                ? await sb.rpc('admin_approve_article', { p_article: id })
+                : await sb.rpc('admin_return_article', { p_article: id, p_comment: comment });
+        }
+        if (res.error) throw res.error;
+        const done = modal.entity === 'article'
+            ? (modal.mode === 'approve' ? 'Статья опубликована' : 'Статья возвращена на доработку')
+            : (modal.mode === 'approve' ? 'Курс опубликован' : 'Курс возвращён на доработку');
+        if (modal.entity === 'course') { queue.rows = queue.rows.filter((r) => r.id !== id); counts.courses = queue.rows.length; }
+        else { aqueue.rows = aqueue.rows.filter((r) => r.id !== id); counts.articles = aqueue.rows.length; }
+        modal.open = false; modal.item = null; modal.comment = '';
+        toast(done);
     } catch (e) { modal.error = friendlyError(e); }
     modal.busy = false;
 }
 
-// load the queue when the Курсы tab is (or becomes) active
-watch(active, (t) => { if (t === 'courses') loadQueue(); });
+// load the relevant queue when its tab is (or becomes) active
+watch(active, (t) => {
+    if (t === 'courses') loadQueue();
+    if (t === 'articles') loadArticleQueue();
+});
 
 onMounted(async () => {
     if (!isLikelyLoggedIn()) { router.replace('/login'); return; }

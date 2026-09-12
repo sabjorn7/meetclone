@@ -118,6 +118,31 @@
                 </div>
             </section>
 
+            <!-- LIVE: Комиссия -->
+            <section v-else-if="active === 'commission'" class="sa-panel sa-pad">
+                <div class="sa-panelhead">
+                    <h2>Комиссия авторов</h2>
+                    <span class="sa-note">Доля автора, % · влияет на будущие продажи</span>
+                </div>
+                <div class="sa-search"><input v-model="authors.search" type="search" placeholder="Поиск по имени" /></div>
+                <div v-if="authors.loading" class="sa-empty">Загрузка…</div>
+                <div v-else-if="!authorsFiltered.length" class="sa-empty">Ничего не найдено</div>
+                <div v-else class="sa-tablewrap">
+                    <table class="sa-table">
+                        <thead><tr><th>Автор</th><th>Роль</th><th class="ta-r">Комиссия</th><th class="ta-r">Баланс</th><th class="ta-r">Действия</th></tr></thead>
+                        <tbody>
+                            <tr v-for="a in authorsFiltered" :key="a.id">
+                                <td class="ttl">{{ a.Name || '—' }}</td>
+                                <td><span class="role-chip">{{ a.role }}</span></td>
+                                <td class="ta-r strong">{{ a.authorCommission ?? 100 }}%</td>
+                                <td class="ta-r muted">{{ fmtRub(a.Ammount) }}</td>
+                                <td class="ta-r acts"><button type="button" class="btn btn-ghost" @click="askCommission(a)">Изменить</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <!-- Placeholders for the other phases -->
             <section v-else class="sa-panel sa-soon">
                 <div class="soon">
@@ -135,15 +160,20 @@
                     <h3>{{ modalCfg.title }}</h3>
                     <p v-if="modalItemLabel" class="sa-modal__course">«{{ modalItemLabel }}»</p>
                     <p v-if="modalCfg.warn" class="sa-modal__warn">{{ modalCfg.warn }}</p>
+                    <template v-if="modalCfg.needsValue">
+                        <label class="sa-modal__field">Новая комиссия, %
+                            <input type="number" v-model.number="modal.value" min="0" max="100" step="1" class="sa-modal__num" />
+                        </label>
+                    </template>
                     <template v-if="modalCfg.needsComment">
-                        <p class="sa-modal__hint">Автор увидит этот комментарий в своём кабинете.</p>
-                        <textarea v-model="modal.comment" class="sa-modal__ta" rows="4" placeholder="Что нужно исправить"></textarea>
+                        <p class="sa-modal__hint">{{ modalCfg.commentHint }}</p>
+                        <textarea v-model="modal.comment" class="sa-modal__ta" rows="3" :placeholder="modalCfg.commentPlaceholder"></textarea>
                     </template>
                     <p v-if="modal.error" class="sa-modal__err">{{ modal.error }}</p>
                     <div class="sa-modal__acts">
                         <button type="button" class="btn btn-ghost" :disabled="modal.busy" @click="closeModal">Отмена</button>
                         <button type="button" class="btn" :class="modalCfg.btn"
-                                :disabled="modal.busy || (modalCfg.needsComment && !modal.comment.trim())" @click="confirmAction">
+                                :disabled="modal.busy || (modalCfg.needsComment && !modal.comment.trim()) || (modalCfg.needsValue && !isValidCommission)" @click="confirmAction">
                             {{ modal.busy ? 'Сохранение…' : modalCfg.confirm }}
                         </button>
                     </div>
@@ -203,23 +233,43 @@ async function loadCounts() {
 const queue = reactive({ loading: false, rows: [] });
 const aqueue = reactive({ loading: false, rows: [] });
 const rqueue = reactive({ loading: false, rows: [] });
-const modal = reactive({ open: false, entity: null, mode: null, item: null, comment: '', busy: false, error: '' });
+const authors = reactive({ loading: false, rows: [], search: '' });
+const modal = reactive({ open: false, entity: null, mode: null, item: null, value: null, comment: '', busy: false, error: '' });
 const modalCfg = computed(() => {
     const e = modal.entity, m = modal.mode;
-    if (e === 'report' && m === 'delete') return { title: 'Удалить сообщение?', warn: '⚠️ Сообщение будет удалено безвозвратно для всех участников чата.', confirm: 'Удалить', btn: 'btn-danger', needsComment: false };
-    if (e === 'report' && m === 'dismiss') return { title: 'Отклонить жалобу?', warn: '', confirm: 'Отклонить', btn: 'btn-primary', needsComment: false };
-    if (m === 'approve') return { title: `Опубликовать ${e === 'article' ? 'статью' : 'курс'}?`, warn: e === 'article' ? '⚠️ Статья станет видна всем пользователям платформы.' : '⚠️ Курс станет виден всем пользователям платформы.', confirm: 'Опубликовать', btn: 'btn-ok', needsComment: false };
-    return { title: 'Вернуть на доработку?', warn: '', confirm: 'Вернуть', btn: 'btn-warn', needsComment: true };
+    if (e === 'report' && m === 'delete') return { title: 'Удалить сообщение?', warn: '⚠️ Сообщение будет удалено безвозвратно для всех участников чата.', confirm: 'Удалить', btn: 'btn-danger', needsComment: false, needsValue: false };
+    if (e === 'report' && m === 'dismiss') return { title: 'Отклонить жалобу?', warn: '', confirm: 'Отклонить', btn: 'btn-primary', needsComment: false, needsValue: false };
+    if (e === 'commission') return { title: 'Изменить комиссию автора?', warn: 'Влияет только на будущие продажи — прошлые начисления не меняются.', confirm: 'Сохранить', btn: 'btn-ok', needsComment: true, needsValue: true, commentHint: 'Причина изменения — сохранится в аудит-логе.', commentPlaceholder: 'Например: договорённость о новой ставке' };
+    if (m === 'approve') return { title: `Опубликовать ${e === 'article' ? 'статью' : 'курс'}?`, warn: e === 'article' ? '⚠️ Статья станет видна всем пользователям платформы.' : '⚠️ Курс станет виден всем пользователям платформы.', confirm: 'Опубликовать', btn: 'btn-ok', needsComment: false, needsValue: false };
+    return { title: 'Вернуть на доработку?', warn: '', confirm: 'Вернуть', btn: 'btn-warn', needsComment: true, needsValue: false, commentHint: 'Автор увидит этот комментарий в своём кабинете.', commentPlaceholder: 'Что нужно исправить' };
 });
 const modalItemLabel = computed(() => {
     if (!modal.item) return '';
     if (modal.entity === 'report') return modal.item.targetUserName ? `сообщение пользователя ${modal.item.targetUserName}` : 'сообщение';
+    if (modal.entity === 'commission') return modal.item.Name || '—';
     return modal.item.Title || '';
 });
+const isValidCommission = computed(() => { const v = modal.value; return typeof v === 'number' && !Number.isNaN(v) && v >= 0 && v <= 100; });
 const toastMsg = ref('');
 let toastTimer = null;
 function toast(m) { toastMsg.value = m; if (toastTimer) clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = ''; }, 3000); }
 function fmtDate(iso) { if (!iso) return ''; const d = new Date(iso); const p = (n) => String(n).padStart(2, '0'); return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`; }
+const fmtRub = (n) => `${Math.round(Number(n) || 0).toLocaleString('ru-RU')} ₽`;
+
+async function loadAuthors() {
+    authors.loading = true;
+    try {
+        const { data } = await sb.from('users').select('id,"Name",role,"authorCommission","Ammount"')
+            .in('role', ['Спикер', 'Учебное заведение']).order('Name', { ascending: true });
+        authors.rows = data || [];
+    } catch (e) { console.warn('loadAuthors failed', e); }
+    authors.loading = false;
+}
+const authorsFiltered = computed(() => {
+    const q = authors.search.trim().toLowerCase();
+    return q ? authors.rows.filter((a) => (a.Name || '').toLowerCase().includes(q)) : authors.rows;
+});
+function askCommission(a) { modal.open = true; modal.entity = 'commission'; modal.mode = 'set'; modal.item = a; modal.value = (a.authorCommission ?? 100); modal.comment = ''; modal.error = ''; }
 
 async function loadQueue() {
     queue.loading = true;
@@ -286,7 +336,7 @@ async function loadReportQueue() {
 function askApprove(entity, item) { modal.open = true; modal.entity = entity; modal.mode = 'approve'; modal.item = item; modal.comment = ''; modal.error = ''; }
 function askReturn(entity, item) { modal.open = true; modal.entity = entity; modal.mode = 'return'; modal.item = item; modal.comment = ''; modal.error = ''; }
 function askReport(mode, item) { modal.open = true; modal.entity = 'report'; modal.mode = mode; modal.item = item; modal.comment = ''; modal.error = ''; }
-function closeModal() { if (modal.busy) return; modal.open = false; modal.item = null; modal.comment = ''; modal.error = ''; }
+function closeModal() { if (modal.busy) return; modal.open = false; modal.item = null; modal.comment = ''; modal.value = null; modal.error = ''; }
 
 function friendlyError(e) {
     const m = e?.message || '';
@@ -299,12 +349,16 @@ function friendlyError(e) {
 
 async function confirmAction() {
     if (modal.busy || !modal.item) return;
-    if (modal.mode === 'return' && !modal.comment.trim()) { modal.error = 'Укажите комментарий для автора.'; return; }
+    const cfg = modalCfg.value;
+    if (cfg.needsComment && !modal.comment.trim()) { modal.error = 'Укажите ' + (modal.entity === 'commission' ? 'причину' : 'комментарий') + '.'; return; }
+    if (cfg.needsValue && !isValidCommission.value) { modal.error = 'Комиссия должна быть от 0 до 100.'; return; }
     modal.busy = true; modal.error = '';
     try {
         const id = modal.item.id; const comment = modal.comment.trim();
         let res, done;
-        if (modal.entity === 'report') {
+        if (modal.entity === 'commission') {
+            res = await sb.rpc('admin_set_commission', { p_user: id, p_value: modal.value, p_reason: comment });
+        } else if (modal.entity === 'report') {
             res = modal.mode === 'dismiss'
                 ? await sb.rpc('admin_dismiss_report', { p_report: id })
                 : await sb.rpc('admin_delete_reported_message', { p_report: id });
@@ -318,7 +372,10 @@ async function confirmAction() {
                 : await sb.rpc('admin_return_article', { p_article: id, p_comment: comment });
         }
         if (res.error) throw res.error;
-        if (modal.entity === 'report') {
+        if (modal.entity === 'commission') {
+            const row = authors.rows.find((r) => r.id === id); if (row) row.authorCommission = modal.value;
+            done = 'Комиссия обновлена';
+        } else if (modal.entity === 'report') {
             rqueue.rows = rqueue.rows.filter((r) => r.id !== id); counts.reports = rqueue.rows.length;
             done = modal.mode === 'dismiss' ? 'Жалоба отклонена' : 'Сообщение удалено, жалоба закрыта';
         } else if (modal.entity === 'course') {
@@ -328,7 +385,7 @@ async function confirmAction() {
             aqueue.rows = aqueue.rows.filter((r) => r.id !== id); counts.articles = aqueue.rows.length;
             done = modal.mode === 'approve' ? 'Статья опубликована' : 'Статья возвращена на доработку';
         }
-        modal.open = false; modal.item = null; modal.comment = '';
+        modal.open = false; modal.item = null; modal.comment = ''; modal.value = null;
         toast(done);
     } catch (e) { modal.error = friendlyError(e); }
     modal.busy = false;
@@ -339,6 +396,7 @@ watch(active, (t) => {
     if (t === 'courses') loadQueue();
     if (t === 'articles') loadArticleQueue();
     if (t === 'reports') loadReportQueue();
+    if (t === 'commission') loadAuthors();
 });
 
 onMounted(async () => {
@@ -427,6 +485,13 @@ onMounted(async () => {
 .rcard__text { font-size: 14px; background: #f7f9fc; border: 1px solid #eef1f5; border-radius: 10px; padding: 10px 12px; overflow-wrap: anywhere; }
 .rcard__text--gone { color: #8a94a6; font-style: italic; }
 .rcard__acts { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+/* S4 Комиссия — author list + edit modal field */
+.sa-search { margin-bottom: 14px; }
+.sa-search input { width: 100%; max-width: 320px; height: 38px; border: 1px solid #e1e5ea; border-radius: 10px; padding: 0 12px; font: inherit; font-size: 14px; }
+.sa-table .strong { font-weight: 700; }
+.sa-modal__field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #5b6472; margin-bottom: 10px; }
+.sa-modal__num { width: 120px; height: 40px; border: 1px solid #e1e5ea; border-radius: 10px; padding: 0 12px; font: inherit; font-size: 16px; }
 
 .sa-modal { position: fixed; inset: 0; z-index: 1000; background: rgba(11, 31, 77, .38); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .sa-modal__box { background: #fff; border-radius: 16px; padding: 24px; max-width: 440px; width: 100%; box-shadow: 0 20px 60px rgba(11, 31, 77, .25); }

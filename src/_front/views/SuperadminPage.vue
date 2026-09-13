@@ -1,12 +1,12 @@
 <!--
   SuperadminPage.vue — hand-written rebuild of the WeWeb /superadmin admin back-office.
-  Built at /superadmin-demo FIRST; the live WeWeb /superadmin stays untouched until each tab
-  is proven, then /superadmin is swapped via PAGE_OVERRIDES. Shares the visual language + isAdmin
-  gate with DashboardPage (analytics). This is a WRITE surface (real money + publishing) — but
-  S0 is shell-only: tab nav + read-only queue-count badges, NO mutations yet.
+  Owns /superadmin (PAGE_OVERRIDES); the old WeWeb page is kept at /superadmin-legacy for the 3
+  rare infra actions not rebuilt (PeerTube token refresh, clear-video, lesson field edit). Shares
+  the visual language + isAdmin gate with DashboardPage (analytics). This is a WRITE surface (real
+  money + publishing); every mutation goes through an admin-gated SECURITY DEFINER RPC + audit log.
 
-    S0 (this): shell + gate + tabs + queue counts.  S1 Курсы · S2 Статьи · S3 Жалобы(UGC) ·
-    S4 Комиссия · S5 Выплаты · S6 Видео — each adds real admin actions behind admin-gated RPCs.
+    Tabs: Курсы · Статьи (moderation, +articles_logs) · Жалобы (UGC stream_reports) · Комиссия
+    (+admin_money_log ledger) · Выплаты (approve/reject+refund) · Видео (storage-by-author).
 
   ACCESS (admin-only): guest → /login; logged in but not admin (role!=='admin' && !superadmin) → /.
 -->

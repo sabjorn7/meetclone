@@ -284,10 +284,9 @@ const PAGE_OVERRIDES = [
     // (it keys on the WeWeb `page-16089944…` route, which this override skips). /courses-manage-demo is the rollback.
     { path: '/courses_manage', name: 'courses_manage', component: CoursesManagePage, wwPath: 'courses_manage' },
     { path: '/dashboard', name: 'dashboard', component: DashboardPage, wwPath: 'dashboard' },
-    // Hand-written admin panel now owns /superadmin (wwPath 'superadmin' → the WeWeb page is skipped
-    // in the loop below and re-registered at /superadmin-legacy). /superadmin-demo kept as an alias.
+    // Hand-written admin panel owns /superadmin (wwPath 'superadmin' → the WeWeb page is skipped in
+    // the loop below and re-registered at /superadmin-legacy for the rare infra actions).
     { path: '/superadmin', name: 'superadmin', component: SuperadminPage, wwPath: 'superadmin' },
-    { path: '/superadmin-demo', name: 'superadmin-demo', component: SuperadminPage },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

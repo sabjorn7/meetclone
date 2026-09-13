@@ -26,8 +26,9 @@ const CHROME_EXCLUDE = [
     '/my_finanse', '/feedback',
     // creator management (courses_manage is now the hand-written CoursesManagePage — gets the new chrome)
     '/articles_manage',
-    // admin
-    '/superadmin',
+    // admin — /superadmin is now the hand-written panel (gets our chrome); the WeWeb legacy fallback
+    // lives at /superadmin-legacy and keeps its own WeWeb header.
+    '/superadmin-legacy',
     // auth utilities (login is a full-screen dedicated page — its own chrome, no AppHeader/Footer)
     '/login', '/login-demo', '/registration', '/reset_pw',
     // multi-host broadcaster room — full-screen call UI, no shared chrome

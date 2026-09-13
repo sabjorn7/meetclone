@@ -284,8 +284,9 @@ const PAGE_OVERRIDES = [
     // (it keys on the WeWeb `page-16089944…` route, which this override skips). /courses-manage-demo is the rollback.
     { path: '/courses_manage', name: 'courses_manage', component: CoursesManagePage, wwPath: 'courses_manage' },
     { path: '/dashboard', name: 'dashboard', component: DashboardPage, wwPath: 'dashboard' },
-    // Hand-written /superadmin rebuild, built at a DEMO route first; the live WeWeb /superadmin
-    // (wwPath 'superadmin') stays untouched until each tab is proven, then this takes its path.
+    // Hand-written admin panel now owns /superadmin (wwPath 'superadmin' → the WeWeb page is skipped
+    // in the loop below and re-registered at /superadmin-legacy). /superadmin-demo kept as an alias.
+    { path: '/superadmin', name: 'superadmin', component: SuperadminPage, wwPath: 'superadmin' },
     { path: '/superadmin-demo', name: 'superadmin-demo', component: SuperadminPage },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
@@ -298,6 +299,16 @@ for (const page of window.wwg_designInfo.pages) {
     for (const lang of window.wwg_designInfo.langs) {
         if (!page.langs.includes(lang.lang)) continue;
         registerRoute(page, lang);
+    }
+}
+
+// Soft swap (Variant A): the WeWeb /superadmin (overridden above by the hand-written panel) stays
+// reachable at /superadmin-legacy for the 3 rare infra actions that were NOT rebuilt — PeerTube
+// token refresh, clear-video, lesson field edit. Same route mechanism as the 404 forcedPath.
+{
+    const wwSa = window.wwg_designInfo.pages.find((p) => p.paths?.default === 'superadmin');
+    if (wwSa) for (const lang of window.wwg_designInfo.langs) {
+        if (wwSa.langs.includes(lang.lang)) registerRoute(wwSa, lang, '/superadmin-legacy');
     }
 }
 

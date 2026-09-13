@@ -108,6 +108,22 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Physical page for /superadmin-legacy — the WeWeb admin panel re-registered at this path (soft swap,
+// Variant A) for rare infra actions. Needs a dist/superadmin-legacy/index.html for direct hits/refresh.
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['superadmin-legacy-en'] = {
+            ..._tpl,
+            outputDir: './superadmin-legacy',
+            title: 'Модерация (устаревшая панель) — МитГуру',
+            meta: [
+                { name: 'robots', content: 'noindex' },
+            ],
+        };
+    }
+}
+
 // Hand-added standalone page (NOT WeWeb-generated): the /promo-demo seminar landing (design
 // experiment; see src/_front/views/PromoDemoPage.vue). Needs a physical dist/promo-demo/index.html
 // for direct hits/refresh.

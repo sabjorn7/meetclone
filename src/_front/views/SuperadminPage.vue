@@ -185,22 +185,23 @@
                 </div>
                 <div v-if="storage.loading" class="sa-empty">Загрузка…</div>
                 <template v-else>
-                    <div class="stotal">Общий размер видео: <b>{{ fmtSize(storage.total) }}</b> · {{ storage.owners.length }} владельцев курсов ({{ storage.withVideo }} с видео)</div>
+                    <div class="stotal">Видео: <b>{{ storage.totalVids }}</b> · записанный размер <b>{{ fmtSize(storage.total) }}</b> · {{ storage.owners.length }} владельцев ({{ storage.withVideo }} с видео)</div>
+                    <p class="vstat__note" style="margin: 0 0 14px;">Размер берётся из поля video_size, а оно записано не у всех загрузок — там, где видео есть, но размер не сохранён, показано «размер не записан». Полный сигнал — число видео.</p>
                     <div class="sa-tablewrap">
                         <table class="sa-table">
-                            <thead><tr><th>Автор</th><th class="ta-r">Курсов</th><th class="ta-r">Размер видео</th></tr></thead>
+                            <thead><tr><th>Автор</th><th class="ta-r">Видео</th><th class="ta-r">Записанный размер</th></tr></thead>
                             <tbody>
                                 <template v-for="o in storage.owners" :key="o.owner_id || 'none'">
                                     <tr class="srow" @click="o.expanded = !o.expanded">
                                         <td><span class="scaret">{{ o.expanded ? '▾' : '▸' }}</span> {{ o.owner_name }}</td>
-                                        <td class="ta-r muted">{{ o.courses.length }}</td>
-                                        <td class="ta-r strong">{{ fmtSize(o.bytes) }}</td>
+                                        <td class="ta-r strong">{{ o.vids }}</td>
+                                        <td class="ta-r muted">{{ o.bytes > 0 ? fmtSize(o.bytes) : (o.vids > 0 ? 'не записан' : '—') }}</td>
                                     </tr>
                                     <template v-if="o.expanded">
                                         <tr v-for="c in o.courses" :key="c.id" class="ssub">
                                             <td class="ssub__title">{{ c.title }}</td>
-                                            <td></td>
-                                            <td class="ta-r muted">{{ fmtSize(c.bytes) }}</td>
+                                            <td class="ta-r muted">{{ c.vids }}</td>
+                                            <td class="ta-r muted">{{ c.bytes > 0 ? fmtSize(c.bytes) : (c.vids > 0 ? 'не записан' : '—') }}</td>
                                         </tr>
                                     </template>
                                 </template>
@@ -213,7 +214,7 @@
                             <span class="vstat__label">Токен загрузки видео (PeerTube)</span>
                             <span class="vstat__badge" :class="video.status.expired ? 'is-bad' : 'is-ok'">{{ video.status.expired ? 'Истёк' : 'Активен' }}</span>
                         </div>
-                        <p class="vstat__note">Значения токенов не показываются. Обновление токена и сброс видео уроков — на старой панели (WeWeb).</p>
+                        <p class="vstat__note">Значения токенов не показываются. Обновление токена, сброс видео уроков и правка уроков — на <a href="/superadmin-legacy" class="vstat__link">устаревшей панели</a>.</p>
                     </div>
                 </template>
             </section>
@@ -311,7 +312,7 @@ const rqueue = reactive({ loading: false, rows: [] });
 const authors = reactive({ loading: false, rows: [], search: '' });
 const pqueue = reactive({ loading: false, rows: [] });
 const video = reactive({ loading: false, status: null });
-const storage = reactive({ loading: false, owners: [], total: 0, withVideo: 0 });
+const storage = reactive({ loading: false, owners: [], total: 0, totalVids: 0, withVideo: 0 });
 const modal = reactive({ open: false, entity: null, mode: null, item: null, value: null, comment: '', busy: false, error: '' });
 const modalCfg = computed(() => {
     const e = modal.entity, m = modal.mode;
@@ -388,19 +389,29 @@ async function loadStorage() {
     storage.loading = true;
     try {
         const [{ data: courses }, { data: lessons }] = await Promise.all([
-            sb.from('course').select('id,"Title",owner,video_size'),
-            sb.from('lessons').select('"Course",video_size').limit(100000),
+            sb.from('course').select('id,"Title",owner,video_size,video_id'),
+            sb.from('lessons').select('"Course",video_size,video_id').limit(100000),
         ]);
         const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-        const lessonBytes = {};
-        for (const l of (lessons || [])) { if (!l.Course) continue; lessonBytes[l.Course] = (lessonBytes[l.Course] || 0) + num(l.video_size); }
+        const hasVid = (v) => v != null && v !== '';
+        // video_size is recorded for only some uploads → we also count videos (video_id) which is
+        // complete data. lessonAgg: courseId -> { bytes: Σvideo_size, vids: #lessons-with-video }.
+        const lessonAgg = {};
+        for (const l of (lessons || [])) {
+            if (!l.Course) continue;
+            const a = lessonAgg[l.Course] || (lessonAgg[l.Course] = { bytes: 0, vids: 0 });
+            a.bytes += num(l.video_size);
+            if (hasVid(l.video_id)) a.vids += 1;
+        }
         const owners = {};
         for (const c of (courses || [])) {
-            const bytes = num(c.video_size) + (lessonBytes[c.id] || 0);
+            const la = lessonAgg[c.id] || { bytes: 0, vids: 0 };
+            const bytes = num(c.video_size) + la.bytes;
+            const vids = (hasVid(c.video_id) ? 1 : 0) + la.vids;
             const oid = c.owner || 'none';
-            if (!owners[oid]) owners[oid] = { owner_id: c.owner, owner_name: '—', bytes: 0, courses: [], expanded: false };
-            owners[oid].bytes += bytes;
-            owners[oid].courses.push({ id: c.id, title: c.Title || 'Без названия', bytes });
+            if (!owners[oid]) owners[oid] = { owner_id: c.owner, owner_name: '—', bytes: 0, vids: 0, courses: [], expanded: false };
+            owners[oid].bytes += bytes; owners[oid].vids += vids;
+            owners[oid].courses.push({ id: c.id, title: c.Title || 'Без названия', bytes, vids });
         }
         const ids = Object.values(owners).map((o) => o.owner_id).filter(Boolean);
         if (ids.length) {
@@ -408,11 +419,13 @@ async function loadStorage() {
             const nm = {}; for (const u of (us || [])) nm[u.id] = u.Name;
             for (const o of Object.values(owners)) o.owner_name = nm[o.owner_id] || (o.owner_id ? 'Автор' : '— (без владельца)');
         }
-        const list = Object.values(owners).sort((a, b) => b.bytes - a.bytes);
-        for (const o of list) o.courses.sort((a, b) => b.bytes - a.bytes);
+        // sort by video COUNT (complete data) first, then recorded size.
+        const list = Object.values(owners).sort((a, b) => b.vids - a.vids || b.bytes - a.bytes);
+        for (const o of list) o.courses.sort((a, b) => b.vids - a.vids || b.bytes - a.bytes);
         storage.owners = list;
         storage.total = list.reduce((s, o) => s + o.bytes, 0);
-        storage.withVideo = list.filter((o) => o.bytes > 0).length;
+        storage.totalVids = list.reduce((s, o) => s + o.vids, 0);
+        storage.withVideo = list.filter((o) => o.vids > 0).length;
     } catch (e) { console.warn('loadStorage failed', e); }
     storage.loading = false;
 }
@@ -665,6 +678,7 @@ onMounted(async () => {
 .vstat__badge.is-ok { background: #e7f6ec; color: #2f9e57; }
 .vstat__badge.is-bad { background: #fdeceb; color: #d1483d; }
 .vstat__note { margin: 16px 0 0; color: #a4adba; font-size: 12px; line-height: 1.5; }
+.vstat__link { color: #5495f3; text-decoration: underline; }
 
 /* S6 — video storage by author */
 .stotal { margin-bottom: 14px; font-size: 15px; color: #1b1f27; }

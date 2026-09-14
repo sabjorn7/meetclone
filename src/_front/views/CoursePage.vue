@@ -325,7 +325,7 @@ async function addCourse(renewal) {
         if (!buyer.value) throw new Error('Не удалось определить пользователя.');
         if (!renewal && course.value.Free) {
             await enrollFree(sb, { buyer: buyer.value, course: course.value });
-            window.location.assign('/my_courses'); // free access granted → straight to the library
+            window.location.assign(myCoursesHref.value); // free access granted → open THAT course's player
         } else {
             // ADD to cart only — no order, no redirect. Checkout is done from the header cart.
             await addToCart(sb, { buyer: buyer.value, course: course.value, renewal });

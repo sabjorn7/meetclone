@@ -298,7 +298,7 @@ async function buyFromQuickView() {
         if (!buyer.value) throw new Error('Не удалось определить пользователя.');
         if (qv.value.Free) {
             await enrollFree(sb, { buyer: buyer.value, course: qv.value });
-            window.location.assign('/my_courses');
+            window.location.assign(`/my_courses?course=${qv.value.id}`); // open THAT course's player
         } else {
             await addToCart(sb, { buyer: buyer.value, course: qv.value });
             qvInCart.value = true;

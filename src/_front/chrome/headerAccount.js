@@ -170,7 +170,9 @@ export async function checkoutCart(sb, { user, cart }) {
     const orderId = orderRows?.[0]?.id;
 
     const base = 'https://meetguru.payform.ru/?do=link&sys=meetguru';
-    const urlSuccess = 'https://app.meetgu.ru/my_courses';
+    // Return to the home dashboard ("Ваши курсы") — a paid cart can hold several courses, so there is
+    // no single ?course=<id> to deep-link, and bare /my_courses now shows "Курс не найден".
+    const urlSuccess = 'https://app.meetgu.ru/';
     const products = cart.map((r, i) =>
         `products[${i}][price]=${encodeURIComponent(r.price)}` +
         `&products[${i}][quantity]=${encodeURIComponent(r.quantity || 1)}` +

@@ -325,6 +325,7 @@ async function load() {
     const { data } = await sb.from('course')
         .select('id, "Title", "Price", "Free", old_price, "Category", slug, owner, video_id, cover, "Less_Id", comment, rating, created_at')
         .eq('ModStatus', 'Опубликовано')
+        .eq('Buy', true)   // «Доступен к покупке» — не показываем в каталоге снятые с продажи (но опубликованные) курсы
         .order('created_at', { ascending: false });
     courses.value = data || [];
     // authors (school / teacher) — name for the card footer, name+photo for the quick-view popup.

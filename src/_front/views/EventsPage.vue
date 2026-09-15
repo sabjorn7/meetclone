@@ -167,7 +167,9 @@ onMounted(async () => {
 .pd-erow { display: flex; gap: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; text-decoration: none; color: inherit; transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease-out); }
 @media (hover: hover) and (pointer: fine) { .pd-erow:hover { transform: translateY(-2px); box-shadow: var(--shadow-hov); border-color: transparent; } }
 .pd-erow--past { opacity: 0.72; }
-.pd-erow__cover { position: relative; flex: 0 0 320px; aspect-ratio: 16 / 9; background: var(--bg-tint); }
+/* align-self:flex-start keeps the cover at its 16:9 height instead of stretching to a taller card
+   body (which made object-fit:cover crop the banner sides on desktop; mobile stacks so was unaffected). */
+.pd-erow__cover { position: relative; flex: 0 0 320px; align-self: flex-start; aspect-ratio: 16 / 9; background: var(--bg-tint); }
 .pd-erow__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pd-erow__cover--empty { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 34px; }
 .pd-erow__badge { position: absolute; top: 12px; left: 12px; background: rgba(255,255,255,0.94); color: var(--blue-ink); border-radius: var(--r-pill); padding: 5px 12px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; backdrop-filter: blur(4px); }

@@ -167,15 +167,15 @@ onMounted(async () => {
 .pd-erow { display: flex; gap: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; text-decoration: none; color: inherit; transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease-out); }
 @media (hover: hover) and (pointer: fine) { .pd-erow:hover { transform: translateY(-2px); box-shadow: var(--shadow-hov); border-color: transparent; } }
 .pd-erow--past { opacity: 0.72; }
-/* Cover stays a fixed 16:9 (320×180) and does NOT stretch (align-self:flex-start) so the full banner
-   shows uncropped. The body is kept compact (tight padding + 2-line title clamp) so the card height
-   matches the cover — no crop, no empty gap. Mobile stacks the cover full-width below. */
-.pd-erow__cover { position: relative; flex: 0 0 320px; align-self: flex-start; aspect-ratio: 16 / 9; background: var(--bg-tint); }
+/* The cover is a fixed 16:9 whose height (344px wide → ~194px) is sized to be >= the tallest card body,
+   so the cover drives the card height: it fills the whole card (full banner, no crop, reaches the
+   bottom) and the body fits beside it. Mobile stacks the cover full-width below. */
+.pd-erow__cover { position: relative; flex: 0 0 344px; aspect-ratio: 16 / 9; background: var(--bg-tint); }
 .pd-erow__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pd-erow__cover--empty { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 34px; }
 .pd-erow__badge { position: absolute; top: 12px; left: 12px; background: rgba(255,255,255,0.94); color: var(--blue-ink); border-radius: var(--r-pill); padding: 5px 12px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; backdrop-filter: blur(4px); }
 .pd-erow__badge--past { color: var(--ink-3); }
-.pd-erow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 16px 24px; }
+.pd-erow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 16px 24px; }
 .pd-erow__title { margin: 0; font-weight: 800; font-size: 1.35rem; line-height: 1.24; letter-spacing: -0.02em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .pd-erow__meta { margin-top: 8px; color: var(--ink-2); font-size: 0.98rem; }
 .pd-erow__spacer { flex: 1; min-height: 0; }

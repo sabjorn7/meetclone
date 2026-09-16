@@ -92,7 +92,7 @@
                 <div class="pd-wrap pd-about">
                     <h2 class="pd-h2">О мероприятии</h2>
                     <div class="pd-about__body">
-                        <p v-for="(p, i) in aboutParagraphs" :key="i">{{ p }}</p>
+                        <p v-for="(p, i) in aboutParagraphs" :key="i" v-html="linkifyText(p)"></p>
                     </div>
                 </div>
             </section>
@@ -101,7 +101,7 @@
                 <div class="pd-wrap pd-about">
                     <h2 class="pd-h2">Чему научитесь</h2>
                     <div class="pd-about__body">
-                        <p v-for="(p, i) in learnParagraphs" :key="i">{{ p }}</p>
+                        <p v-for="(p, i) in learnParagraphs" :key="i" v-html="linkifyText(p)"></p>
                     </div>
                 </div>
             </section>
@@ -129,7 +129,7 @@
                             <div class="ed-speaker__name">{{ speaker.Name || 'Спикер' }}</div>
                             <div v-if="speaker.city" class="ed-speaker__city">📍 {{ speaker.city }}</div>
                             <div v-if="speakerBio.length" class="ed-speaker__bio">
-                                <p v-for="(p, i) in speakerBio" :key="i">{{ p }}</p>
+                                <p v-for="(p, i) in speakerBio" :key="i" v-html="linkifyText(p)"></p>
                             </div>
                             <div v-if="speakerLinks.length" class="ed-speaker__socials">
                                 <a v-for="l in speakerLinks" :key="l.type" class="ed-speaker__social" :href="l.url" target="_blank" rel="noopener noreferrer" :aria-label="l.label" v-html="l.icon"></a>
@@ -188,6 +188,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { getCurrentUser } from '@/_front/streams/streamsApi.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
+import { linkifyText } from '@/_front/helpers/linkify.js';
 import {
     getEventById,
     getEventBySlug,

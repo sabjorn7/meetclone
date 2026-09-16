@@ -362,7 +362,7 @@ onMounted(async () => {
 .pd-learn { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 32px; }
 .pd-learn__item { display: flex; align-items: flex-start; gap: 12px; font-size: 1.06rem; color: #091747; }
 .pd-learn__item .pd-ic { flex: none; width: 24px; height: 24px; stroke-width: 2.6; stroke: #21a366; fill: none; margin-top: 2px; }
-.pd-about__body p { margin: 0 0 16px; font-size: 1.1rem; color: #5b6472; line-height: 1.6; }
+.pd-about__body p { margin: 0 0 16px; font-size: 1.1rem; color: #5b6472; line-height: 1.6; white-space: pre-line; }
 .pd-cards--for { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .pd-forcard { position: relative; background: #fff; border: 1px solid #e4e9f1; border-radius: 16px; padding: 24px 24px 24px 28px; }
 .pd-forcard__dot { position: absolute; left: 24px; top: 30px; width: 10px; height: 10px; border-radius: 50%; background: #5495f3; }
@@ -425,7 +425,7 @@ onMounted(async () => {
 .ed-speaker__name { font-weight: 800; font-size: 20px; }
 .ed-speaker__city { color: #64748b; font-size: 14px; margin-top: 2px; }
 .ed-speaker__bio { margin-top: 10px; line-height: 1.6; }
-.ed-speaker__bio p { margin: 0 0 8px; }
+.ed-speaker__bio p { margin: 0 0 8px; white-space: pre-line; }
 .ed-speaker__socials { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
 .ed-speaker__social { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: #eef2f7; color: #2563eb; transition: transform .16s, background .16s, color .16s; }
 .ed-speaker__social :deep(svg) { width: 22px; height: 22px; fill: currentColor; }

@@ -364,9 +364,10 @@ onMounted(async () => {
 .pd-learn__item { display: flex; align-items: flex-start; gap: 12px; font-size: 1.06rem; color: #091747; }
 .pd-learn__item .pd-ic { flex: none; width: 24px; height: 24px; stroke-width: 2.6; stroke: #21a366; fill: none; margin-top: 2px; }
 .pd-about__body p { margin: 0 0 16px; font-size: 1.1rem; color: #5b6472; line-height: 1.6; white-space: pre-line; }
-/* auto-linkified URLs (linkify.js) — brand blue + bolder */
-.pd-about__body a, .ed-speaker__bio a { color: #2e70dd; font-weight: 600; text-decoration: none; }
-.pd-about__body a:hover, .ed-speaker__bio a:hover { text-decoration: underline; }
+/* auto-linkified URLs (linkify.js) — brand blue + bolder. :deep() is required because the <a> are
+   injected via v-html and therefore have no scoped data-v attribute for a plain scoped selector. */
+.pd-about__body :deep(a), .ed-speaker__bio :deep(a) { color: #2e70dd; font-weight: 600; text-decoration: none; }
+.pd-about__body :deep(a):hover, .ed-speaker__bio :deep(a):hover { text-decoration: underline; }
 .pd-cards--for { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .pd-forcard { position: relative; background: #fff; border: 1px solid #e4e9f1; border-radius: 16px; padding: 24px 24px 24px 28px; }
 .pd-forcard__dot { position: absolute; left: 24px; top: 30px; width: 10px; height: 10px; border-radius: 50%; background: #5495f3; }

@@ -88,7 +88,7 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
 
 // Fixed category list — matches the WeWeb `Cat_Articles` variable (not derived from the data).
-const CATS = ['Общая практика', 'Остеопатия', 'Психология', 'Кинезиология'];
+const CATS = ['Общая практика', 'Остеопатия', 'Психология', 'Кинезиология', 'Обзоры PubMed'];
 const COVER_FALLBACK = 'https://sb.meetgu.ru/storage/v1/object/public/profile//image_16x9_enhanced.png';
 const LIST_COLS = 'id, created_at, "Title", "Content", "Image", "Category", "Rating", "Comments", "slug", "Creator"';
 

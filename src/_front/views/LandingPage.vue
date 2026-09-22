@@ -259,21 +259,29 @@ const advantages = [
     { icon: IC.community, title: 'Кинезио-сообщество', text: 'Сообщество объединяет специалистов, увлечённых новыми знаниями. Взаимодействуйте и развивайтесь с единомышленниками.' },
 ];
 
-// Contact form. NOTE: on this demo route the submit is a LOCAL success state only — it does not
-// send anywhere. Real delivery (n8n webhook, like LoginPage's reset flow) is wired at ship time.
+// Contact form → notifies adv@meetgu.ru via the meetguru-lead n8n webhook (Unisender email). Same
+// pattern as LoginPage's password reset: fire-and-confirm — a network error still shows success so
+// the visitor is never blocked (the lead may just need a retry).
 const form = reactive({ name: '', phone: '' });
 const sent = ref(false);
 const busy = ref(false);
 const error = ref('');
-function submitForm() {
+const N8N_LEAD = 'https://n8n.meetgu.ru/webhook/meetguru-lead';
+async function submitForm() {
     error.value = '';
     if (!form.name || form.phone.replace(/\D/g, '').length < 10) {
         error.value = 'Укажите имя и корректный телефон.';
         return;
     }
     busy.value = true;
-    // Phase 5: POST { name, phone } to the leads n8n webhook here.
-    setTimeout(() => { busy.value = false; sent.value = true; }, 350);
+    try {
+        await fetch(N8N_LEAD, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source: 'Главная', name: form.name, phone: form.phone }),
+        });
+    } catch (e) { /* keep parity with the reset flow: always confirm */ }
+    finally { busy.value = false; sent.value = true; }
 }
 
 function go(path) { router.push(path); }

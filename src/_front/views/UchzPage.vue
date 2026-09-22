@@ -125,20 +125,28 @@ const values = [
     { icon: I('<path d="M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-7M2 7h20v5H2zM12 7v13M12 7S9.5 3 7.5 4.2 8 7 12 7zM12 7s2.5-4 4.5-2.8S16 7 12 7z"/>'), title: 'Без затрат', text: 'Никаких вложений и абонентской платы — платформа зарабатывает вместе с вами, а не до этого.' },
 ];
 
-// Contact form. NOTE: local success only on the demo route — real delivery (n8n leads webhook) is
-// wired at ship time, same pattern as LoginPage's reset flow.
+// Contact form → notifies adv@meetgu.ru via the meetguru-lead n8n webhook (Unisender email). Same
+// pattern as LoginPage's password reset: fire-and-confirm — a network error still shows success.
 const form = reactive({ org: '', phone: '' });
 const sent = ref(false);
 const busy = ref(false);
 const error = ref('');
-function submitForm() {
+const N8N_LEAD = 'https://n8n.meetgu.ru/webhook/meetguru-lead';
+async function submitForm() {
     error.value = '';
     if (!form.org || form.phone.replace(/\D/g, '').length < 10) {
         error.value = 'Укажите название заведения и корректный телефон.';
         return;
     }
     busy.value = true;
-    setTimeout(() => { busy.value = false; sent.value = true; }, 350);
+    try {
+        await fetch(N8N_LEAD, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source: 'Учебные заведения', name: form.org, phone: form.phone }),
+        });
+    } catch (e) { /* keep parity with the reset flow: always confirm */ }
+    finally { busy.value = false; sent.value = true; }
 }
 
 function go(path) { router.push(path); }

@@ -229,6 +229,23 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Hand-added standalone page: the /spikeram-demo marketing subpage (DEMO; see
+// src/_front/views/SpikeramPage.vue). Physical dist/spikeram-demo/index.html for direct hits.
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['spikeram-demo-en'] = {
+            ..._tpl,
+            outputDir: './spikeram-demo',
+            title: 'Спикерам — публикуйте курсы и зарабатывайте | МитГуру',
+            meta: [
+                { name: 'title', content: 'Спикерам — публикуйте курсы и зарабатывайте | МитГуру' },
+                { name: 'description', content: 'Станьте спикером платформы оздоровления: публикуйте курсы, находите учеников и зарабатывайте. Быстрый старт, вывод средств на любое юрлицо, без абонентской платы.' },
+            ],
+        };
+    }
+}
+
 // Hand-added standalone page: the /about-demo promo-styled about page (DEMO; see
 // src/_front/views/AboutPage.vue). Physical dist/about-demo/index.html for direct hits.
 {

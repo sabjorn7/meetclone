@@ -10,6 +10,7 @@ import CoursePage from './views/CoursePage.vue';
 import AllCoursesPage from './views/AllCoursesPage.vue';
 import HomePage from './views/HomePage.vue';
 import LandingPage from './views/LandingPage.vue';
+import UchenikamPage from './views/UchenikamPage.vue';
 import AboutPage from './views/AboutPage.vue';
 import ClubsPage from './views/ClubsPage.vue';
 import ChatsPage from './views/ChatsPage.vue';
@@ -394,6 +395,14 @@ routes.push({
     path: '/landing-demo',
     name: 'landing-demo',
     component: LandingPage,
+});
+
+// DEMO: public "Специалистам/Ученикам" subpage (/uchenikam-demo; see UchenikamPage.vue). Phase 2 of
+// the Tilda migration. Physical dist/uchenikam-demo/index.html via a matching vite.config.js entry.
+routes.push({
+    path: '/uchenikam-demo',
+    name: 'uchenikam-demo',
+    component: UchenikamPage,
 });
 
 // DEMO: promo-styled about page (/about-demo; see src/_front/views/AboutPage.vue).

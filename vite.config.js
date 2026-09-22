@@ -212,6 +212,23 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Hand-added standalone page: the /uchenikam-demo marketing subpage (DEMO; see
+// src/_front/views/UchenikamPage.vue). Physical dist/uchenikam-demo/index.html for direct hits.
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['uchenikam-demo-en'] = {
+            ..._tpl,
+            outputDir: './uchenikam-demo',
+            title: 'Специалистам — обучение оздоровлению | МитГуру',
+            meta: [
+                { name: 'title', content: 'Специалистам — обучение оздоровлению | МитГуру' },
+                { name: 'description', content: 'Курсы и семинары по оздоровлению от ведущих экспертов России. Осваивайте разные подходы к работе с телом и здоровьем, помогайте людям и стройте востребованную профессию.' },
+            ],
+        };
+    }
+}
+
 // Hand-added standalone page: the /about-demo promo-styled about page (DEMO; see
 // src/_front/views/AboutPage.vue). Physical dist/about-demo/index.html for direct hits.
 {

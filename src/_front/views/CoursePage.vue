@@ -199,7 +199,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
-import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
+import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
 import { getBuyerRow, ownsCourse, enrollFree, addToCart, courseInCart } from '@/_front/course/coursesApi.js';
 
@@ -393,7 +393,7 @@ async function load() {
         const { count } = await sb.from('user_course').select('id', { count: 'exact', head: true }).eq('course', course.value.id);
         students.value = count || 0;
         // purchase state: is the viewer logged in, and do they already own this course?
-        buyerId.value = readStoredSession()?.user?.id || null;
+        buyerId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null;
         if (buyerId.value) {
             owns.value = await ownsCourse(sb, course.value.id, buyerId.value);
             // for any paid course, note if it's already in the cart (a fresh buy OR an owner's renewal)

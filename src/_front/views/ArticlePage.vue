@@ -190,7 +190,7 @@ import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { marked } from 'marked';
 import mediumZoom from 'medium-zoom';
-import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
+import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import { listBlockedUserIds, blockUser, reportContent } from '@/_front/moderation/moderationApi.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -292,7 +292,7 @@ async function ensureUsers(ids) {
 /* ── load ───────────────────────────────────────────────────────────────── */
 async function load() {
     sb = getSupabase();
-    myId.value = readStoredSession()?.user?.id || null;
+    myId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null;
     if (!sb) { loading.value = false; return; }
     if (myId.value) { try { blockedIds.value = new Set(await listBlockedUserIds(myId.value)); } catch (e) { /* non-fatal */ } }
 

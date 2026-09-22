@@ -94,7 +94,7 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue';
-import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
+import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 
 const clubs = ref([]);        // active clubs (catalog)
 const mySubs = ref([]);       // [{ id, end_date, club }] — the user's active subscriptions
@@ -134,7 +134,7 @@ function subCount(club) { return subCountById.value[club?.id] || 0; }
 async function load() {
     const sb = getSupabase();
     if (!sb) { loading.value = false; return; }
-    const uid = readStoredSession()?.user?.id;
+    const uid = readStoredSession()?.user?.id || authCookieUser()?.id;
 
     const { data: cl } = await sb.from('clubs')
         .select('id, title, short_descr, label, price, subs, owner, active')

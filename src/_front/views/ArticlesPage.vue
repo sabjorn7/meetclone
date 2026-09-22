@@ -85,7 +85,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
+import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 
 // Fixed category list — matches the WeWeb `Cat_Articles` variable (not derived from the data).
 const CATS = ['Общая практика', 'Остеопатия', 'Психология', 'Кинезиология', 'Обзоры PubMed'];
@@ -134,7 +134,7 @@ function onDocClick(e) { if (!e.target.closest('.pd-select')) catOpen.value = fa
 
 async function load() {
     sb = getSupabase();
-    myId.value = readStoredSession()?.user?.id || null;
+    myId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null;
     if (!sb) { loading.value = false; return; }
 
     const { data } = await sb.from('articles').select(LIST_COLS).eq('Status', 'Опубликовано').order('created_at', { ascending: false });

@@ -89,7 +89,7 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue';
-import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
+import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 
 const PER_PAGE = 50;
 const DEFAULT_NAME = 'Новый пользователь';   // unnamed users — pushed to the end of the list
@@ -195,7 +195,7 @@ onMounted(async () => {
     ensureFonts();
     applySeo();
     sb = getSupabase();
-    myId.value = readStoredSession()?.user?.id || null;
+    myId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null;
     await fetchUsers();
     await nextTick();
     ready.value = true;

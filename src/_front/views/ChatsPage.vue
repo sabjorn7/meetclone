@@ -301,7 +301,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
-import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
+import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import { listBlockedUserIds, blockUser, unblockUser, reportContent } from '@/_front/moderation/moderationApi.js';
 import { uploadChatFile, validateFile, formatBytes, ACCEPT_ATTR, pickAudioFormat, audioRecordingSupported } from '@/_front/helpers/chatAttachments.js';
 import VoiceMessagePlayer from '@/_front/components/VoiceMessagePlayer.vue';
@@ -416,7 +416,7 @@ function canRemove(c, uid) { return uid === myId.value ? true : isCreator(c); }
 
 async function load() {
     sb = getSupabase();
-    myId.value = readStoredSession()?.user?.id || null;
+    myId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null;
     if (!sb || !myId.value) { loading.value = false; return; }
     try { blockedIds.value = new Set(await listBlockedUserIds(myId.value)); } catch (e) { /* non-fatal */ }
 

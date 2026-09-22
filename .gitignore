@@ -50,6 +50,10 @@ dist/
 /faq/
 /feedback/
 /home-demo/
+/landing-demo/
+/uchenikam-demo/
+/spikeram-demo/
+/uchz-demo/
 /kinesis/
 /login/
 /login-demo/
@@ -82,3 +86,4 @@ dist/
 # ---------------------------------------------------------------------------
 .DS_Store
 *.log
+dist-landing/

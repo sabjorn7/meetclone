@@ -58,9 +58,12 @@ import { useRouter } from 'vue-router';
 
 defineProps({ note: { type: String, default: '' } });
 
-const router = useRouter();
+// Router is present in the app build but NOT in the standalone meetgu.ru landing build
+// (src/_landing) — guard useRouter() and fall back to the app host so footer links still work there.
+let router = null;
+try { router = useRouter(); } catch (e) { router = null; }
 const year = 2026;
-function go(path) { router.push(path); }
+function go(path) { if (router) router.push(path); else window.location.href = 'https://app.meetgu.ru' + path; }
 const rustoreUrl = 'https://www.rustore.ru/catalog/app/ru.meetguru.mobile';
 
 const columns = [

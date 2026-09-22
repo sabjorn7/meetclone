@@ -209,7 +209,10 @@
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 
-const router = useRouter();
+// Router is present in the app build (/landing-demo) but NOT in the standalone meetgu.ru landing
+// build (src/_landing) — useRouter() returns undefined there, so guard it and fall back to the app host.
+let router = null;
+try { router = useRouter(); } catch (e) { router = null; }
 const rootEl = ref(null);
 
 // "Как это работает" video: custom cover (community-network.jpg) + play button that starts the
@@ -284,7 +287,8 @@ async function submitForm() {
     finally { busy.value = false; sent.value = true; }
 }
 
-function go(path) { router.push(path); }
+// In-app (router present) → SPA nav; standalone landing build (no router) → open the path on the app host.
+function go(path) { if (router) router.push(path); else window.location.href = 'https://app.meetgu.ru' + path; }
 
 const reduce = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 

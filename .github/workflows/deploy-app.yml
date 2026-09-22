@@ -30,6 +30,10 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Standalone marketing landing for meetgu.ru (fully isolated build → dist-landing/).
+      - name: Build landing
+        run: npm run build:landing
+
       # Atomic-ish two-phase deploy to avoid the cache-poisoning race: a single `rsync --delete` has a
       # window where the new index.html is live but its new hashed chunk (assets/main-<hash>.js) hasn't
       # uploaded yet — a browser loading in that window caches an empty chunk and white-screens until a
@@ -57,4 +61,28 @@ jobs:
           REMOTE_PORT: ${{ secrets.DEPLOY_PORT }}
           SOURCE: "dist/"
           TARGET: "/home/arseny/www-app/"
+          ARGS: "-rlgoDzvc -i --delete"
+
+      # ── Landing (meetgu.ru) — same two-phase deploy to avoid the chunk cache-poisoning race ──
+      - name: Deploy landing assets first (no delete)
+        uses: easingthemes/ssh-deploy@v6
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}
+          REMOTE_USER: ${{ secrets.DEPLOY_USER }}
+          REMOTE_PORT: ${{ secrets.DEPLOY_PORT }}
+          SOURCE: "dist-landing/"
+          TARGET: "/home/arseny/www-landing/"
+          ARGS: "-rlgoDzvc -i"
+          EXCLUDE: "*.html"
+
+      - name: Deploy landing HTML + prune stale (delete)
+        uses: easingthemes/ssh-deploy@v6
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.DEPLOY_HOST }}
+          REMOTE_USER: ${{ secrets.DEPLOY_USER }}
+          REMOTE_PORT: ${{ secrets.DEPLOY_PORT }}
+          SOURCE: "dist-landing/"
+          TARGET: "/home/arseny/www-landing/"
           ARGS: "-rlgoDzvc -i --delete"

@@ -8,9 +8,10 @@
 
 <script>
 import { reactive, computed, provide, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import AppHeader from '@/_front/chrome/AppHeader.vue';
 import AppFooter from '@/_front/chrome/AppFooter.vue';
+import { isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
 
 // The new MeetGuru chrome (AppHeader/AppFooter) is the DEFAULT on every route. This is a denylist,
 // not an allowlist: to fast-rollback a single page to the old WeWeb chrome, add its normalized path
@@ -52,6 +53,7 @@ export default {
         provide('wwFrontState', wwFrontState);
 
         const route = useRoute();
+        const router = useRouter();
         // Normalize the trailing slash: direct hits on the live site (nginx) canonicalize
         // "/about_meet" -> "/about_meet/", which an exact match would miss.
         const normPath = (p) => (p || '').replace(/\/+$/, '') || '/';
@@ -65,9 +67,15 @@ export default {
             document.documentElement.classList.toggle('mg-newchrome', on);
         }, { immediate: true });
 
-        // The root "/" no longer redirects guests to /all_course: RootPage.vue renders the public
-        // marketing LandingPage for guests and the HomePage dashboard for logged-in users, so guests
-        // stay on "/" and see the landing (this is the meetgu.ru home).
+        // The home route "/" is the logged-in dashboard. Guests are redirected to the public catalog
+        // instead of an empty "Здравствуйте, undefined" dashboard. The public marketing landing lives
+        // on the SEPARATE meetgu.ru build (src/_landing/*), not on app.meetgu.ru. "Logged in?" via
+        // isLikelyLoggedIn() (sb-refresh/access cookie OR persisted localStorage; fails OPEN).
+        function redirectGuestFromHome(path) {
+            if (normPath(path) !== '/') return;
+            if (!isLikelyLoggedIn()) router.replace('/all_course');
+        }
+        watch(() => route.path, redirectGuestFromHome, { immediate: true });
 
         return { useNewChrome };
     },

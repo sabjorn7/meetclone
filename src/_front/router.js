@@ -10,7 +10,6 @@ import CoursePage from './views/CoursePage.vue';
 import AllCoursesPage from './views/AllCoursesPage.vue';
 import HomePage from './views/HomePage.vue';
 import LandingPage from './views/LandingPage.vue';
-import RootPage from './views/RootPage.vue';
 import UchenikamPage from './views/UchenikamPage.vue';
 import SpikeramPage from './views/SpikeramPage.vue';
 import UchzPage from './views/UchzPage.vue';
@@ -255,10 +254,10 @@ const PAGE_OVERRIDES = [
     { path: '/my_courses', name: 'my_courses', component: MyCoursePage, wwPath: 'my_courses' },
     // Course catalog: promo-styled AllCoursesPage replaces the WeWeb `all_course` page.
     { path: '/all_course', name: 'all-course', component: AllCoursesPage, wwPath: 'all_course' },
-    // Root "/": RootPage picks the public marketing LandingPage for guests and the promo-styled
-    // HomePage dashboard for logged-in users (replaces the WeWeb Home, paths.default 'home'). The
-    // old guest→/all_course redirect is removed from App.vue so guests stay on "/" and see the landing.
-    { path: '/', name: 'home', component: RootPage, wwPath: 'home' },
+    // Logged-in home ("/"): promo-styled HomePage replaces the WeWeb Home (paths.default 'home').
+    // Guests are redirected to /all_course by App.vue (the public marketing landing lives on the
+    // separate meetgu.ru build, not on app.meetgu.ru).
+    { path: '/', name: 'home', component: HomePage, wwPath: 'home' },
     // About: promo-styled AboutPage replaces the WeWeb `about_meet` page.
     { path: '/about_meet', name: 'about-meet', component: AboutPage, wwPath: 'about_meet' },
     // Clubs (MeetClub): promo-styled ClubsPage replaces the WeWeb `clubs` catalog (read-only; the

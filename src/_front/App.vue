@@ -8,10 +8,9 @@
 
 <script>
 import { reactive, computed, provide, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import AppHeader from '@/_front/chrome/AppHeader.vue';
 import AppFooter from '@/_front/chrome/AppFooter.vue';
-import { isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
 
 // The new MeetGuru chrome (AppHeader/AppFooter) is the DEFAULT on every route. This is a denylist,
 // not an allowlist: to fast-rollback a single page to the old WeWeb chrome, add its normalized path
@@ -53,7 +52,6 @@ export default {
         provide('wwFrontState', wwFrontState);
 
         const route = useRoute();
-        const router = useRouter();
         // Normalize the trailing slash: direct hits on the live site (nginx) canonicalize
         // "/about_meet" -> "/about_meet/", which an exact match would miss.
         const normPath = (p) => (p || '').replace(/\/+$/, '') || '/';
@@ -67,20 +65,9 @@ export default {
             document.documentElement.classList.toggle('mg-newchrome', on);
         }, { immediate: true });
 
-        // The home route "/" is the logged-in dashboard ("моя страница"). Guests get redirected to
-        // the public catalog instead of an empty "Здравствуйте, undefined" dashboard. Lives here
-        // (not in a router guard) because router.js is a large generated file that the Rolldown
-        // build chokes on when edited; App.vue is the safe place to hook route changes.
-        //
-        // "Logged in?" is decided by isLikelyLoggedIn() (headerAccount.js): the sb-refresh/access
-        // cookie OR a persisted localStorage session — NOT sb.auth.getSession() (which can hang on
-        // Web Locks) and NOT localStorage alone (which can be stale/cleared, wrongly bouncing a real
-        // user). It fails OPEN, so we only ever redirect when we are confident this is a guest.
-        function redirectGuestFromHome(path) {
-            if (normPath(path) !== '/') return;
-            if (!isLikelyLoggedIn()) router.replace('/all_course');
-        }
-        watch(() => route.path, redirectGuestFromHome, { immediate: true });
+        // The root "/" no longer redirects guests to /all_course: RootPage.vue renders the public
+        // marketing LandingPage for guests and the HomePage dashboard for logged-in users, so guests
+        // stay on "/" and see the landing (this is the meetgu.ru home).
 
         return { useNewChrome };
     },

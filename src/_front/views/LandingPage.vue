@@ -107,13 +107,25 @@
                 </div>
                 <div class="pd-video" data-reveal>
                     <video
+                        ref="videoEl"
                         class="pd-video__el"
                         src="/video/how-it-works.mp4"
-                        poster="/video/how-it-works-poster.jpg"
-                        controls
+                        poster="/images/community-network.jpg"
                         playsinline
                         preload="metadata"
+                        :controls="videoStarted"
                     ></video>
+                    <button
+                        v-if="!videoStarted"
+                        class="pd-video__cover"
+                        type="button"
+                        aria-label="Смотреть видео — как работает платформа"
+                        @click="playVideo"
+                    >
+                        <span class="pd-video__play" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                        </span>
+                    </button>
                 </div>
             </div>
         </section>
@@ -199,6 +211,16 @@ import { useRouter } from 'vue-router';
 
 const router = useRouter();
 const rootEl = ref(null);
+
+// "Как это работает" video: custom cover (community-network.jpg) + play button that starts the
+// self-hosted clip and reveals native controls.
+const videoEl = ref(null);
+const videoStarted = ref(false);
+function playVideo() {
+    videoStarted.value = true;
+    const v = videoEl.value;
+    if (v) { v.play?.().catch(() => {}); }
+}
 
 // Phosphor-style line icons (MIT), single 1.6 stroke, sized via CSS.
 const IC = {
@@ -424,6 +446,14 @@ function ensureFonts() {
 /* ── How it works (video) ───────────────────────────────────────────────── */
 .pd-video { position: relative; width: 100%; max-width: 960px; margin: 0 auto; aspect-ratio: 16 / 9; border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--line); background: #000; }
 .pd-video__el { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; object-fit: cover; background: #000; }
+.pd-video__cover { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; padding: 0; cursor: pointer; display: grid; place-items: center; background-image: linear-gradient(rgba(9, 23, 71, 0.06), rgba(9, 23, 71, 0.16)), url('/images/community-network.jpg'); background-size: cover; background-position: center; }
+.pd-video__play { display: grid; place-items: center; width: 84px; height: 84px; border-radius: 50%; background: var(--blue); box-shadow: 0 14px 34px -10px rgba(46, 112, 221, 0.75); transition: transform 0.18s var(--ease-out), background 0.18s var(--ease-out); }
+.pd-video__play svg { width: 34px; height: 34px; margin-left: 4px; fill: #fff; }
+@media (hover: hover) and (pointer: fine) {
+    .pd-video__cover:hover .pd-video__play { transform: scale(1.08); background: var(--blue-strong); }
+}
+.pd-video__cover:focus-visible { outline: 3px solid var(--blue-ink); outline-offset: -3px; }
+@media (prefers-reduced-motion: reduce) { .pd-video__play { transition: none; } }
 
 /* ── Advantages cards ───────────────────────────────────────────────────── */
 .pd-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }

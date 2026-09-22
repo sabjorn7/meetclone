@@ -195,6 +195,23 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Hand-added standalone page: the /landing-demo public marketing landing (DEMO; see
+// src/_front/views/LandingPage.vue). Physical dist/landing-demo/index.html for direct hits.
+{
+    const _tpl = pages['cf9f551f-e733-4934-a682-535575cb7c70-en'] || Object.values(pages)[0];
+    if (_tpl) {
+        pages['landing-demo-en'] = {
+            ..._tpl,
+            outputDir: './landing-demo',
+            title: 'МитГуру — сообщество кинезиологов и платформа курсов',
+            meta: [
+                { name: 'title', content: 'МитГуру — сообщество кинезиологов и платформа курсов' },
+                { name: 'description', content: 'Первое онлайн-сообщество прикладных кинезиологов: курсы от ведущих экспертов, собственная школа и площадка, чтобы делиться знаниями и зарабатывать.' },
+            ],
+        };
+    }
+}
+
 // Hand-added standalone page: the /about-demo promo-styled about page (DEMO; see
 // src/_front/views/AboutPage.vue). Physical dist/about-demo/index.html for direct hits.
 {

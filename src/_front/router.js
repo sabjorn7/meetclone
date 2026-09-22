@@ -9,6 +9,7 @@ import ProfilePage from './views/ProfilePage.vue';
 import CoursePage from './views/CoursePage.vue';
 import AllCoursesPage from './views/AllCoursesPage.vue';
 import HomePage from './views/HomePage.vue';
+import LandingPage from './views/LandingPage.vue';
 import AboutPage from './views/AboutPage.vue';
 import ClubsPage from './views/ClubsPage.vue';
 import ChatsPage from './views/ChatsPage.vue';
@@ -383,6 +384,16 @@ routes.push({
     path: '/home-demo',
     name: 'home-demo',
     component: HomePage,
+});
+
+// DEMO: public marketing landing (/landing-demo; see src/_front/views/LandingPage.vue). Phase 1 of
+// the Tilda → self-host migration. Reviewed here first; the guest "/" soft-swap (App.vue redirect)
+// is the ship step after design sign-off. A physical dist/landing-demo/index.html is produced via a
+// matching entry in vite.config.js for direct hits on prod (no SPA fallback there).
+routes.push({
+    path: '/landing-demo',
+    name: 'landing-demo',
+    component: LandingPage,
 });
 
 // DEMO: promo-styled about page (/about-demo; see src/_front/views/AboutPage.vue).

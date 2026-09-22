@@ -55,11 +55,11 @@
                         <div class="pd-dash__stats">
                             <div class="pd-dash__stat">
                                 <span class="pd-dash__l">Продаж</span>
-                                <span class="pd-dash__n">47</span>
+                                <span class="pd-dash__n">124</span>
                             </div>
                             <div class="pd-dash__stat pd-dash__stat--accent">
                                 <span class="pd-dash__l">На вывод</span>
-                                <span class="pd-dash__n">12&nbsp;040&nbsp;<span class="cur">₽</span></span>
+                                <span class="pd-dash__n">148&nbsp;500&nbsp;<span class="cur">₽</span></span>
                             </div>
                         </div>
                         <div class="pd-dash__chart" aria-hidden="true">

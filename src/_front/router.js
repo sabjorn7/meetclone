@@ -12,6 +12,7 @@ import HomePage from './views/HomePage.vue';
 import LandingPage from './views/LandingPage.vue';
 import UchenikamPage from './views/UchenikamPage.vue';
 import SpikeramPage from './views/SpikeramPage.vue';
+import UchzPage from './views/UchzPage.vue';
 import AboutPage from './views/AboutPage.vue';
 import ClubsPage from './views/ClubsPage.vue';
 import ChatsPage from './views/ChatsPage.vue';
@@ -412,6 +413,14 @@ routes.push({
     path: '/spikeram-demo',
     name: 'spikeram-demo',
     component: SpikeramPage,
+});
+
+// DEMO: public "Учебным заведениям" subpage (/uchz-demo; see UchzPage.vue). Phase 4 of the Tilda
+// migration. Physical dist/uchz-demo/index.html via a matching vite.config.js entry.
+routes.push({
+    path: '/uchz-demo',
+    name: 'uchz-demo',
+    component: UchzPage,
 });
 
 // DEMO: promo-styled about page (/about-demo; see src/_front/views/AboutPage.vue).

@@ -120,7 +120,7 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue';
-import { getSupabase, readStoredSession } from '@/_front/chrome/headerAccount.js';
+import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
 import { listPublishedEvents } from '@/_front/streams/eventsApi.js';
 
@@ -191,7 +191,11 @@ function pl(n, f) {
 
 async function load() {
     const sb = getSupabase();
-    const uid = readStoredSession()?.user?.id;
+    // uid from localStorage OR the sb-access-token cookie. The cookie is domain-scoped to .meetgu.ru
+    // (shared across meetgu.ru + app.meetgu.ru) while localStorage is per-origin, so a user who signed
+    // in on one host has no localStorage session on the other — without the cookie fallback uid would
+    // be null there and «Ваши курсы» would render empty. Same fallback as MyCoursePage/ProfileEditPage.
+    const uid = readStoredSession()?.user?.id || authCookieUser()?.id;
     if (!sb || !uid) { loading.value = false; return; }
 
     const { data: urows } = await sb.from('users').select('"Name", last_open').eq('id', uid).limit(1);

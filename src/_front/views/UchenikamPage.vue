@@ -157,7 +157,9 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 
-const router = useRouter();
+// Router-optional: present in the app build, absent in the standalone meetgu.ru landing build.
+let router = null;
+try { router = useRouter(); } catch (e) { router = null; }
 const rootEl = ref(null);
 
 // Phosphor-style line icons (MIT), 1.6 stroke, attributes baked in (so v-html-injected SVGs render
@@ -196,7 +198,7 @@ const audience = [
     { icon: IC.dumbbell, title: 'Спортивные тренеры', text: 'Стройте план тренировок с точки зрения здоровья и грамотно работайте с отстающими группами мышц.' },
 ];
 
-function go(path) { router.push(path); }
+function go(path) { if (router) router.push(path); else window.location.href = 'https://app.meetgu.ru' + path; }
 const reduce = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 let io = null;

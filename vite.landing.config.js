@@ -22,7 +22,13 @@ export default defineConfig({
         outDir: path.resolve(__dirname, 'dist-landing'),
         emptyOutDir: true,
         rollupOptions: {
-            input: path.resolve(__dirname, 'landing.html'),
+            input: {
+                main: path.resolve(__dirname, 'landing.html'),        // meetgu.ru/
+                onas: path.resolve(__dirname, 'onas.html'),           // meetgu.ru/onas
+                spikeram: path.resolve(__dirname, 'spikeram.html'),   // meetgu.ru/spikeram
+                uchenikam: path.resolve(__dirname, 'uchenikam.html'), // meetgu.ru/uchenikam
+                uchz: path.resolve(__dirname, 'uchz.html'),           // meetgu.ru/uchz
+            },
         },
     },
 });

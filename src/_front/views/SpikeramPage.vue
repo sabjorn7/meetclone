@@ -127,7 +127,9 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 
-const router = useRouter();
+// Router-optional: present in the app build, absent in the standalone meetgu.ru landing build.
+let router = null;
+try { router = useRouter(); } catch (e) { router = null; }
 const rootEl = ref(null);
 
 const bars = [38, 52, 46, 64, 58, 76, 70];
@@ -166,7 +168,7 @@ const steps = [
     },
 ];
 
-function go(path) { router.push(path); }
+function go(path) { if (router) router.push(path); else window.location.href = 'https://app.meetgu.ru' + path; }
 const reduce = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function scrollTo(id) {
     const el = document.getElementById(id);

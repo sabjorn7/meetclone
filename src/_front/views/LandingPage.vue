@@ -64,39 +64,8 @@
             </div>
         </header>
 
-        <!-- ── AUDIENCE TABS (Студент / Спикер / Учебное заведение) ── -->
-        <section class="pd-section pd-audience">
-            <div class="pd-wrap">
-                <div class="pd-head" data-reveal>
-                    <h2 class="pd-h2">Присоединяйся к сообществу</h2>
-                    <p class="pd-head__note">Платформа работает для всех сторон обучения — выберите свою роль.</p>
-                </div>
-                <div class="pd-tabs" data-reveal>
-                    <div class="pd-tabs__row" role="tablist" aria-label="Роли на платформе">
-                        <button
-                            v-for="(t, i) in tabs"
-                            :key="t.key"
-                            class="pd-tab"
-                            :class="{ 'is-active': activeTab === i }"
-                            type="button"
-                            role="tab"
-                            :aria-selected="activeTab === i ? 'true' : 'false'"
-                            @click="activeTab = i"
-                        >
-                            <span class="pd-tab__ic" v-html="t.icon" aria-hidden="true"></span>
-                            {{ t.label }}
-                        </button>
-                    </div>
-                    <div class="pd-tabs__panel" role="tabpanel">
-                        <p class="pd-tabs__text">{{ tabs[activeTab].text }}</p>
-                        <a class="pd-ghost" :href="tabs[activeTab].href" @click.prevent="go(tabs[activeTab].href)">
-                            {{ tabs[activeTab].cta }}
-                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </section>
+        <!-- ── AUDIENCE TABS (shared component; also used on /onas) ── -->
+        <AudienceTabs />
 
         <!-- ── HOW IT WORKS (Kinescope demo) ──────────────────────── -->
         <section class="pd-section pd-section--tint">
@@ -208,6 +177,7 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
+import AudienceTabs from '@/_front/components/AudienceTabs.vue';
 
 // Router is present in the app build (/landing-demo) but NOT in the standalone meetgu.ru landing
 // build (src/_landing) — useRouter() returns undefined there, so guard it and fall back to the app host.
@@ -227,8 +197,6 @@ function playVideo() {
 
 // Phosphor-style line icons (MIT), single 1.6 stroke, sized via CSS.
 const IC = {
-    mic: '<svg viewBox="0 0 24 24" class="pd-ic" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6"/></svg>',
-    school: '<svg viewBox="0 0 24 24" class="pd-ic" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9l8-5 8 5v12M9 21v-6h6v6"/></svg>',
     clock: '<svg viewBox="0 0 24 24" class="pd-ic" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
     video: '<svg viewBox="0 0 24 24" class="pd-ic" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>',
     chat: '<svg viewBox="0 0 24 24" class="pd-ic" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-5.3A8 8 0 1 1 21 12z"/></svg>',
@@ -236,22 +204,6 @@ const IC = {
     teacher: '<svg viewBox="0 0 24 24" class="pd-ic" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.6a3 3 0 0 1 0 5.5M20.5 19a5 5 0 0 0-3.4-4.7"/></svg>',
     community: '<svg viewBox="0 0 24 24" class="pd-ic" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18"/></svg>',
 };
-
-const tabs = [
-    {
-        key: 'specialist', label: 'Специалист', icon: IC.stethoscope, href: '/all_course', cta: 'Смотреть курсы',
-        text: 'Проходите курсы у ведущих практиков и заполняйте профиль специалиста — вас увидят пациенты в каталоге сообщества и смогут к вам записаться.',
-    },
-    {
-        key: 'speaker', label: 'Спикер', icon: IC.mic, href: '/registration', cta: 'Стать спикером',
-        text: 'Хотите делиться своими знаниями и зарабатывать на этом? У нас вы найдёте идеальные условия для создания и продажи ваших курсов.',
-    },
-    {
-        key: 'school', label: 'Учебное заведение', icon: IC.school, href: '/registration', cta: 'Оставить заявку',
-        text: 'Расширьте доступ к вашим образовательным продуктам и привлекайте больше специалистов с помощью нашей платформы.',
-    },
-];
-const activeTab = ref(0);
 
 const advantages = [
     { icon: IC.clock, title: 'Учитесь в своём темпе', text: 'Обучение дома без строгого расписания. Вы сами задаёте ритм — удобное время и скорость прохождения курсов.' },
@@ -444,16 +396,7 @@ function ensureFonts() {
 @media (prefers-reduced-motion: reduce) { .pd-hero__art-panel { animation: none; } }
 .pd-hero__img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 14px 26px rgba(9, 23, 71, 0.14)); }
 
-/* ── Audience tabs ──────────────────────────────────────────────────────── */
-.pd-tabs__row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 22px; }
-.pd-tab { display: inline-flex; align-items: center; gap: 10px; font-family: inherit; font-weight: 600; font-size: 1rem; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 12px 22px; cursor: pointer; transition: color 0.18s var(--ease-out), border-color 0.18s var(--ease-out), background 0.18s var(--ease-out); }
-.pd-tab__ic { display: grid; place-items: center; color: var(--blue-ink); }
-.pd-tab__ic :deep(.pd-ic) { width: 20px; height: 20px; }
-.pd-tab.is-active { color: #fff; background: var(--blue); border-color: var(--blue); }
-.pd-tab.is-active .pd-tab__ic { color: #fff; }
-@media (hover: hover) and (pointer: fine) { .pd-tab:not(.is-active):hover { border-color: var(--blue-soft); color: var(--ink); } }
-.pd-tabs__panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 34px 36px; box-shadow: var(--shadow-sm); }
-.pd-tabs__text { margin: 0 0 18px; font-size: 1.16rem; color: var(--ink-2); max-width: 68ch; }
+/* Audience tabs moved to the shared AudienceTabs.vue component. */
 
 /* ── How it works (video) ───────────────────────────────────────────────── */
 .pd-video { position: relative; width: 100%; max-width: 960px; margin: 0 auto; aspect-ratio: 16 / 9; border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--line); background: #000; }
@@ -516,12 +459,10 @@ function ensureFonts() {
     .pd-contact { grid-template-columns: 1fr; }
     .pd-contact__l { padding: 34px 28px; }
     .pd-contact__card { padding: 30px 28px; }
-    .pd-tabs__panel { padding: 26px 24px; }
 }
 @media (max-width: 560px) {
     .pd-cards { grid-template-columns: 1fr; }
     .pd-hero__cta { gap: 14px; }
     .pd-hero__cta .pd-btn { width: 100%; }
-    .pd-tab { flex: 1 1 auto; justify-content: center; }
 }
 </style>

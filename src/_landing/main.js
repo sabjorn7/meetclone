@@ -1,6 +1,5 @@
-// Standalone marketing landing entry for meetgu.ru — a FULLY ISOLATED build (vite.landing.config.js
-// → dist-landing/). No Vue Router, no Vuex/Pinia, no Supabase, no wwLib, no auth. Just the landing.
-import { createApp } from 'vue';
-import LandingApp from './LandingApp.vue';
+// meetgu.ru/ — the main marketing landing.
+import { mountLanding } from './mount.js';
+import LandingPage from '@/_front/views/LandingPage.vue';
 
-createApp(LandingApp).mount('#app');
+mountLanding(LandingPage);

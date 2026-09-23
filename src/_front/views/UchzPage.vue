@@ -115,7 +115,9 @@
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 
-const router = useRouter();
+// Router-optional: present in the app build, absent in the standalone meetgu.ru landing build.
+let router = null;
+try { router = useRouter(); } catch (e) { router = null; }
 const rootEl = ref(null);
 
 const I = (body) => `<svg viewBox="0 0 24 24" class="pd-ic" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
@@ -149,7 +151,7 @@ async function submitForm() {
     finally { busy.value = false; sent.value = true; }
 }
 
-function go(path) { router.push(path); }
+function go(path) { if (router) router.push(path); else window.location.href = 'https://app.meetgu.ru' + path; }
 const reduce = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function scrollTo(id) {
     const el = document.getElementById(id);

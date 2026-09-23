@@ -42,7 +42,12 @@
             <nav class="mgf__cols" aria-label="Навигация в подвале">
                 <div class="mgf__col" v-for="col in columns" :key="col.title">
                     <h4>{{ col.title }}</h4>
-                    <a v-for="l in col.links" :key="l.path" :href="l.path" @click.prevent="go(l.path)">{{ l.label }}</a>
+                    <template v-for="l in col.links" :key="l.label">
+                        <!-- l.url = absolute external link (e.g. the meetgu.ru marketing subpages,
+                             which exist ONLY on that host); l.path = in-app route via go(). -->
+                        <a v-if="l.url" :href="l.url">{{ l.label }}</a>
+                        <a v-else :href="l.path" @click.prevent="go(l.path)">{{ l.label }}</a>
+                    </template>
                 </div>
             </nav>
         </div>
@@ -69,7 +74,12 @@ const rustoreUrl = 'https://www.rustore.ru/catalog/app/ru.meetguru.mobile';
 const columns = [
     { title: 'Курсы', links: [{ label: 'Все курсы', path: '/all_course' }, { label: 'Трансляции', path: '/streams' }, { label: 'Клуб', path: '/clubs' }] },
     { title: 'Поддержка', links: [{ label: 'Вопросы и ответы', path: '/faq' }, { label: 'Контакты', path: '/contacts' }] },
-    { title: 'Компания', links: [{ label: 'О нас', path: '/about_meet' }, { label: 'Приветствие', path: '/welcome' }] },
+    { title: 'Компания', links: [
+        { label: 'О нас', url: 'https://meetgu.ru/onas' },
+        { label: 'Спикерам', url: 'https://meetgu.ru/spikeram' },
+        { label: 'Ученикам', url: 'https://meetgu.ru/uchenikam' },
+        { label: 'Учебным заведениям', url: 'https://meetgu.ru/uchz' },
+    ] },
     { title: 'Документы', links: [{ label: 'Политика', path: '/politica' }, { label: 'Оферта', path: '/oferta' }, { label: 'Согласие', path: '/soglasie' }, { label: 'Правила отмены', path: '/vozvrat' }] },
 ];
 </script>

@@ -96,7 +96,13 @@
                                 <template v-else>
                                     <img v-if="other(activeChat)?.Photo" class="pd-thread__ava" :src="other(activeChat).Photo" :alt="other(activeChat).Name" />
                                     <span v-else class="pd-thread__ava pd-thread__ava--i">{{ initials(other(activeChat)?.Name) }}</span>
-                                    <b>{{ chatTitle(activeChat) }}</b>
+                                    <a
+                                        v-if="otherId(activeChat)"
+                                        class="pd-thread__name"
+                                        :href="`/profile_page?user=${otherId(activeChat)}`"
+                                        title="Открыть профиль собеседника"
+                                    >{{ chatTitle(activeChat) }}</a>
+                                    <b v-else>{{ chatTitle(activeChat) }}</b>
                                     <span v-if="confirmAction === 'delete'" class="pd-confirm pd-confirm--head">
                                         Удалить диалог?
                                         <button class="pd-btn pd-btn--sm pd-btn--danger" type="button" @click="deleteActiveChat">Да</button>
@@ -963,6 +969,9 @@ function ensureFonts() {
 .pd-thread__ava--grp .pd-ic { width: 22px; height: 22px; }
 .pd-thread__titles { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .pd-thread__titles b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 1-on-1 peer name → clickable link to their profile (/profile_page?user=<id>) */
+.pd-thread__name { color: inherit; text-decoration: none; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: color 0.16s var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .pd-thread__name:hover { color: var(--blue); text-decoration: underline; } }
 .pd-thread__meta { font-weight: 500; font-size: 0.8rem; color: var(--ink-3); }
 .pd-thread__manage { margin-left: auto; flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r-pill); padding: 7px 15px; font-family: inherit; font-size: 0.85rem; font-weight: 600; color: var(--blue-ink); cursor: pointer; transition: background 0.14s, border-color 0.14s; }
 @media (hover: hover) and (pointer: fine) { .pd-thread__manage:hover { background: var(--blue-tint); border-color: var(--blue-soft); } }

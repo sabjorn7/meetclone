@@ -70,6 +70,7 @@
 
                 <button class="mgh__burger" type="button" :aria-expanded="menuOpen ? 'true' : 'false'" aria-label="Меню" @click="menuOpen = !menuOpen">
                     <span :class="{ 'is-x': menuOpen }"></span>
+                    <span v-if="hasUnread && !menuOpen" class="mgh__burger-dot" aria-hidden="true"></span>
                 </button>
             </div>
         </div>
@@ -79,7 +80,10 @@
                 <!-- primary nav is inline on desktop, so it only shows in the burger on mobile -->
                 <a v-for="i in menuItems.slice(0, 4)" :key="i.path" class="mgh__menu-top" :href="i.path" @click.prevent="go(i.path)">{{ i.label }}</a>
                 <template v-if="user">
-                    <a v-for="i in burgerItems" :key="i.path" :href="i.path" @click.prevent="go(i.path)">{{ i.label }}</a>
+                    <a v-for="i in burgerItems" :key="i.path" :href="i.path" @click.prevent="go(i.path)">
+                        {{ i.label }}
+                        <span v-if="i.path === '/chats' && hasUnread" class="mgh__dot" aria-label="Есть непрочитанные сообщения"></span>
+                    </a>
                 </template>
                 <template v-else>
                     <a href="/login" @click.prevent="hardGo('/login')">Войти</a>
@@ -97,6 +101,7 @@ import { useRouter, useRoute } from 'vue-router';
 import {
     getSupabase, loadUser, avatarUrl, initials, loadCart, removeCartItem, cartTotal, signOutUser, checkoutCart,
 } from './headerAccount.js';
+import { hasUnread, initUnread, resetUnread } from './unread.js';
 
 const props = defineProps({
     ctaLabel: { type: String, default: '' },
@@ -178,6 +183,7 @@ async function doCheckout() {
 }
 async function doSignOut() {
     open.value = null; menuOpen.value = false;
+    resetUnread();
     try { await signOutUser(sb); } catch (e) { /* best-effort: still hard-navigate below */ }
     user.value = null; cart.value = [];
     // Full reload to the public catalog: clears WeWeb's cached auth everywhere (a plain
@@ -222,6 +228,7 @@ onMounted(async () => {
         cartChannel = sb.channel('mgh-cart')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'shop' }, () => reloadCart())
             .subscribe();
+        initUnread(); // global unread-messages badge (own `chats` realtime channel)
     }
 });
 onBeforeUnmount(() => {
@@ -316,6 +323,9 @@ function ensureFont() {
 .mgh__burger span::before { top: -7px; }
 .mgh__burger span::after { top: 7px; }
 .mgh__burger span.is-x { background: transparent; }
+/* unread-messages indicators (orange dot, no count) */
+.mgh__burger-dot { position: absolute; top: 7px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #ff6a1a; box-shadow: 0 0 0 2px #fff; }
+.mgh__dot { display: inline-block; width: 8px; height: 8px; margin-left: 7px; border-radius: 50%; background: #ff6a1a; vertical-align: middle; }
 .mgh__burger span.is-x::before { transform: translateY(7px) rotate(45deg); }
 .mgh__burger span.is-x::after { transform: translateY(-7px) rotate(-45deg); }
 

@@ -2,8 +2,14 @@
   ArticlesManagePage.vue — hand-written "Управление статьями" (replaces the WeWeb /articles_manage).
   Phase 1: list the author's articles + create/edit/submit-for-moderation/soft-delete, with a
   hand-written cover upload (fixes the WeWeb file-upload crash: jOe._removeEmptyFolders reading
-  .replace of undefined) and a TipTap rich-text editor for the article body. Article PeerTube video
-  is Phase 2.
+  .replace of undefined) and a TipTap rich-text editor for the article body.
+  Phase 2: (a) PeerTube article video — reuses the shared peertubeUpload primitives (same chunked
+  resumable upload as course/lesson video), but writes to the article's `video_resume_id` resume
+  column (courses use `resume_video_id`). The public ArticlePage already renders `video_id`.
+  (b) Versioning (Variant A — single previous snapshot, no full history): on save, the last-saved
+  Content is stashed into `Content_Version` + `Date_Version` is stamped, and a one-step
+  "restore previous version" loads that snapshot back into the editor. `Versions[]` is left unused
+  (it was never populated by the WeWeb page and has no backing table).
 
   ACCESS: creator-only surface (same gate as the header nav / CoursesManagePage): role ∈
   {Спикер, Учебное заведение, admin}; guests → /login, non-creators → /.
@@ -111,6 +117,38 @@
                         <p v-if="coverError" class="pd-alert pd-alert--err">{{ coverError }}</p>
                     </div>
 
+                    <!-- video (PeerTube) -->
+                    <div class="pd-field">
+                        <span class="pd-field__lb">Видео статьи</span>
+                        <div v-if="videoUploading" class="pd-vprog">
+                            <div class="pd-vprog__bar"><span :style="{ transform: `scaleX(${videoProgress / 100})` }"></span></div>
+                            <span class="pd-vprog__t">Загрузка… {{ videoProgress }}%</span>
+                        </div>
+                        <template v-else-if="editing.video_id">
+                            <div class="pd-vframe"><iframe :src="embedUrl(editing.video_id, { autoplay: false })" title="Видео статьи" frameborder="0" allowfullscreen allow="fullscreen; picture-in-picture"></iframe></div>
+                            <div class="pd-vactions">
+                                <label class="pd-btn pd-btn--sm" :class="{ 'is-disabled': videoUploading || !editable }">
+                                    <svg viewBox="0 0 24 24" class="pd-ic"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Заменить
+                                    <input type="file" accept="video/*" class="pd-hidden-file" :disabled="videoUploading || !editable" @change="onArticleVideo" />
+                                </label>
+                                <button type="button" class="pd-btn pd-btn--sm pd-btn--dangerghost" :disabled="videoBusy || !editable" @click="removeArticleVideo">{{ videoBusy ? 'Удаляем…' : 'Удалить' }}</button>
+                            </div>
+                        </template>
+                        <div v-else-if="editing.video_resume_id" class="pd-vresume">
+                            <p class="pd-hint">Загрузка «{{ editing.resume_name || 'видео' }}» не завершена. Выберите тот же файл, чтобы продолжить.</p>
+                            <label class="pd-btn pd-btn--sm" :class="{ 'is-disabled': !editable }">
+                                <svg viewBox="0 0 24 24" class="pd-ic"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Продолжить загрузку
+                                <input type="file" accept="video/*" class="pd-hidden-file" :disabled="!editable" @change="onArticleVideo" />
+                            </label>
+                        </div>
+                        <label v-else class="pd-upload" :class="{ 'is-disabled': !editable }">
+                            <svg viewBox="0 0 24 24" class="pd-ic"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg>
+                            Загрузить видео
+                            <input type="file" accept="video/*" class="pd-hidden-file" :disabled="!editable" @change="onArticleVideo" />
+                        </label>
+                        <p v-if="videoError" class="pd-alert pd-alert--err">{{ videoError }}</p>
+                    </div>
+
                     <!-- content (TipTap) -->
                     <div class="pd-field">
                         <span class="pd-field__lb">Текст статьи</span>
@@ -132,6 +170,13 @@
                                 <button type="button" @click="editor.chain().focus().redo().run()" title="Повторить">↷</button>
                             </div>
                             <EditorContent :editor="editor" class="pd-rte__area" />
+                        </div>
+                        <!-- versioning (Variant A): last-modified date + one-step restore of the previous snapshot -->
+                        <div v-if="editing.Date_Version || editing.Content_Version" class="pd-ver">
+                            <span v-if="editing.Date_Version" class="pd-ver__date">Изменено: {{ fmtDate(editing.Date_Version) }}</span>
+                            <button v-if="editing.Content_Version && editable" type="button" class="pd-ver__btn" :disabled="busy" @click="restorePreviousVersion" title="Загрузить предыдущую версию в редактор — вступит в силу после сохранения">
+                                ↺ Вернуть предыдущую версию
+                            </button>
                         </div>
                     </div>
 
@@ -168,6 +213,8 @@ import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
+import { getUploadToken, uploadVideo, fetchVideoSize } from '@/_front/streams/peertubeUpload.js';
+import { deleteLive, embedUrl } from '@/_front/streams/peertubeLive.js';
 
 const CREATORS = ['Спикер', 'Учебное заведение', 'admin'];
 const CATEGORIES = ['Общая практика', 'Остеопатия', 'Психология', 'Кинезиология', 'Обзоры PubMed'];
@@ -192,6 +239,11 @@ const coverBusy = ref(false);
 const coverError = ref('');
 const imgBusy = ref(false);
 const delConfirm = ref(false);
+// video (PeerTube — shared system account, same as course/lesson video)
+const videoUploading = ref(false);  // true while a chunked upload runs (blocks a second)
+const videoProgress = ref(0);
+const videoBusy = ref(false);       // delete/replace
+const videoError = ref('');
 
 const editable = computed(() => !!editing.value && (editing.value.isCreate || EDITABLE.includes(editing.value.Status)));
 
@@ -248,14 +300,23 @@ function openArticle(a) {
     form.Category = CATEGORIES.includes(a.Category) ? a.Category : CATEGORIES[0];
     form.Image = a.Image || '';
     form.Content = a.Content || '';
-    saveError.value = ''; coverError.value = '';
-    // load the full Content (list query omits it), then set the editor
-    loadContent(a.id);
+    saveError.value = ''; coverError.value = ''; videoError.value = '';
+    // load the full row (list query omits Content / video / version cols), then set the editor
+    loadFull(a.id);
 }
-async function loadContent(id) {
-    const { data } = await sb.from('articles').select('Content').eq('id', id).limit(1);
-    const html = data?.[0]?.Content || '';
+async function loadFull(id) {
+    const { data } = await sb.from('articles')
+        .select('"Content", video_id, video_size, video_resume_id, resume_chunk, resume_name, "Content_Version", "Date_Version"')
+        .eq('id', id).limit(1);
+    const row = data?.[0] || {};
+    const html = row.Content || '';
     form.Content = html;
+    // merge video + version state onto the editing row so the template can read them
+    if (editing.value?.id === id) Object.assign(editing.value, {
+        video_id: row.video_id || null, video_size: row.video_size || null,
+        video_resume_id: row.video_resume_id || null, resume_chunk: row.resume_chunk || null, resume_name: row.resume_name || null,
+        Content_Version: row.Content_Version || null, Date_Version: row.Date_Version || null,
+    });
     editor.value?.commands.setContent(html || '<p></p>');
     editor.value?.setEditable(editable.value);
 }
@@ -292,13 +353,20 @@ async function save(submit) {
     busy.value = true; saveError.value = '';
     try {
         const html = editor.value ? editor.value.getHTML() : form.Content;
+        const prevContent = form.Content || '';   // the content as last saved (becomes the snapshot)
         const patch = { Title: form.Title.trim(), Content: html, Category: form.Category };
         // ensure a stable slug (generate once when empty)
         if (!editing.value.slug) patch.slug = await uniqueSlug(slugify(form.Title), editing.value.id);
+        // Versioning (Variant A): when the body actually changed, stash the previous copy + stamp the date
+        if (prevContent !== html) {
+            patch.Content_Version = prevContent || null;
+            patch.Date_Version = todayISO();
+        }
         if (submit) patch.Status = 'На модерации';
         const { error } = await sb.from('articles').update(patch).eq('id', editing.value.id);
         if (error) throw error;
         Object.assign(editing.value, patch);
+        form.Content = html;   // the just-saved content is the new "previous" for the next save
         patchListRow(editing.value.id, { Title: patch.Title, Category: patch.Category, slug: patch.slug ?? editing.value.slug, Status: patch.Status ?? editing.value.Status, Image: form.Image });
         if (submit) { closeEditor(); }
         else { editor.value?.setEditable(editable.value); }
@@ -379,6 +447,65 @@ function setLink() {
     if (url === null) return;
     if (url === '') { editor.value.chain().focus().extendMarkRange('link').unsetLink().run(); return; }
     editor.value.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+}
+
+// ── article video (PeerTube — shared system account) ────────────────────────
+// Same chunked resumable upload as course/lesson video (peertubeUpload.js), but articles use
+// `video_resume_id` for the resume-upload id where course/lesson use `resume_video_id`.
+async function runArticleVideoUpload(file) {
+    const row = editing.value;
+    if (!row?.id || videoUploading.value || !editable.value) return;
+    videoUploading.value = true; videoProgress.value = 0; videoError.value = '';
+    try {
+        const token = await getUploadToken(sb);
+        await sb.from('articles').update({ resume_name: file.name }).eq('id', row.id);
+        const result = await uploadVideo({
+            token, file,
+            resumeUploadId: row.video_resume_id || null,
+            resumeStart: row.video_resume_id ? Number(row.resume_chunk || 0) : 0,
+            onInit: (uid) => sb.from('articles').update({ video_resume_id: uid }).eq('id', row.id),
+            onChunk: (pos) => sb.from('articles').update({ resume_chunk: String(pos) }).eq('id', row.id),
+            onProgress: (p) => { videoProgress.value = p; },
+        });
+        const size = await fetchVideoSize(result.uuid);
+        const done = { video_id: result.uuid, video_size: size == null ? null : String(size), video_resume_id: null, resume_chunk: null, resume_name: null };
+        await sb.from('articles').update(done).eq('id', row.id);
+        Object.assign(editing.value, done);
+    } catch (e) {
+        if (e?.message !== 'cancelled') videoError.value = `Не удалось загрузить видео: ${e?.message || 'ошибка'}`;
+    } finally { videoUploading.value = false; }
+}
+async function removeArticleVideo() {
+    const row = editing.value;
+    if (!row?.id || videoBusy.value || !editable.value) return;
+    videoBusy.value = true; videoError.value = '';
+    try {
+        if (row.video_id) { try { await deleteLive(sb, row.video_id); } catch (_) { /* already gone */ } }
+        const done = { video_id: null, video_size: null, video_resume_id: null, resume_chunk: null, resume_name: null };
+        await sb.from('articles').update(done).eq('id', row.id);
+        Object.assign(editing.value, done);
+    } catch (e) { videoError.value = 'Не удалось удалить видео.'; }
+    finally { videoBusy.value = false; }
+}
+function onArticleVideo(e) {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (f) runArticleVideoUpload(f);
+}
+
+// ── versioning helpers (Variant A) ──────────────────────────────────────────
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+function fmtDate(d) {
+    if (!d) return '';
+    try { return new Date(d).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }); }
+    catch (_) { return String(d); }
+}
+// Load the previous snapshot back into the editor. It persists on the next Save (which then stashes
+// the current text as the new previous — so the author can toggle one step back and forth).
+function restorePreviousVersion() {
+    const prev = editing.value?.Content_Version;
+    if (!prev || !editable.value) return;
+    editor.value?.commands.setContent(prev || '<p></p>');
+    editor.value?.commands.focus();
 }
 
 // ── mount: access gate ──────────────────────────────────────────────────────
@@ -490,6 +617,24 @@ onBeforeUnmount(() => { editor.value?.destroy(); });
 .pd-rte__area :deep(.ProseMirror blockquote) { border-left: 3px solid var(--blue-soft); padding-left: 14px; color: var(--ink-2); margin: 0.8em 0; }
 .pd-rte__area :deep(.ProseMirror a) { color: var(--blue-ink); }
 .pd-rte__area :deep(.ProseMirror-focused) { outline: none; }
+
+/* video */
+.pd-vframe { position: relative; aspect-ratio: 16/9; border-radius: var(--r-md); overflow: hidden; background: #000; }
+.pd-vframe iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.pd-vactions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.pd-vresume { display: grid; gap: 8px; }
+.pd-hint { margin: 0; font-size: 0.9rem; color: var(--ink-2); }
+.pd-vprog { display: grid; gap: 8px; padding: 8px 0; }
+.pd-vprog__bar { height: 8px; border-radius: var(--r-pill); background: var(--bg-tint); overflow: hidden; }
+.pd-vprog__bar span { display: block; height: 100%; width: 100%; background: var(--blue); border-radius: inherit; transform-origin: left; transition: transform 0.2s var(--ease-out); }
+.pd-vprog__t { font-size: 0.9rem; color: var(--ink-2); }
+
+/* versioning bar */
+.pd-ver { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+.pd-ver__date { font-size: 0.85rem; color: var(--ink-3); }
+.pd-ver__btn { font-family: inherit; font-size: 0.85rem; font-weight: 600; color: var(--blue-ink); background: none; border: none; cursor: pointer; padding: 2px 0; }
+.pd-ver__btn:hover { text-decoration: underline; }
+.pd-ver__btn:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
 
 @media (max-width: 700px) {
     .pd-wrap { padding-inline: 18px; }

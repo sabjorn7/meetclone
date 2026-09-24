@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru" translate="no">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, follow" />
+    <title>Страница не найдена — МитГуру</title>
+    <link rel="icon" href="/images/favicon.png" />
+    <style>
+        :root {
+            --ink: #091747; --ink-2: #5b6472; --ink-3: #98a0ad; --line: #e4e9f1;
+            --blue: #2e70dd; --blue-soft: #5495f3; --blue-strong: #2360c6; --blue-ink: #1f5fc9;
+            --bg: #ffffff; --bg-tint: #f1f6fd; --r-pill: 999px;
+            --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; }
+        body {
+            min-height: 100vh; background: var(--bg); color: var(--ink);
+            font-family: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            display: flex; flex-direction: column;
+        }
+        .nf-top { padding: 22px 32px; }
+        .nf-brand { font-weight: 800; font-size: 1.3rem; letter-spacing: -0.02em; color: var(--ink); text-decoration: none; }
+        .nf-brand span { color: var(--blue); }
+        .nf-main {
+            position: relative; overflow: hidden; flex: 1;
+            display: grid; place-items: center; padding: 24px 24px 72px; text-align: center;
+        }
+        .nf-blob { position: absolute; border-radius: 50%; filter: blur(46px); opacity: 0.5; z-index: 0; pointer-events: none; }
+        .nf-blob-1 { width: 340px; height: 340px; left: -80px; top: 6%; background: #dbe8ff; animation: nf-drift 15s var(--ease-out) infinite alternate; }
+        .nf-blob-2 { width: 300px; height: 300px; right: -70px; top: 30%; background: #ffe6d4; animation: nf-drift 18s var(--ease-out) infinite alternate-reverse; }
+        .nf-blob-3 { width: 260px; height: 260px; left: 30%; bottom: -90px; background: #e3f0ff; animation: nf-drift 21s var(--ease-out) infinite alternate; }
+        @keyframes nf-drift { from { transform: translate(0, 0); } to { transform: translate(26px, -22px); } }
+        .nf-inner { position: relative; z-index: 1; max-width: 560px; display: flex; flex-direction: column; align-items: center; }
+        .nf-img { width: clamp(160px, 34vw, 240px); height: auto; margin-bottom: 4px; animation: nf-float 5.5s ease-in-out infinite; }
+        @keyframes nf-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+        .nf-code { margin: 0; font-weight: 800; font-size: clamp(2.4rem, 8vw, 3.6rem); letter-spacing: 0.06em; color: var(--blue); line-height: 1; }
+        .nf-title { margin: 6px 0 0; font-weight: 700; font-size: clamp(1.4rem, 4vw, 2rem); letter-spacing: -0.02em; }
+        .nf-sub { margin: 12px 0 0; color: var(--ink-2); font-size: 1.02rem; line-height: 1.55; max-width: 44ch; }
+        .nf-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 26px; }
+        .nf-btn { font-weight: 600; font-size: 15px; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: var(--r-pill); padding: 13px 24px; text-decoration: none; transition: border-color 0.16s var(--ease-out), background 0.16s var(--ease-out); }
+        .nf-btn--primary { background: var(--blue); color: #fff; border-color: transparent; }
+        .nf-btn:hover { border-color: var(--blue-soft); }
+        .nf-btn--primary:hover { background: var(--blue-strong); border-color: transparent; }
+        .nf-links { display: flex; align-items: center; gap: 12px; margin-top: 22px; color: var(--ink-3); font-size: 0.92rem; }
+        .nf-links a { color: var(--blue-ink); text-decoration: none; }
+        .nf-links a:hover { text-decoration: underline; }
+        @media (prefers-reduced-motion: reduce) { .nf-img, .nf-blob { animation: none; } }
+    </style>
+</head>
+<body>
+    <header class="nf-top"><a class="nf-brand" href="/">meetguru<span>.</span></a></header>
+    <main class="nf-main">
+        <span class="nf-blob nf-blob-1"></span>
+        <span class="nf-blob nf-blob-2"></span>
+        <span class="nf-blob nf-blob-3"></span>
+        <div class="nf-inner">
+            <img class="nf-img" src="/images/404-character.png" alt="" width="626" height="626" />
+            <p class="nf-code">404</p>
+            <h1 class="nf-title">Кажется, вы забрели не туда</h1>
+            <p class="nf-sub">Такой страницы у нас нет — возможно, ссылка устарела или в адресе опечатка. Ничего страшного, вот куда можно вернуться.</p>
+            <div class="nf-actions">
+                <a class="nf-btn nf-btn--primary" href="/">На главную</a>
+                <a class="nf-btn" href="/all_course">Каталог курсов</a>
+            </div>
+            <div class="nf-links">
+                <a href="/articles">Статьи</a><span>·</span>
+                <a href="/users">Сообщество</a><span>·</span>
+                <a href="/clubs">Клубы</a>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

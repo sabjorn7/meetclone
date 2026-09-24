@@ -1,7 +1,11 @@
 <template>
     <div class="ed">
         <div v-if="loading" class="ed-center">Загрузка…</div>
-        <div v-else-if="notFound" class="ed-center">Мероприятие не найдено.</div>
+        <div v-else-if="notFound" class="ed-center ed-nf">
+            <h2 class="ed-nf__t">Мероприятие не найдено</h2>
+            <p>Возможно, оно завершилось или ссылка устарела.</p>
+            <a href="/events" class="pd-btn ed-nf__btn">Все мероприятия</a>
+        </div>
 
         <template v-else>
             <!-- Two-column hero like CoursePage (pd-chero): main + sticky pd-buycard sidebar -->
@@ -342,6 +346,9 @@ onMounted(async () => {
 /* Full-width page (like course main.pd); EVERY block sits in a pd-wrap (1200/40) → same width. */
 .ed { width: 100%; font-family: 'Raleway', sans-serif; color: #091747; }
 .ed-center { text-align: center; color: #64748b; padding: 64px 0; }
+.ed-nf { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ed-nf__t { margin: 0; font-size: 1.5rem; font-weight: 700; color: #0f172a; }
+.ed-nf__btn { margin-top: 14px; text-decoration: none; }
 .ed-draft { display: inline-block; font-size: 12px; color: #b45309; background: #fef3c7; padding: 2px 8px; border-radius: 999px; margin: 10px 0; }
 .ed-map__addr { color: #5b6472; margin-bottom: 14px; }
 .ed-map__frame { width: 100%; height: 380px; border: 0; border-radius: 16px; box-shadow: 0 6px 20px rgba(15,23,42,.06); }

@@ -22,7 +22,8 @@
         <div v-if="loading" class="pd-wrap pd-art__loading">Загрузка…</div>
 
         <div v-else-if="!article" class="pd-wrap pd-art__missing">
-            <p>Статья не найдена.</p>
+            <h2 class="pd-art__missing-t">Статья не найдена</h2>
+            <p>Возможно, статья снята с публикации или ссылка устарела.</p>
             <a href="/articles" class="pd-btn pd-btn--ghost">Все статьи</a>
         </div>
 
@@ -456,6 +457,7 @@ function ensureFonts() {
 @media (prefers-reduced-motion: reduce) { [data-reveal] { opacity: 1; transform: none; transition: none; } }
 
 .pd-art__loading, .pd-art__missing { padding: 90px 24px; text-align: center; color: var(--ink-2); }
+.pd-art__missing-t { margin: 0 0 6px; font-size: 1.5rem; font-weight: 700; color: var(--ink); }
 .pd-art__missing .pd-btn { margin-top: 16px; display: inline-block; text-decoration: none; }
 
 /* ── Head ───────────────────────────────────────────────────────────────── */

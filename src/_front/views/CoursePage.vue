@@ -176,7 +176,11 @@
         </template>
 
         <div v-else-if="loading" class="pd-state">Загрузка курса…</div>
-        <div v-else class="pd-state">Курс не найден.</div>
+        <div v-else class="pd-state pd-nf">
+            <h2 class="pd-nf__t">Курс не найден</h2>
+            <p class="pd-nf__p">Возможно, курс снят с публикации или ссылка устарела.</p>
+            <a href="/all_course" class="pd-btn pd-btn--primary pd-nf__btn">Каталог курсов</a>
+        </div>
 
         <!-- Guest auth prompt (same offer as /all_course: войти / зарегистрироваться, without leaving) -->
         <transition name="pd-modal">
@@ -450,6 +454,10 @@ function ensureFonts() {
 .pd-ic { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; display: block; }
 .pd-h2 { margin: 0 0 32px; font-weight: 700; font-size: clamp(1.9rem, 4vw, 3rem); line-height: 1.06; letter-spacing: -0.02em; }
 .pd-state { max-width: var(--wrap); margin: 120px auto; padding: 0 40px; text-align: center; color: var(--ink-2); font-size: 1.1rem; }
+.pd-nf { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.pd-nf__t { margin: 0; font-size: 1.5rem; font-weight: 700; color: var(--ink); }
+.pd-nf__p { margin: 0; }
+.pd-nf__btn { margin-top: 14px; text-decoration: none; }
 
 [data-reveal] { opacity: 0; transform: translateY(20px); transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-out); transition-delay: calc(var(--i, 0) * 55ms); }
 .pd.is-ready [data-reveal] { opacity: 1; transform: none; }

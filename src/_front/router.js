@@ -24,6 +24,7 @@ import ProfileEditPage from './views/ProfileEditPage.vue';
 import MyCoursePage from './views/MyCoursePage.vue';
 import CoursesManagePage from './views/CoursesManagePage.vue';
 import ArticlesManagePage from './views/ArticlesManagePage.vue';
+import NotFoundPage from './views/NotFoundPage.vue';
 import DashboardPage from './views/DashboardPage.vue';
 import SuperadminPage from './views/SuperadminPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
@@ -542,7 +543,10 @@ if (page404) {
         // Vue Router 4 silently drops nameless wildcard routes when registering
         // (they never show up in getRoutes()/resolve()) unless given a name.
         name: 'catch-all-404',
-        redirect: null,
+        // Render the branded client-side 404 for in-app navigation to an unknown route. Direct
+        // hits / refresh never boot the SPA (no server SPA-fallback by design) — those are served
+        // the static public/404.html via nginx `error_page 404 /404.html;` (kept visually in sync).
+        component: NotFoundPage,
         async beforeEnter(to) {
             // Legacy query-string links (?article=<uuid> / ?course=<uuid>) predate the
             // /articles/:slug and /course/:slug path-based routes. Old shared links
@@ -550,14 +554,14 @@ if (page404) {
             const legacyArticleId = to.query?.article;
             if (/^\/article_page\/?$/.test(to.path) && legacyArticleId) {
                 window.location.href = `/articles/${encodeURIComponent(legacyArticleId)}`;
-                return;
+                return false;
             }
             const legacyCourseId = to.query?.course;
             if (/^\/course_info\/?$/.test(to.path) && legacyCourseId) {
                 window.location.href = `/course/${encodeURIComponent(legacyCourseId)}`;
-                return;
+                return false;
             }
-            window.location.href = '/404';
+            // otherwise fall through → NotFoundPage renders.
         },
     });
 }

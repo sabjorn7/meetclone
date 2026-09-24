@@ -816,7 +816,12 @@ async function saveCourse() {
     saving.value = true; formError.value = '';
     try {
         const isCreate = !!editing.value.isCreate;
-        const slug = await uniqueSlug(slugify(title), isCreate ? null : editing.value.id);
+        // slug is generated ONCE (at create, or backfilled if a legacy course somehow has none) and then
+        // FROZEN — renaming a published course must NOT move its public /course/<slug> URL (external links,
+        // search index, prerendered SEO pages would 404). Mirrors ArticlesManagePage / eventsApi behaviour.
+        const slug = (!isCreate && editing.value.slug)
+            ? editing.value.slug
+            : await uniqueSlug(slugify(title), isCreate ? null : editing.value.id);
         // money normalization: a free course carries no price; a lifetime course carries no renewal price.
         const free = !!form.value.Free;
         const durLong = num(form.value.DurationLong);

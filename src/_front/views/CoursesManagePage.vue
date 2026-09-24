@@ -833,7 +833,11 @@ async function saveCourse() {
             old_price: free ? 0 : num(form.value.old_price),
             DurationLong: free ? 0 : durLong,
             DurationPrice: free || durLong === 0 ? 0 : num(form.value.DurationPrice),
-            Buy: free ? false : !!form.value.Buy,
+            // `Buy` is the catalog-VISIBILITY flag («Доступен к покупке») — the only field AllCoursesPage
+            // filters on (.eq('Buy', true)). It is NOT a per-user "purchased" flag (real enrollments live in
+            // user_course). So a free course must stay listed (Buy=true) — the earlier `free ? false` hid every
+            // free course from /all_course; paid courses still respect the «Доступен к покупке» checkbox.
+            Buy: free ? true : !!form.value.Buy,
         };
         if (isCreate) {
             // new courses always start as an unpublished draft; moderation is a separate action.

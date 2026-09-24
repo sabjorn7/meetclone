@@ -24,8 +24,7 @@ import { isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
 const CHROME_EXCLUDE = [
     // account / product ( /profile, /profile_page and /my_courses are redesigned — they get the new chrome)
     '/my_finanse', '/feedback',
-    // creator management (courses_manage is now the hand-written CoursesManagePage — gets the new chrome)
-    '/articles_manage',
+    // creator management: courses_manage AND articles_manage are now hand-written pages — they get the new chrome.
     // admin — /superadmin is now the hand-written panel (gets our chrome); the WeWeb legacy fallback
     // lives at /superadmin-legacy and keeps its own WeWeb header.
     '/superadmin-legacy',

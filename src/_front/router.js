@@ -23,6 +23,7 @@ import UsersPage from './views/UsersPage.vue';
 import ProfileEditPage from './views/ProfileEditPage.vue';
 import MyCoursePage from './views/MyCoursePage.vue';
 import CoursesManagePage from './views/CoursesManagePage.vue';
+import ArticlesManagePage from './views/ArticlesManagePage.vue';
 import DashboardPage from './views/DashboardPage.vue';
 import SuperadminPage from './views/SuperadminPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
@@ -289,6 +290,10 @@ const PAGE_OVERRIDES = [
     // Also removed from App.vue CHROME_EXCLUDE (gets shared chrome); coursesManageStyle.js goes inert here
     // (it keys on the WeWeb `page-16089944…` route, which this override skips). /courses-manage-demo is the rollback.
     { path: '/courses_manage', name: 'courses_manage', component: CoursesManagePage, wwPath: 'courses_manage' },
+    // Creator article management: hand-written ArticlesManagePage replaces the WeWeb `articles_manage` page.
+    // Phase 1 — list + create/edit/submit-for-moderation/soft-delete, TipTap body editor, hand-written cover
+    // upload (fixes the WeWeb file-upload crash). Article video is Phase 2. /articles-manage-demo is the rollback.
+    { path: '/articles_manage', name: 'articles_manage', component: ArticlesManagePage, wwPath: 'articles_manage' },
     { path: '/dashboard', name: 'dashboard', component: DashboardPage, wwPath: 'dashboard' },
     // Hand-written admin panel owns /superadmin (wwPath 'superadmin' → the WeWeb page is skipped in
     // the loop below and re-registered at /superadmin-legacy for the rare infra actions).
@@ -498,6 +503,13 @@ routes.push({
     path: '/courses-manage-demo',
     name: 'courses-manage-demo',
     component: CoursesManagePage,
+});
+
+// DEMO / rollback for the hand-written article management (/articles-manage-demo; see views/ArticlesManagePage.vue).
+routes.push({
+    path: '/articles-manage-demo',
+    name: 'articles-manage-demo',
+    component: ArticlesManagePage,
 });
 
 // DEMO: course-completion certificate preview + PDF download (/cert-demo; see views/CertificatePage.vue).

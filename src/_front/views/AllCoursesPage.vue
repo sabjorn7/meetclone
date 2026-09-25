@@ -13,7 +13,7 @@
             <div class="pd-wrap pd-hero__grid">
                 <div class="pd-hero__text">
                     <span class="pd-badge" data-reveal><span class="pd-badge__dot" aria-hidden="true"></span>Каталог</span>
-                    <h1 class="pd-hero__title" data-reveal>Все курсы по кинезиологии</h1>
+                    <h1 class="pd-hero__title" data-reveal>Все курсы</h1>
                     <p class="pd-hero__sub" data-reveal>Программы и семинары от практикующих экспертов — выбирайте направление и учитесь в удобном темпе.</p>
                 </div>
                 <img class="pd-hero__art" src="/images/881bb218-6026-4212-8809-c79020cf4a58.png" alt="" aria-hidden="true" data-reveal />

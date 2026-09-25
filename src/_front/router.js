@@ -26,6 +26,7 @@ import CoursesManagePage from './views/CoursesManagePage.vue';
 import ArticlesManagePage from './views/ArticlesManagePage.vue';
 import NotFoundPage from './views/NotFoundPage.vue';
 import RegistrationPage from './views/RegistrationPage.vue';
+import WelcomePage from './views/WelcomePage.vue';
 import DashboardPage from './views/DashboardPage.vue';
 import SuperadminPage from './views/SuperadminPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
@@ -304,6 +305,9 @@ const PAGE_OVERRIDES = [
     // signUp metadata.nickname → users.role via the on_auth_user_created trigger → /welcome). Full-screen
     // auth page (stays in App.vue CHROME_EXCLUDE). /registration-demo is the hand-written rollback.
     { path: '/registration', name: 'registration', component: RegistrationPage, wwPath: 'registration' },
+    // Post-registration welcome (RegistrationPage → /welcome). Hand-written pd-* page keeping the four
+    // WeWeb «Minime» illustrations as value-prop cards. /welcome-demo is the rollback.
+    { path: '/welcome', name: 'welcome', component: WelcomePage, wwPath: 'welcome' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {
@@ -524,6 +528,13 @@ routes.push({
     path: '/registration-demo',
     name: 'registration-demo',
     component: RegistrationPage,
+});
+
+// DEMO / rollback for the hand-written welcome page (/welcome-demo; see views/WelcomePage.vue).
+routes.push({
+    path: '/welcome-demo',
+    name: 'welcome-demo',
+    component: WelcomePage,
 });
 
 // DEMO: course-completion certificate preview + PDF download (/cert-demo; see views/CertificatePage.vue).

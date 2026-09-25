@@ -134,9 +134,10 @@ const year = new Date().getFullYear();
 
 const HOME = '/';
 const WELCOME = '/welcome';
-// The WeWeb signUp passes the Home page UUID as redirectPage → the plugin turns it into the email
-// confirmation emailRedirectTo. Passing the same UUID reproduces the WeWeb behaviour exactly.
-const HOME_PAGE_UUID = '538a50d6-c665-4121-abd8-63ea97de2d3c';
+// NB: the WeWeb signUp passed `redirectPage: <Home UUID>`, which the auth plugin runs through
+// wwLib.wwPageHelper.getPagePath(uuid) to build emailRedirectTo — that throws in this hand-written
+// runtime and broke signUp. We deliberately DROP it: email confirmation is OFF (autoconfirm ON →
+// signUp returns a session, no confirmation email is ever sent), so emailRedirectTo is dead anyway.
 const N8N_SIGNUP_HOOK = 'https://n8n.meetgu.ru/webhook/64277b75-849f-45c6-81bc-64da11a7d530';
 const N8N_VK = 'https://n8n.meetgu.ru/webhook/auth_vk';
 
@@ -171,7 +172,6 @@ async function submitRegister() {
             email: e,
             password: p,
             metadata: [{ key: 'nickname', value: nickname }],
-            redirectPage: HOME_PAGE_UUID,
         });
         // Server-side welcome/setup — preserved verbatim (POST with email+password as query params,
         // exactly like the WeWeb apiRequest step). Best-effort: a failure here must not strand a user
@@ -184,6 +184,7 @@ async function submitRegister() {
         } catch (hookErr) { /* non-fatal — account already created */ }
         window.location.href = WELCOME;
     } catch (err) {
+        console.error('[registration] signUp failed:', err);   // surface unmapped errors for diagnosis
         authError.value = mapError(err?.message);
         loading.value = false;
     }

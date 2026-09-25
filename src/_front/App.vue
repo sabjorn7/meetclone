@@ -29,7 +29,7 @@ const CHROME_EXCLUDE = [
     // lives at /superadmin-legacy and keeps its own WeWeb header.
     '/superadmin-legacy',
     // auth utilities (login is a full-screen dedicated page — its own chrome, no AppHeader/Footer)
-    '/login', '/login-demo', '/registration', '/reset_pw',
+    '/login', '/login-demo', '/registration', '/registration-demo', '/reset_pw',
     // multi-host broadcaster room — full-screen call UI, no shared chrome
     '/streams/call',
     // dev / internal

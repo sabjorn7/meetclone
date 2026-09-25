@@ -300,6 +300,10 @@ const PAGE_OVERRIDES = [
     // Hand-written admin panel owns /superadmin (wwPath 'superadmin' → the WeWeb page is skipped in
     // the loop below and re-registered at /superadmin-legacy for the rare infra actions).
     { path: '/superadmin', name: 'superadmin', component: SuperadminPage, wwPath: 'superadmin' },
+    // Sign-up: hand-written RegistrationPage replaces the WeWeb `registration` page (verified live E2E —
+    // signUp metadata.nickname → users.role via the on_auth_user_created trigger → /welcome). Full-screen
+    // auth page (stays in App.vue CHROME_EXCLUDE). /registration-demo is the hand-written rollback.
+    { path: '/registration', name: 'registration', component: RegistrationPage, wwPath: 'registration' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

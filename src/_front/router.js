@@ -25,6 +25,7 @@ import MyCoursePage from './views/MyCoursePage.vue';
 import CoursesManagePage from './views/CoursesManagePage.vue';
 import ArticlesManagePage from './views/ArticlesManagePage.vue';
 import NotFoundPage from './views/NotFoundPage.vue';
+import RegistrationPage from './views/RegistrationPage.vue';
 import DashboardPage from './views/DashboardPage.vue';
 import SuperadminPage from './views/SuperadminPage.vue';
 import PoliticaPage from './views/legal/PoliticaPage.vue';
@@ -511,6 +512,14 @@ routes.push({
     path: '/articles-manage-demo',
     name: 'articles-manage-demo',
     component: ArticlesManagePage,
+});
+
+// DEMO: hand-written registration (/registration-demo; see views/RegistrationPage.vue). The live WeWeb
+// /registration stays until verified live on a throwaway account; go-live swaps it via PAGE_OVERRIDES later.
+routes.push({
+    path: '/registration-demo',
+    name: 'registration-demo',
+    component: RegistrationPage,
 });
 
 // DEMO: course-completion certificate preview + PDF download (/cert-demo; see views/CertificatePage.vue).

@@ -246,6 +246,9 @@ async function onVkSuccess(code, deviceId) {
 
 onMounted(() => {
     ensureFonts();
+    // The physical /registration shell inherits the empty WeWeb title → the home fallback «МитГуру —
+    // моя страница». Set a proper tab title client-side (the shell HTML can't be changed per-route here).
+    document.title = 'Регистрация — МитГуру';
     // already-logged-in guard (the WeWeb page redirects home onload). ?preview=1 stays for previewing.
     if (route.query.preview !== '1' && isLikelyLoggedIn()) { window.location.replace(HOME); return; }
     loadVkSdk();

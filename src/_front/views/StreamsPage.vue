@@ -201,6 +201,10 @@
                                 </select>
                             </label>
                             <p class="sp-note">Доступ отсчитывается от даты эфира.</p>
+                            <label class="sp-check">
+                                <input type="checkbox" v-model="form.chat" />
+                                <span>Общий чат трансляции — покупатели автоматически попадают в общий групповой чат (как у мероприятий)</span>
+                            </label>
                         </div>
                         <div class="sp-form-actions">
                             <button type="submit" class="sp-btn sp-btn-primary" :disabled="creating || !canSubmit">
@@ -337,7 +341,7 @@ const notice = ref('');
 const error = ref('');
 const creds = ref(null);
 const maskKey = ref(false);
-const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo' });
+const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo', chat: false });
 const shareMsg = ref('');
 
 const canSubmit = computed(() => {
@@ -744,7 +748,7 @@ watch(replayProcessing, processing => {
 // ---------- create / author actions ----------
 function cancelForm() {
     showForm.value = false;
-    form.value = { title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo' };
+    form.value = { title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo', chat: false };
     error.value = '';
 }
 async function createBroadcast() {
@@ -776,6 +780,7 @@ async function createBroadcast() {
             backing_course_id: backingId,
             scheduled_at,
             mode: multi ? 'multi' : 'solo',
+            chat_enabled: paid && form.value.chat,   // group chat is opt-in and paid-only (buyers are the members)
         });
         const withAuthor = { ...row, authorUser: me.value };
         myStreams.value.unshift(withAuthor);
@@ -984,6 +989,19 @@ onBeforeUnmount(() => {
     display: flex;
     flex-direction: column;
     gap: 14px;
+}
+.sp-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #374151;
+}
+.sp-check input {
+    margin-top: 2px;
+    flex: none;
 }
 .sp-field select {
     font: inherit;

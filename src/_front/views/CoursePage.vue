@@ -377,10 +377,18 @@ async function load() {
     const sb = getSupabase();
     if (!sb || !key) { loading.value = false; return; }
     let q = sb.from('course')
-        .select('id, "Title", "Decription", "WhatTeach", "For", "Price", "Free", old_price, "Category", video_id, cover, "Less_Id", "DurationLong", "DurationPrice", owner, slug, comment, rating');
+        .select('id, "Title", "Decription", "WhatTeach", "For", "Price", "Free", old_price, "Category", video_id, cover, "Less_Id", "DurationLong", "DurationPrice", owner, slug, comment, rating, "ModStatus"');
     q = UUID_RE.test(key) ? q.eq('id', key) : q.eq('slug', key);
     const { data } = await q.limit(1);
     course.value = data?.[0] || null;
+    // Unpublished courses (draft / on-moderation — e.g. a paid stream's HIDDEN backing course or its
+    // bundle-only recording course) must NOT be publicly viewable or buyable. Only the course author
+    // may preview (they manage it in /courses_manage). Everyone else → the "not found" state, so no
+    // stray "Купить за 0 ₽" CTA on a direct uuid link.
+    if (course.value && course.value.ModStatus !== 'Опубликовано') {
+        const viewerId = readStoredSession()?.user?.id || authCookieUser()?.id || null;
+        if (course.value.owner !== viewerId) course.value = null;
+    }
     if (course.value) {
         document.title = `${course.value.Title} — МитГуру`;
         if (course.value.owner) {

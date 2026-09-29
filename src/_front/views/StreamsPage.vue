@@ -205,6 +205,10 @@
                                 <input type="checkbox" v-model="form.chat" />
                                 <span>Общий чат трансляции — покупатели автоматически попадают в общий групповой чат (как у мероприятий)</span>
                             </label>
+                            <label class="sp-check">
+                                <input type="checkbox" v-model="form.recording" />
+                                <span>Запись как отдельный курс — после завершения эфира запись автоматически публикуется курсом в каталоге и появляется в «Мои курсы» у всех, кто купил эфир</span>
+                            </label>
                         </div>
                         <div class="sp-form-actions">
                             <button type="submit" class="sp-btn sp-btn-primary" :disabled="creating || !canSubmit">
@@ -341,7 +345,7 @@ const notice = ref('');
 const error = ref('');
 const creds = ref(null);
 const maskKey = ref(false);
-const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo', chat: false });
+const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo', chat: false, recording: false });
 const shareMsg = ref('');
 
 const canSubmit = computed(() => {
@@ -748,7 +752,7 @@ watch(replayProcessing, processing => {
 // ---------- create / author actions ----------
 function cancelForm() {
     showForm.value = false;
-    form.value = { title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo', chat: false };
+    form.value = { title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo', chat: false, recording: false };
     error.value = '';
 }
 async function createBroadcast() {
@@ -781,6 +785,7 @@ async function createBroadcast() {
             scheduled_at,
             mode: multi ? 'multi' : 'solo',
             chat_enabled: paid && form.value.chat,   // group chat is opt-in and paid-only (buyers are the members)
+            recording_course_enabled: paid && form.value.recording,   // draft recording course, opt-in and paid-only
         });
         const withAuthor = { ...row, authorUser: me.value };
         myStreams.value.unshift(withAuthor);

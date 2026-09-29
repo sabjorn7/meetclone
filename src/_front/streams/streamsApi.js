@@ -27,7 +27,7 @@ export function canStream(user) {
 
 /** Insert a stream metadata row. `peertube_video_id` = the live video uuid. price 0 = free.
  *  `scheduled_at` = planned start (ISO) or null. */
-export async function createStream(supabase, { author, title, description = '', price = 0, peertube_video_id = null, access_months = null, backing_course_id = null, scheduled_at = null, mode = 'solo', chat_enabled = false, recording_course_enabled = false }) {
+export async function createStream(supabase, { author, title, description = '', price = 0, peertube_video_id = null, access_months = null, backing_course_id = null, scheduled_at = null, mode = 'solo', chat_enabled = false, recording_course_enabled = false, cover_url = null }) {
     // chat_enabled=true → the BEFORE INSERT trigger tg_stream_create_chat auto-creates a group chat
     // (shared `chats` table, same as events) and fills streams.chat. Buyers are then added by
     // tg_stream_bought_add_to_chat when their user_course on the backing course appears.
@@ -38,7 +38,7 @@ export async function createStream(supabase, { author, title, description = '', 
     // it appears in /all_course as «Запись семинара» and in «Мои курсы» of everyone who bought.
     const { data, error } = await supabase
         .from('streams')
-        .insert({ author, title, description, price, peertube_video_id, access_months, backing_course_id, scheduled_at, mode, chat_enabled, recording_course_enabled })
+        .insert({ author, title, description, price, peertube_video_id, access_months, backing_course_id, scheduled_at, mode, chat_enabled, recording_course_enabled, cover_url })
         .select()
         .limit(1);
     if (error) throw new Error(`Не удалось сохранить эфир: ${error.message}`);

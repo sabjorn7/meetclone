@@ -46,17 +46,19 @@
 
                     <section v-if="upcoming.length" class="pd-panel pd-evpanel" data-reveal>
                         <div class="pd-panel__head">
-                            <span class="pd-panel__eyebrow">Ближайшие мероприятия</span>
+                            <span class="pd-panel__eyebrow">Ближайшие мероприятия и эфиры</span>
                             <a class="pd-panel__link" href="/events">Все →</a>
                         </div>
                         <div class="pd-evlist">
                             <a v-for="ev in upcoming" :key="ev.id" class="pd-evrow" :href="eventHref(ev)">
                                 <div class="pd-evrow__cover">
                                     <img v-if="ev.cover_url" :src="ev.cover_url" :alt="ev.title" loading="lazy" />
-                                    <div v-else class="pd-evrow__cover--empty" aria-hidden="true">🗓</div>
+                                    <div v-else class="pd-evrow__cover--empty" aria-hidden="true">{{ ev._kind === 'stream' ? '📡' : '🗓' }}</div>
                                 </div>
                                 <div class="pd-evrow__body">
-                                    <h3 class="pd-evrow__t">{{ ev.title }}</h3>
+                                    <h3 class="pd-evrow__t">
+                                        <span v-if="ev._kind === 'stream'" class="pd-evrow__tag">Эфир</span>{{ ev.title }}
+                                    </h3>
                                     <div v-if="ev.speaker" class="pd-evrow__meta">
                                         <svg class="pd-evrow__ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18v3" /></svg>
                                         <span>{{ ev.speaker }}</span>
@@ -123,6 +125,7 @@ import { ref, computed, onMounted, nextTick } from 'vue';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
 import { listPublishedEvents } from '@/_front/streams/eventsApi.js';
+import { listAllStreams } from '@/_front/streams/streamsApi.js';
 
 const name = ref('');
 const courses = ref([]);   // [{ id, course, end_period, created_at, expired }]
@@ -143,7 +146,10 @@ function courseWord(n) {
 function courseHref(course) { return `/course/${course?.slug || course?.id}`; }
 // Active course → open THAT course on /my_courses (it reads ?course=<id> to deep-link into the player).
 function watchHref(c) { return `/my_courses?course=${c.course?.id}`; }
-function eventHref(ev) { return ev.slug ? `/event/${ev.slug}` : `/events?event=${ev.id}`; }
+function eventHref(ev) {
+    if (ev._kind === 'stream') return `/streams?stream=${ev.id}`;
+    return ev.slug ? `/event/${ev.slug}` : `/events?event=${ev.id}`;
+}
 function fmtEventDate(d) {
     const x = new Date(d);
     if (isNaN(x)) return '';
@@ -238,16 +244,30 @@ async function load() {
             || { course: byId[user.last_open], end_period: null, created_at: null, expired: false };
     }
 
-    // "Ближайшие мероприятия": nearest FUTURE published events (public — block hidden when none).
-    // listPublishedEvents already sorts by starts_at ↑, so filtered future events are nearest-first.
+    // "Ближайшие мероприятия и эфиры": nearest FUTURE published events + scheduled streams, merged
+    // and sorted by date (nearest-first). Public — block hidden when none.
     try {
-        const evs = await listPublishedEvents(sb);
         const now = Date.now();
-        upcoming.value = (evs || []).filter((e) => e.starts_at && new Date(e.starts_at).getTime() > now).slice(0, 2);
-        // enrich with speaker names (listPublishedEvents doesn't return speaker_id)
-        const ids = upcoming.value.map((e) => e.id);
-        if (ids.length) {
-            const { data: erows } = await sb.from('events').select('id, speaker_id').in('id', ids);
+        // future published events
+        const evs = await listPublishedEvents(sb);
+        const futureEvents = (evs || [])
+            .filter((e) => e.starts_at && new Date(e.starts_at).getTime() > now)
+            .map((e) => ({ ...e, _kind: 'event' }));
+        // future scheduled streams (эфиры) — same card shape; author = "speaker"
+        let futureStreams = [];
+        try {
+            const streams = await listAllStreams(sb);
+            futureStreams = (streams || [])
+                .filter((s) => s.status === 'scheduled' && s.scheduled_at && new Date(s.scheduled_at).getTime() > now)
+                .map((s) => ({ id: s.id, title: s.title, cover_url: s.cover_url, starts_at: s.scheduled_at, speaker: s.authorUser?.Name || '', location: null, _kind: 'stream' }));
+        } catch (e) { /* streams are optional in this block */ }
+        upcoming.value = [...futureEvents, ...futureStreams]
+            .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
+            .slice(0, 3);
+        // enrich only the EVENT rows with speaker names (streams already carry theirs)
+        const eventIds = upcoming.value.filter((x) => x._kind === 'event').map((x) => x.id);
+        if (eventIds.length) {
+            const { data: erows } = await sb.from('events').select('id, speaker_id').in('id', eventIds);
             const spkIds = [...new Set((erows || []).map((r) => r.speaker_id).filter(Boolean))];
             let nameById = {};
             if (spkIds.length) {
@@ -255,7 +275,7 @@ async function load() {
                 nameById = Object.fromEntries((us || []).map((u) => [u.id, u.Name]));
             }
             const spkByEvent = Object.fromEntries((erows || []).map((r) => [r.id, nameById[r.speaker_id] || '']));
-            upcoming.value = upcoming.value.map((e) => ({ ...e, speaker: spkByEvent[e.id] || '' }));
+            upcoming.value = upcoming.value.map((x) => (x._kind === 'event' ? { ...x, speaker: spkByEvent[x.id] || '' } : x));
         }
     } catch (e) { upcoming.value = []; }
 
@@ -377,6 +397,7 @@ a.pd-mycard { cursor: pointer; }
 .pd-evrow__cover--empty { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 22px; }
 .pd-evrow__body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .pd-evrow__t { margin: 0 0 2px; font-weight: 600; font-size: 0.92rem; line-height: 1.22; letter-spacing: -0.01em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pd-evrow__tag { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 999px; background: #fdecec; color: #d33; font-size: 0.68rem; font-weight: 700; vertical-align: middle; }
 .pd-evrow__meta { display: flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 0.8rem; overflow: hidden; }
 .pd-evrow__meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pd-evrow__ic { flex: none; width: 14px; height: 14px; stroke: var(--ink-3); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

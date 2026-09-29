@@ -163,6 +163,24 @@
                             <span>Описание</span>
                             <textarea v-model.trim="form.description" rows="3" maxlength="2000" placeholder="Коротко о чём эфир"></textarea>
                         </label>
+                        <div class="sp-field">
+                            <span>Обложка <span class="sp-optional">(необязательно)</span></span>
+                            <div v-if="form.cover_url" class="sp-cover">
+                                <img :src="form.cover_url" alt="Обложка эфира" class="sp-cover-img" />
+                                <div class="sp-cover-ctl">
+                                    <label class="sp-btn sp-btn-mini" :class="{ 'is-disabled': coverBusy }">
+                                        {{ coverBusy ? 'Загрузка…' : 'Заменить' }}
+                                        <input type="file" accept="image/*" class="sp-hidden-file" :disabled="coverBusy" @change="onCoverUpload" />
+                                    </label>
+                                    <button type="button" class="sp-btn sp-btn-mini sp-btn-ghost" :disabled="coverBusy" @click="removeCover">Удалить</button>
+                                </div>
+                            </div>
+                            <label v-else class="sp-upload" :class="{ 'is-disabled': coverBusy }">
+                                {{ coverBusy ? 'Загрузка…' : '＋ Загрузить обложку' }}
+                                <input type="file" accept="image/*" class="sp-hidden-file" :disabled="coverBusy" @change="onCoverUpload" />
+                            </label>
+                            <p v-if="coverError" class="sp-note sp-note-err">{{ coverError }}</p>
+                        </div>
                         <label class="sp-field">
                             <span>Дата и время эфира <span class="sp-optional">(необязательно)</span></span>
                             <input v-model="form.scheduledAt" type="datetime-local" />
@@ -345,8 +363,13 @@ const notice = ref('');
 const error = ref('');
 const creds = ref(null);
 const maskKey = ref(false);
-const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo', chat: false, recording: false });
+const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo', chat: false, recording: false, cover_url: '' });
 const shareMsg = ref('');
+// cover upload (same bucket/pattern as course/profile covers)
+const COVER_BUCKET = 'profile';
+const COVER_STORAGE_URL = 'https://sb.meetgu.ru/storage/v1/object/public/profile//';
+const coverBusy = ref(false);
+const coverError = ref('');
 
 const canSubmit = computed(() => {
     // PeerTube requires a 3–120 char video title; the live is created from this name.
@@ -752,8 +775,27 @@ watch(replayProcessing, processing => {
 // ---------- create / author actions ----------
 function cancelForm() {
     showForm.value = false;
-    form.value = { title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo', chat: false, recording: false };
+    form.value = { title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo', chat: false, recording: false, cover_url: '' };
     error.value = '';
+    coverError.value = '';
+}
+async function onCoverUpload(e) {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file || coverBusy.value) return;
+    coverBusy.value = true; coverError.value = '';
+    try {
+        if (form.value.cover_url) { try { await supa().storage.from(COVER_BUCKET).remove([form.value.cover_url.split('/').pop()]); } catch (_) { /* ignore */ } }
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+        const key = `${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supa().storage.from(COVER_BUCKET).upload(key, file, { upsert: false });
+        if (upErr) throw upErr;
+        form.value.cover_url = COVER_STORAGE_URL + key;
+    } catch (e2) { coverError.value = 'Не удалось загрузить обложку.'; }
+    finally { coverBusy.value = false; }
+}
+function removeCover() {
+    if (form.value.cover_url) { try { supa().storage.from(COVER_BUCKET).remove([form.value.cover_url.split('/').pop()]); } catch (_) { /* ignore */ } }
+    form.value.cover_url = '';
 }
 async function createBroadcast() {
     if (!canSubmit.value || creating.value) return;
@@ -786,6 +828,7 @@ async function createBroadcast() {
             mode: multi ? 'multi' : 'solo',
             chat_enabled: paid && form.value.chat,   // group chat is opt-in and paid-only (buyers are the members)
             recording_course_enabled: paid && form.value.recording,   // draft recording course, opt-in and paid-only
+            cover_url: form.value.cover_url || null,
         });
         const withAuthor = { ...row, authorUser: me.value };
         myStreams.value.unshift(withAuthor);
@@ -943,6 +986,18 @@ onBeforeUnmount(() => {
     font-size: 13px;
     margin: 8px 0 0;
 }
+.sp-note-err { color: #dc2626; }
+
+/* cover upload */
+.sp-hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.sp-upload { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 16px; border: 1px dashed #cbd5e1; border-radius: 12px; color: #5b6472; cursor: pointer; font-size: 14px; font-weight: 600; width: fit-content; }
+.sp-upload:hover { border-color: #5495f3; color: #1f5fc9; }
+.sp-upload.is-disabled { opacity: 0.6; pointer-events: none; }
+.sp-cover { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.sp-cover-img { width: 200px; aspect-ratio: 16/9; object-fit: cover; border-radius: 12px; border: 1px solid #e4e9f1; }
+.sp-cover-ctl { display: flex; gap: 8px; flex-wrap: wrap; }
+.sp-btn-ghost { background: none; border: 1px solid #e4e9f1; color: #dc2626; }
+.sp-btn-mini.is-disabled { opacity: 0.6; pointer-events: none; }
 
 /* form */
 .sp-form {

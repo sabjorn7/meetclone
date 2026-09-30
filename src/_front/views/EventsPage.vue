@@ -116,7 +116,9 @@ const now = Date.now();
 // An event counts as "past" only once its END (or start, if no end) is behind us — a multi-day
 // event stays "upcoming" until it actually finishes.
 function endMs(e) { const t = e.ends_at || e.starts_at; return t ? new Date(t).getTime() : Infinity; }
-const upcoming = computed(() => items.value.filter((e) => endMs(e) >= now));
+// Upcoming: nearest first (events + merged streams sorted together by start date).
+const startMs = (e) => (e.starts_at ? new Date(e.starts_at).getTime() : Infinity);
+const upcoming = computed(() => items.value.filter((e) => endMs(e) >= now).slice().sort((a, b) => startMs(a) - startMs(b)));
 const past = computed(() => items.value.filter((e) => endMs(e) < now).reverse());
 
 function backToList() { window.location.href = '/events'; }

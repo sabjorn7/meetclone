@@ -266,7 +266,7 @@
                     <div v-else class="sp-grid">
                         <button v-for="s in listItems" :key="s.id" class="sp-tile" @click="openStream(s.id)">
                             <div class="sp-thumb">
-                                <img v-if="s.thumb" :src="s.thumb" alt="" />
+                                <img v-if="s.cover_url || s.thumb" :src="s.cover_url || s.thumb" alt="" />
                                 <div v-else class="sp-thumb-ph">▶</div>
                                 <span class="sp-badge sp-tile-badge" :class="'sp-badge-' + s.status">{{ statusLabel(s.status) }}</span>
                             </div>

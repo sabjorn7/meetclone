@@ -45,6 +45,17 @@ export async function createStream(supabase, { author, title, description = '', 
     return data?.[0];
 }
 
+/** Update editable stream metadata (author only; RLS off). Whitelisted fields — never touches
+ *  price/backing_course/mode/peertube. `cover_url`/`scheduled_at`/`title`/`description` only. */
+export async function updateStream(supabase, streamId, fields) {
+    const patch = {};
+    for (const k of ['title', 'description', 'cover_url', 'scheduled_at']) {
+        if (k in fields) patch[k] = fields[k];
+    }
+    const { error } = await supabase.from('streams').update(patch).eq('id', streamId);
+    if (error) throw new Error(`Не удалось сохранить эфир: ${error.message}`);
+}
+
 // ============================ PAID STREAMS (Phase 3) ============================
 // Variant 1 — a paid stream is backed by a hidden `course` row; the UNTOUCHED BuyCourse
 // pipeline grants access via user_course on it. The functions below that create the backing

@@ -311,6 +311,7 @@
                                 <template v-else>
                                     <button v-if="s.status !== 'live'" class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="goLive(s)">Я в эфире</button>
                                     <button v-else class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="endLive(s)">Завершить</button>
+                                    <button class="sp-btn sp-btn-mini" @click="openManage(s)">✏️ Редактировать</button>
                                     <button class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="showCreds(s)">Данные OBS</button>
                                     <button v-if="!s.hidden" class="sp-btn sp-btn-mini sp-btn-danger" :disabled="busyId === s.id" @click="confirmDeleteId = s.id">Удалить</button>
                                 </template>
@@ -342,6 +343,49 @@
                 <a class="sp-authmodal-reg" href="/registration">Ещё нет аккаунта? Зарегистрируйтесь</a>
             </div>
         </div>
+
+        <!-- Manage / edit stream popup -->
+        <div v-if="manageStream" class="sp-authmodal" @click.self="closeManage">
+            <div class="sp-managemodal-card" role="dialog" aria-modal="true">
+                <button class="sp-authmodal-x" type="button" aria-label="Закрыть" @click="closeManage">✕</button>
+                <div class="sp-managemodal-title">Редактирование эфира</div>
+                <label class="sp-field">
+                    <span>Название</span>
+                    <input v-model.trim="editForm.title" type="text" minlength="3" maxlength="120" />
+                </label>
+                <label class="sp-field">
+                    <span>Описание</span>
+                    <textarea v-model.trim="editForm.description" rows="3" maxlength="2000"></textarea>
+                </label>
+                <div class="sp-field">
+                    <span>Обложка</span>
+                    <div v-if="editForm.cover_url" class="sp-cover">
+                        <img :src="editForm.cover_url" alt="Обложка эфира" class="sp-cover-img" />
+                        <div class="sp-cover-ctl">
+                            <label class="sp-btn sp-btn-mini" :class="{ 'is-disabled': editCoverBusy }">
+                                {{ editCoverBusy ? 'Загрузка…' : 'Заменить' }}
+                                <input type="file" accept="image/*" class="sp-hidden-file" :disabled="editCoverBusy" @change="onEditCover" />
+                            </label>
+                            <button type="button" class="sp-btn sp-btn-mini sp-btn-ghost" :disabled="editCoverBusy" @click="removeEditCover">Удалить</button>
+                        </div>
+                    </div>
+                    <label v-else class="sp-upload" :class="{ 'is-disabled': editCoverBusy }">
+                        {{ editCoverBusy ? 'Загрузка…' : '＋ Загрузить обложку' }}
+                        <input type="file" accept="image/*" class="sp-hidden-file" :disabled="editCoverBusy" @change="onEditCover" />
+                    </label>
+                    <p v-if="editCoverError" class="sp-note sp-note-err">{{ editCoverError }}</p>
+                </div>
+                <label class="sp-field">
+                    <span>Дата и время эфира <span class="sp-optional">(необязательно)</span></span>
+                    <input v-model="editForm.scheduledAt" type="datetime-local" />
+                </label>
+                <p v-if="editError" class="sp-note sp-note-err">{{ editError }}</p>
+                <div class="sp-manage-foot">
+                    <button class="sp-btn" type="button" @click="closeManage">Закрыть</button>
+                    <button class="sp-btn sp-btn-primary" type="button" :disabled="editBusy" @click="saveEdit">{{ editBusy ? 'Сохранение…' : 'Сохранить' }}</button>
+                </div>
+            </div>
+        </div>
         </div>
     </div>
 </template>
@@ -360,6 +404,7 @@ import {
     accessExpiry,
     listMyStreams,
     listStreamBuyers,
+    updateStream,
     listAllStreams,
     getStreamById,
     setStreamStatus,
@@ -391,6 +436,13 @@ const expandedBuyers = ref({});
 const buyers = ref({});
 const buyersLoading = ref({});
 const buyersError = ref({});
+// manage/edit modal (per stream)
+const manageStream = ref(null);
+const editForm = ref({ title: '', description: '', cover_url: '', scheduledAt: '' });
+const editBusy = ref(false);
+const editError = ref('');
+const editCoverBusy = ref(false);
+const editCoverError = ref('');
 const notice = ref('');
 const error = ref('');
 const creds = ref(null);
@@ -830,23 +882,74 @@ function cancelForm() {
     error.value = '';
     coverError.value = '';
 }
+// shared cover upload (create form + manage/edit modal)
+async function uploadCoverFile(file, oldUrl) {
+    if (oldUrl) { try { await supa().storage.from(COVER_BUCKET).remove([oldUrl.split('/').pop()]); } catch (_) { /* ignore */ } }
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const key = `${crypto.randomUUID()}.${ext}`;
+    const { error: upErr } = await supa().storage.from(COVER_BUCKET).upload(key, file, { upsert: false });
+    if (upErr) throw upErr;
+    return COVER_STORAGE_URL + key;
+}
 async function onCoverUpload(e) {
     const file = e.target.files?.[0]; e.target.value = '';
     if (!file || coverBusy.value) return;
     coverBusy.value = true; coverError.value = '';
-    try {
-        if (form.value.cover_url) { try { await supa().storage.from(COVER_BUCKET).remove([form.value.cover_url.split('/').pop()]); } catch (_) { /* ignore */ } }
-        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-        const key = `${crypto.randomUUID()}.${ext}`;
-        const { error: upErr } = await supa().storage.from(COVER_BUCKET).upload(key, file, { upsert: false });
-        if (upErr) throw upErr;
-        form.value.cover_url = COVER_STORAGE_URL + key;
-    } catch (e2) { coverError.value = 'Не удалось загрузить обложку.'; }
+    try { form.value.cover_url = await uploadCoverFile(file, form.value.cover_url); }
+    catch (e2) { coverError.value = 'Не удалось загрузить обложку.'; }
     finally { coverBusy.value = false; }
 }
 function removeCover() {
     if (form.value.cover_url) { try { supa().storage.from(COVER_BUCKET).remove([form.value.cover_url.split('/').pop()]); } catch (_) { /* ignore */ } }
     form.value.cover_url = '';
+}
+
+// ---- manage/edit modal (per stream) ----
+function toLocalInput(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+function openManage(s) {
+    manageStream.value = s;
+    editForm.value = { title: s.title || '', description: s.description || '', cover_url: s.cover_url || '', scheduledAt: toLocalInput(s.scheduled_at) };
+    editError.value = ''; editCoverError.value = ''; confirmDeleteId.value = null;
+}
+function closeManage() { manageStream.value = null; }
+async function onEditCover(e) {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file || editCoverBusy.value) return;
+    editCoverBusy.value = true; editCoverError.value = '';
+    try { editForm.value.cover_url = await uploadCoverFile(file, editForm.value.cover_url); }
+    catch (e2) { editCoverError.value = 'Не удалось загрузить обложку.'; }
+    finally { editCoverBusy.value = false; }
+}
+function removeEditCover() {
+    if (editForm.value.cover_url) { try { supa().storage.from(COVER_BUCKET).remove([editForm.value.cover_url.split('/').pop()]); } catch (_) { /* ignore */ } }
+    editForm.value.cover_url = '';
+}
+async function saveEdit() {
+    const s = manageStream.value;
+    if (!s || editBusy.value) return;
+    const title = (editForm.value.title || '').trim();
+    if (title.length < 3) { editError.value = 'Название — минимум 3 символа.'; return; }
+    editBusy.value = true; editError.value = '';
+    try {
+        const patch = {
+            title,
+            description: (editForm.value.description || '').trim(),
+            cover_url: editForm.value.cover_url || null,
+            scheduled_at: editForm.value.scheduledAt ? new Date(editForm.value.scheduledAt).toISOString() : null,
+        };
+        await updateStream(supa(), s.id, patch);
+        const apply = (row) => { if (row && row.id === s.id) Object.assign(row, patch); };
+        myStreams.value.forEach(apply);
+        listItems.value.forEach(apply);
+        apply(detail.value);
+        Object.assign(manageStream.value, patch);
+        notice.value = 'Изменения сохранены.';
+    } catch (e) { editError.value = e.message || String(e); }
+    finally { editBusy.value = false; }
 }
 async function createBroadcast() {
     if (!canSubmit.value || creating.value) return;
@@ -1049,6 +1152,9 @@ onBeforeUnmount(() => {
 .sp-authmodal-btn { display: block; width: 100%; text-align: center; text-decoration: none; }
 .sp-authmodal-reg { display: inline-block; margin-top: 16px; color: #1f5fc9; font-size: 0.9rem; font-weight: 600; text-decoration: none; }
 .sp-authmodal-reg:hover { text-decoration: underline; }
+.sp-managemodal-card { position: relative; width: 100%; max-width: 440px; max-height: calc(100vh - 40px); overflow-y: auto; background: #fff; border-radius: 18px; padding: 28px 24px 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 24px 70px -34px rgba(9, 23, 71, 0.5); }
+.sp-managemodal-title { font-weight: 800; font-size: 1.15rem; color: #091747; letter-spacing: -0.02em; padding-right: 30px; }
+.sp-manage-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
 
 /* cover upload */
 .sp-hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }

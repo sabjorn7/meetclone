@@ -344,45 +344,50 @@
             </div>
         </div>
 
-        <!-- Manage / edit stream popup -->
-        <div v-if="manageStream" class="sp-authmodal" @click.self="closeManage">
-            <div class="sp-managemodal-card" role="dialog" aria-modal="true">
-                <button class="sp-authmodal-x" type="button" aria-label="Закрыть" @click="closeManage">✕</button>
-                <div class="sp-managemodal-title">Редактирование эфира</div>
-                <label class="sp-field">
-                    <span>Название</span>
-                    <input v-model.trim="editForm.title" type="text" minlength="3" maxlength="120" />
-                </label>
-                <label class="sp-field">
-                    <span>Описание</span>
-                    <textarea v-model.trim="editForm.description" rows="3" maxlength="2000"></textarea>
-                </label>
-                <div class="sp-field">
-                    <span>Обложка</span>
-                    <div v-if="editForm.cover_url" class="sp-cover">
-                        <img :src="editForm.cover_url" alt="Обложка эфира" class="sp-cover-img" />
-                        <div class="sp-cover-ctl">
-                            <label class="sp-btn sp-btn-mini" :class="{ 'is-disabled': editCoverBusy }">
-                                {{ editCoverBusy ? 'Загрузка…' : 'Заменить' }}
-                                <input type="file" accept="image/*" class="sp-hidden-file" :disabled="editCoverBusy" @change="onEditCover" />
-                            </label>
-                            <button type="button" class="sp-btn sp-btn-mini sp-btn-ghost" :disabled="editCoverBusy" @click="removeEditCover">Удалить</button>
-                        </div>
-                    </div>
-                    <label v-else class="sp-upload" :class="{ 'is-disabled': editCoverBusy }">
-                        {{ editCoverBusy ? 'Загрузка…' : '＋ Загрузить обложку' }}
-                        <input type="file" accept="image/*" class="sp-hidden-file" :disabled="editCoverBusy" @change="onEditCover" />
-                    </label>
-                    <p v-if="editCoverError" class="sp-note sp-note-err">{{ editCoverError }}</p>
+        <!-- Manage / edit stream popup (course-editor style) -->
+        <div v-if="manageStream" class="pd-modal" @click.self="closeManage">
+            <div class="pd-dialog" role="dialog" aria-modal="true">
+                <div class="pd-dialog__head">
+                    <h2 class="pd-dialog__title">Редактирование эфира</h2>
+                    <button type="button" class="pd-x" aria-label="Закрыть" @click="closeManage">✕</button>
                 </div>
-                <label class="sp-field">
-                    <span>Дата и время эфира <span class="sp-optional">(необязательно)</span></span>
-                    <input v-model="editForm.scheduledAt" type="datetime-local" />
-                </label>
-                <p v-if="editError" class="sp-note sp-note-err">{{ editError }}</p>
-                <div class="sp-manage-foot">
-                    <button class="sp-btn" type="button" @click="closeManage">Закрыть</button>
-                    <button class="sp-btn sp-btn-primary" type="button" :disabled="editBusy" @click="saveEdit">{{ editBusy ? 'Сохранение…' : 'Сохранить' }}</button>
+                <div class="pd-dialog__body">
+                    <label class="pd-field">
+                        <span class="pd-field__lb">Название</span>
+                        <input v-model.trim="editForm.title" class="pd-input" type="text" minlength="3" maxlength="120" />
+                    </label>
+                    <label class="pd-field">
+                        <span class="pd-field__lb">Описание</span>
+                        <textarea v-model.trim="editForm.description" class="pd-input" rows="3" maxlength="2000"></textarea>
+                    </label>
+                    <div class="pd-field">
+                        <span class="pd-field__lb">Обложка</span>
+                        <div v-if="editForm.cover_url" class="sp-cover">
+                            <img :src="editForm.cover_url" alt="Обложка эфира" class="sp-cover-img" />
+                            <div class="sp-cover-ctl">
+                                <label class="sp-btn sp-btn-mini" :class="{ 'is-disabled': editCoverBusy }">
+                                    {{ editCoverBusy ? 'Загрузка…' : 'Заменить' }}
+                                    <input type="file" accept="image/*" class="sp-hidden-file" :disabled="editCoverBusy" @change="onEditCover" />
+                                </label>
+                                <button type="button" class="sp-btn sp-btn-mini sp-btn-ghost" :disabled="editCoverBusy" @click="removeEditCover">Удалить</button>
+                            </div>
+                        </div>
+                        <label v-else class="sp-upload" :class="{ 'is-disabled': editCoverBusy }">
+                            {{ editCoverBusy ? 'Загрузка…' : '＋ Загрузить обложку' }}
+                            <input type="file" accept="image/*" class="sp-hidden-file" :disabled="editCoverBusy" @change="onEditCover" />
+                        </label>
+                        <p v-if="editCoverError" class="sp-note sp-note-err">{{ editCoverError }}</p>
+                    </div>
+                    <label class="pd-field">
+                        <span class="pd-field__lb">Дата и время эфира <span class="sp-optional">(необязательно)</span></span>
+                        <input v-model="editForm.scheduledAt" class="pd-input" type="datetime-local" />
+                    </label>
+                    <p v-if="editError" class="sp-note sp-note-err">{{ editError }}</p>
+                </div>
+                <div class="pd-dialog__foot">
+                    <button class="pd-btn pd-btn--ghost" type="button" @click="closeManage">Закрыть</button>
+                    <span class="pd-foot-spacer"></span>
+                    <button class="pd-btn" type="button" :disabled="editBusy" @click="saveEdit">{{ editBusy ? 'Сохранение…' : 'Сохранить' }}</button>
                 </div>
             </div>
         </div>
@@ -1152,9 +1157,27 @@ onBeforeUnmount(() => {
 .sp-authmodal-btn { display: block; width: 100%; text-align: center; text-decoration: none; }
 .sp-authmodal-reg { display: inline-block; margin-top: 16px; color: #1f5fc9; font-size: 0.9rem; font-weight: 600; text-decoration: none; }
 .sp-authmodal-reg:hover { text-decoration: underline; }
-.sp-managemodal-card { position: relative; width: 100%; max-width: 440px; max-height: calc(100vh - 40px); overflow-y: auto; background: #fff; border-radius: 18px; padding: 28px 24px 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 24px 70px -34px rgba(9, 23, 71, 0.5); }
-.sp-managemodal-title { font-weight: 800; font-size: 1.15rem; color: #091747; letter-spacing: -0.02em; padding-right: 30px; }
-.sp-manage-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+/* course-editor-style dialog (pd-*), values inlined from CoursesManagePage tokens */
+.pd-modal { position: fixed; inset: 0; z-index: 1000; background: rgba(9, 23, 71, 0.42); display: grid; place-items: center; padding: 20px; overflow-y: auto; }
+.pd-dialog { position: relative; width: 100%; max-width: 520px; background: #fff; border-radius: 20px; box-shadow: 0 30px 80px -30px rgba(9, 23, 71, 0.5); display: flex; flex-direction: column; max-height: calc(100vh - 40px); }
+.pd-dialog__head { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px 14px; border-bottom: 1px solid #e4e9f1; }
+.pd-dialog__title { margin: 0; font-weight: 800; font-size: 1.15rem; letter-spacing: -0.02em; color: #091747; }
+.pd-x { border: 0; background: none; padding: 4px 8px; cursor: pointer; color: #98a0ad; border-radius: 8px; font-size: 16px; line-height: 1; }
+.pd-x:hover { background: #f1f6fd; color: #091747; }
+.pd-dialog__body { flex: 1 1 auto; min-height: 0; padding: 18px 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+.pd-dialog__foot { flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 14px 22px 20px; border-top: 1px solid #e4e9f1; }
+.pd-foot-spacer { flex: 1; }
+.pd-field { display: flex; flex-direction: column; gap: 6px; }
+.pd-field__lb { font-size: 0.86rem; font-weight: 600; color: #5b6472; }
+.pd-input { width: 100%; border: 1px solid #e4e9f1; border-radius: 12px; background: #fff; padding: 10px 13px; font-family: inherit; font-size: 0.96rem; color: #091747; }
+.pd-input:focus { outline: none; border-color: #5495f3; box-shadow: 0 0 0 3px #eaf1fe; }
+.pd-input::placeholder { color: #98a0ad; }
+textarea.pd-input { resize: vertical; }
+.pd-btn { display: inline-flex; align-items: center; gap: 8px; border: none; border-radius: 999px; background: #2e70dd; color: #fff; font-family: inherit; font-weight: 700; font-size: 0.95rem; padding: 11px 22px; cursor: pointer; transition: background 0.15s, transform 0.15s; white-space: nowrap; }
+.pd-btn:hover { background: #2360c6; }
+.pd-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.pd-btn--ghost { background: #fff; color: #5b6472; border: 1px solid #e4e9f1; }
+.pd-btn--ghost:hover { background: #f1f6fd; color: #091747; }
 
 /* cover upload */
 .sp-hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }

@@ -1438,7 +1438,12 @@ onBeforeUnmount(() => {
 .sp-item-actions {
     display: flex;
     gap: 8px;
-    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+    .sp-item { flex-direction: column; align-items: stretch; }
+    .sp-item-actions { width: 100%; }
+    .sp-item-actions .sp-btn-mini { flex: 1 1 auto; text-align: center; }
 }
 
 /* badges */

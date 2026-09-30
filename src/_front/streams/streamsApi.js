@@ -162,6 +162,25 @@ export async function hasBoughtStream(supabase, stream, userId) {
     return !!data?.length;
 }
 
+/** Buyers of a paid stream (author view): user_course rows on the backing course + user Name/email,
+ *  oldest purchase first. Streams have no "pending registration" like events — a row here = paid. */
+export async function listStreamBuyers(supabase, stream) {
+    if (!stream.backing_course_id) return [];
+    const { data: ucs } = await supabase
+        .from('user_course')
+        .select('id, "user", created_at')
+        .eq('course', stream.backing_course_id)
+        .order('created_at', { ascending: true });
+    const rows = ucs || [];
+    const ids = [...new Set(rows.map((r) => r.user).filter(Boolean))];
+    let byId = {};
+    if (ids.length) {
+        const { data: us } = await supabase.from('users').select('id, "Name", email').in('id', ids);
+        byId = Object.fromEntries((us || []).map((u) => [u.id, u]));
+    }
+    return rows.map((r) => ({ id: r.id, created_at: r.created_at, user: byId[r.user] || null }));
+}
+
 /** All streams by a given author, newest first (for the author's own list). */
 export async function listMyStreams(supabase, authorId) {
     const { data, error } = await supabase

@@ -295,6 +295,9 @@
                                     <span class="sp-badge" :class="'sp-badge-' + s.status">{{ statusLabel(s.status) }}</span>
                                     <span v-if="s.hidden" class="sp-badge sp-badge-hidden">Скрыт</span>
                                     <span>{{ priceLabel(s) }}</span>
+                                    <button v-if="Number(s.price) > 0 && s.backing_course_id" type="button" class="sp-buyers-toggle" @click="toggleBuyers(s)">
+                                        👥 Купившие {{ expandedBuyers[s.id] ? '▲' : '▼' }}
+                                    </button>
                                 </div>
                             </div>
                             <div class="sp-item-actions">
@@ -311,6 +314,18 @@
                                     <button class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="showCreds(s)">Данные OBS</button>
                                     <button v-if="!s.hidden" class="sp-btn sp-btn-mini sp-btn-danger" :disabled="busyId === s.id" @click="confirmDeleteId = s.id">Удалить</button>
                                 </template>
+                            </div>
+                            <div v-if="expandedBuyers[s.id]" class="sp-buyers">
+                                <div v-if="buyersLoading[s.id]" class="sp-muted">Загрузка…</div>
+                                <div v-else-if="buyersError[s.id]" class="sp-note-err">{{ buyersError[s.id] }}</div>
+                                <div v-else-if="!(buyers[s.id] || []).length" class="sp-muted">Пока никто не купил этот эфир.</div>
+                                <ul v-else class="sp-buyers-list">
+                                    <li v-for="b in buyers[s.id]" :key="b.id" class="sp-buyers-item">
+                                        <span class="sp-buyers-name">{{ b.user?.Name || 'Без имени' }}</span>
+                                        <span class="sp-buyers-email">{{ b.user?.email || '—' }}</span>
+                                    </li>
+                                </ul>
+                                <div v-if="(buyers[s.id] || []).length" class="sp-buyers-total">Всего купивших: {{ buyers[s.id].length }}</div>
                             </div>
                         </li>
                     </ul>
@@ -344,6 +359,7 @@ import {
     hasBoughtStream,
     accessExpiry,
     listMyStreams,
+    listStreamBuyers,
     listAllStreams,
     getStreamById,
     setStreamStatus,
@@ -370,6 +386,11 @@ const creating = ref(false);
 const busyId = ref(null);
 const confirmDeleteId = ref(null);
 const showAuthModal = ref(false);   // guest clicked "Купить" → login prompt popup
+// buyers roster (author view, per stream, lazy)
+const expandedBuyers = ref({});
+const buyers = ref({});
+const buyersLoading = ref({});
+const buyersError = ref({});
 const notice = ref('');
 const error = ref('');
 const creds = ref(null);
@@ -682,6 +703,24 @@ async function buyStream() {
     } catch (e) {
         error.value = e.message || String(e);
         buying.value = false;
+    }
+}
+
+// buyers roster (author view) — who paid for this stream (user_course on the backing course)
+async function toggleBuyers(s) {
+    const open = !expandedBuyers.value[s.id];
+    expandedBuyers.value = { ...expandedBuyers.value, [s.id]: open };
+    if (open) await loadBuyers(s);
+}
+async function loadBuyers(s) {
+    buyersLoading.value = { ...buyersLoading.value, [s.id]: true };
+    buyersError.value = { ...buyersError.value, [s.id]: '' };
+    try {
+        buyers.value = { ...buyers.value, [s.id]: await listStreamBuyers(supa(), s) };
+    } catch (e) {
+        buyersError.value = { ...buyersError.value, [s.id]: 'Не удалось загрузить список.' };
+    } finally {
+        buyersLoading.value = { ...buyersLoading.value, [s.id]: false };
     }
 }
 
@@ -1262,9 +1301,19 @@ onBeforeUnmount(() => {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    flex-wrap: wrap;
     padding: 12px 0;
     border-top: 1px solid #eef1f5;
 }
+.sp-buyers-toggle { border: none; background: #f1f6fd; color: #1f5fc9; font: inherit; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; cursor: pointer; }
+.sp-buyers-toggle:hover { background: #e3edfd; }
+.sp-buyers { flex-basis: 100%; width: 100%; margin-top: 4px; padding: 12px 14px; background: #f8fafc; border-radius: 12px; }
+.sp-buyers-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sp-buyers-item { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 6px 0; border-bottom: 1px solid #eef1f5; }
+.sp-buyers-item:last-child { border-bottom: none; }
+.sp-buyers-name { font-weight: 600; color: #091747; }
+.sp-buyers-email { color: #5b6472; }
+.sp-buyers-total { margin-top: 8px; font-size: 12px; color: #8a93a2; }
 .sp-item:first-child {
     border-top: none;
 }

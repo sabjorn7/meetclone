@@ -29,11 +29,11 @@
                             <template v-if="upcoming.length">
                                 <h2 class="pd-grouphead">Предстоящие</h2>
                                 <div class="pd-list">
-                                    <a v-for="ev in upcoming" :key="ev.id" class="pd-erow" :href="ev.slug ? `/event/${ev.slug}` : `/events?event=${ev.id}`">
+                                    <a v-for="ev in upcoming" :key="ev.id" class="pd-erow" :href="hrefFor(ev)">
                                         <div class="pd-erow__cover">
                                             <img v-if="ev.cover_url" :src="ev.cover_url" :alt="ev.title" loading="lazy" />
-                                            <div v-else class="pd-erow__cover--empty">🗓</div>
-                                            <span class="pd-erow__badge">Предстоящее</span>
+                                            <div v-else class="pd-erow__cover--empty">{{ ev._kind === 'stream' ? '📡' : '🗓' }}</div>
+                                            <span class="pd-erow__badge">{{ ev._kind === 'stream' ? 'Эфир' : 'Предстоящее' }}</span>
                                         </div>
                                         <div class="pd-erow__body">
                                             <h3 class="pd-erow__title">{{ ev.title }}</h3>
@@ -49,7 +49,7 @@
                             <template v-if="past.length">
                                 <h2 class="pd-grouphead">Прошедшие</h2>
                                 <div class="pd-list">
-                                    <a v-for="ev in past" :key="ev.id" class="pd-erow pd-erow--past" :href="ev.slug ? `/event/${ev.slug}` : `/events?event=${ev.id}`">
+                                    <a v-for="ev in past" :key="ev.id" class="pd-erow pd-erow--past" :href="hrefFor(ev)">
                                         <div class="pd-erow__cover">
                                             <img v-if="ev.cover_url" :src="ev.cover_url" :alt="ev.title" loading="lazy" />
                                             <div v-else class="pd-erow__cover--empty">🗓</div>
@@ -77,6 +77,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { listPublishedEvents } from '@/_front/streams/eventsApi.js';
+import { listAllStreams } from '@/_front/streams/streamsApi.js';
 import EventDetailPage from './EventDetailPage.vue';
 
 const sb = () => window.wwLib?.wwPlugins?.supabase?.instance;
@@ -119,12 +120,27 @@ const upcoming = computed(() => items.value.filter((e) => endMs(e) >= now));
 const past = computed(() => items.value.filter((e) => endMs(e) < now).reverse());
 
 function backToList() { window.location.href = '/events'; }
+function hrefFor(ev) {
+    if (ev._kind === 'stream') return `/streams?stream=${ev.id}`;
+    return ev.slug ? `/event/${ev.slug}` : `/events?event=${ev.id}`;
+}
 
 onMounted(async () => {
     // In detail mode the child component loads itself; only the calendar needs the list.
     if (activeEventId.value || activeEventSlug.value) { loading.value = false; return; }
     try {
-        items.value = await listPublishedEvents(sb());
+        const events = await listPublishedEvents(sb());
+        // Add future SCHEDULED streams (эфиры) alongside events — same card shape; the time-based
+        // upcoming/past split handles placement (they land in "Предстоящие").
+        let streamRows = [];
+        try {
+            const streams = await listAllStreams(sb());
+            const nowMs = Date.now();
+            streamRows = (streams || [])
+                .filter((s) => s.status === 'scheduled' && s.scheduled_at && new Date(s.scheduled_at).getTime() > nowMs)
+                .map((s) => ({ id: s.id, title: s.title, cover_url: s.cover_url, starts_at: s.scheduled_at, ends_at: null, location: null, price: s.price, _kind: 'stream' }));
+        } catch (e) { /* streams optional */ }
+        items.value = [...(events || []), ...streamRows];
     } catch (e) {
         error.value = e.message || String(e);
     } finally {

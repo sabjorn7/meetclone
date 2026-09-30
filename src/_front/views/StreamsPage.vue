@@ -317,6 +317,16 @@
                 </section>
             </template>
         </template>
+        <!-- Guest clicked "Купить" → login prompt popup -->
+        <div v-if="showAuthModal" class="sp-authmodal" @click.self="showAuthModal = false">
+            <div class="sp-authmodal-card" role="dialog" aria-modal="true">
+                <button class="sp-authmodal-x" type="button" aria-label="Закрыть" @click="showAuthModal = false">✕</button>
+                <div class="sp-authmodal-title">Войдите, чтобы получить доступ к эфиру</div>
+                <p class="sp-authmodal-text">Чтобы купить эфир и смотреть трансляцию, войдите в аккаунт или зарегистрируйтесь.</p>
+                <a class="sp-btn sp-btn-primary sp-authmodal-btn" href="/login">Войти</a>
+                <a class="sp-authmodal-reg" href="/registration">Ещё нет аккаунта? Зарегистрируйтесь</a>
+            </div>
+        </div>
         </div>
     </div>
 </template>
@@ -359,6 +369,7 @@ const showForm = ref(false);
 const creating = ref(false);
 const busyId = ref(null);
 const confirmDeleteId = ref(null);
+const showAuthModal = ref(false);   // guest clicked "Купить" → login prompt popup
 const notice = ref('');
 const error = ref('');
 const creds = ref(null);
@@ -661,10 +672,11 @@ function cohostStatusLabel(c) {
 
 async function buyStream() {
     if (buying.value || !detail.value) return;
+    // Guest → login prompt popup (matches the /course buy flow) instead of a tiny inline error.
+    if (!me.value) { showAuthModal.value = true; return; }
     buying.value = true;
     error.value = '';
     try {
-        if (!me.value) throw new Error('Войдите, чтобы купить эфир.');
         const payLink = await purchaseStream(supa(), { buyer: me.value.id, stream: detail.value });
         window.location.href = payLink; // redirect to Prodamus (clone of the course change-page step)
     } catch (e) {
@@ -987,6 +999,17 @@ onBeforeUnmount(() => {
     margin: 8px 0 0;
 }
 .sp-note-err { color: #dc2626; }
+
+/* guest buy → login modal */
+.sp-authmodal { position: fixed; inset: 0; z-index: 300; background: rgba(9, 23, 71, 0.45); display: grid; place-items: center; padding: 20px; }
+.sp-authmodal-card { position: relative; width: 100%; max-width: 400px; background: #fff; border-radius: 18px; padding: 32px 28px 28px; text-align: center; box-shadow: 0 24px 70px -34px rgba(9, 23, 71, 0.5); }
+.sp-authmodal-x { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; display: grid; place-items: center; border: none; background: none; color: #98a0ad; font-size: 18px; cursor: pointer; border-radius: 8px; }
+.sp-authmodal-x:hover { background: #f1f6fd; color: #091747; }
+.sp-authmodal-title { font-weight: 800; font-size: 1.2rem; color: #091747; letter-spacing: -0.02em; }
+.sp-authmodal-text { margin: 10px 0 22px; color: #5b6472; font-size: 0.95rem; line-height: 1.5; }
+.sp-authmodal-btn { display: block; width: 100%; text-align: center; text-decoration: none; }
+.sp-authmodal-reg { display: inline-block; margin-top: 16px; color: #1f5fc9; font-size: 0.9rem; font-weight: 600; text-decoration: none; }
+.sp-authmodal-reg:hover { text-decoration: underline; }
 
 /* cover upload */
 .sp-hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }

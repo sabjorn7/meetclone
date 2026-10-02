@@ -1,7 +1,7 @@
 <template>
     <div class="streams-page">
         <div class="sp-inner">
-        <h1 class="sp-title">Трансляции</h1>
+        <h1 v-if="activeStreamId" class="sp-title">Трансляции</h1>
 
         <!-- ============================ DETAIL VIEW ============================ -->
         <template v-if="activeStreamId">
@@ -144,6 +144,15 @@
 
         <!-- ============================= LIST VIEW ============================= -->
         <template v-else>
+            <header class="pd-hero">
+                <span class="pd-blob" aria-hidden="true"></span>
+                <div class="pd-hero__text">
+                    <span class="pd-badge"><span class="pd-badge__dot" aria-hidden="true"></span>Прямой эфир</span>
+                    <h1 class="pd-hero__title">Трансляции</h1>
+                    <p class="pd-hero__sub">Живые эфиры и семинары от практикующих экспертов — смотрите онлайн, покупайте и пересматривайте в записи.</p>
+                </div>
+            </header>
+
             <div v-if="loading" class="sp-muted">Загрузка…</div>
 
             <template v-else>
@@ -259,24 +268,27 @@
                     <p class="sp-note">Никому не передавайте ключ потока — по нему можно вести эфир от вашего имени.</p>
                 </section>
 
-                <!-- All streams -->
-                <section class="sp-card">
-                    <h2>Все эфиры</h2>
-                    <div v-if="!listItems.length" class="sp-muted">Пока нет эфиров.</div>
-                    <div v-else class="sp-grid">
-                        <button v-for="s in listItems" :key="s.id" class="sp-tile" @click="openStream(s.id)">
-                            <div class="sp-thumb">
-                                <img v-if="s.cover_url || s.thumb" :src="s.cover_url || s.thumb" alt="" />
-                                <div v-else class="sp-thumb-ph">▶</div>
-                                <span class="sp-badge sp-tile-badge" :class="'sp-badge-' + s.status">{{ statusLabel(s.status) }}</span>
-                            </div>
-                            <div class="sp-tile-body">
-                                <div class="sp-tile-title">{{ s.title }}</div>
-                                <div v-if="s.status === 'scheduled' && s.scheduled_at" class="sp-tile-when">🕐 {{ formatDateTime(s.scheduled_at) }}</div>
-                                <div class="sp-tile-meta">
-                                    <span>{{ authorName(s) }}</span>
-                                    <span>{{ priceLabel(s) }}</span>
-                                </div>
+                <!-- All streams (catalog style, like /all_course) -->
+                <section class="sp-catalog">
+                    <h2 class="pd-h2">Все эфиры</h2>
+                    <div v-if="!listItems.length" class="pd-state">Пока нет эфиров.</div>
+                    <div v-else class="pd-cards pd-cards--courses">
+                        <button v-for="s in listItems" :key="s.id" class="pd-course" type="button" @click="openStream(s.id)">
+                            <span class="pd-course__cover">
+                                <img v-if="s.cover_url || s.thumb" :src="s.cover_url || s.thumb" :alt="s.title" loading="lazy" />
+                                <span v-else class="pd-course__cover--ph" aria-hidden="true">📡</span>
+                                <span class="pd-course__badge" :class="'sp-badge-' + s.status">{{ statusLabel(s.status) }}</span>
+                            </span>
+                            <h3 class="pd-course__t">{{ s.title }}</h3>
+                            <div v-if="s.status === 'scheduled' && s.scheduled_at" class="pd-course__when">🕐 {{ formatDateTime(s.scheduled_at) }}</div>
+                            <div class="pd-course__foot">
+                                <span v-if="s.authorUser" class="pd-course__auth">
+                                    <img v-if="s.authorUser.Photo" class="pd-course__ava" :src="s.authorUser.Photo" :alt="s.authorUser.Name" />
+                                    <span v-else class="pd-course__ava pd-course__ava--i">{{ (s.authorUser.Name || '?').slice(0, 1) }}</span>
+                                    <span class="pd-course__author">{{ s.authorUser.Name }}</span>
+                                </span>
+                                <span v-else></span>
+                                <span class="pd-course__price" :class="{ 'is-free': !(Number(s.price) > 0) }">{{ priceLabel(s) }}</span>
                             </div>
                         </button>
                     </div>
@@ -1178,6 +1190,37 @@ textarea.pd-input { resize: vertical; }
 .pd-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .pd-btn--ghost { background: #fff; color: #5b6472; border: 1px solid #e4e9f1; }
 .pd-btn--ghost:hover { background: #f1f6fd; color: #091747; }
+
+/* catalog-style hero + cards (like /all_course), tokens inlined */
+.pd-hero { position: relative; padding: 32px 0 24px; overflow: hidden; }
+.pd-blob { position: absolute; top: -200px; right: -160px; width: 520px; height: 520px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, rgba(84, 149, 243, 0.2), rgba(84, 149, 243, 0.05) 60%, transparent 72%); pointer-events: none; z-index: 0; }
+.pd-hero__text { position: relative; z-index: 1; }
+.pd-badge { display: inline-flex; align-items: center; gap: 9px; padding: 7px 15px; border-radius: 999px; background: #eaf1fe; color: #1f5fc9; font-weight: 600; font-size: 14px; }
+.pd-badge__dot { width: 8px; height: 8px; border-radius: 50%; background: #f09157; box-shadow: 0 0 0 4px rgba(240, 145, 87, 0.22); }
+.pd-hero__title { margin: 18px 0 0; font-weight: 700; font-size: clamp(1.9rem, 4.4vw, 3rem); line-height: 1.05; letter-spacing: -0.02em; color: #091747; }
+.pd-hero__sub { margin: 16px 0 0; max-width: 56ch; font-size: 1.08rem; color: #5b6472; }
+.sp-catalog { margin-top: 20px; }
+.pd-h2 { margin: 0 0 20px; font-weight: 700; font-size: clamp(1.4rem, 3vw, 1.9rem); letter-spacing: -0.02em; color: #091747; }
+.pd-state { text-align: center; color: #5b6472; font-size: 1.05rem; padding: 40px 0; }
+.pd-cards { display: grid; }
+.pd-cards--courses { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.pd-course { display: flex; flex-direction: column; gap: 12px; background: #fff; border: 1px solid #e4e9f1; border-radius: 16px; padding: 20px 20px 18px; text-align: left; cursor: pointer; color: inherit; font: inherit; transition: transform 0.22s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.22s, border-color 0.22s; }
+.pd-course:hover { transform: translateY(-3px); box-shadow: 0 14px 40px -20px rgba(9, 23, 71, 0.24); border-color: #cdddf7; }
+.pd-course__cover { position: relative; margin: -20px -20px 0; aspect-ratio: 16/9; overflow: hidden; border-radius: 16px 16px 0 0; background: #eaf1fe; display: grid; place-items: center; }
+.pd-course__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pd-course__cover--ph { font-size: 34px; opacity: 0.6; }
+.pd-course__badge { position: absolute; top: 10px; left: 10px; padding: 4px 11px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.pd-course__t { margin: 4px 0 0; font-weight: 600; font-size: 1.05rem; line-height: 1.28; letter-spacing: -0.01em; flex: 1; color: #091747; }
+.pd-course__when { font-size: 0.9rem; color: #5b6472; }
+.pd-course__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+.pd-course__auth { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.pd-course__ava { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex: none; }
+.pd-course__ava--i { display: grid; place-items: center; background: #eaf1fe; color: #1f5fc9; font-weight: 700; font-size: 11px; }
+.pd-course__author { color: #98a0ad; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-course__price { font-weight: 700; font-size: 1.05rem; color: #091747; white-space: nowrap; flex: none; }
+.pd-course__price.is-free { color: #c2410c; }
+@media (max-width: 900px) { .pd-cards--courses { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .pd-cards--courses { grid-template-columns: 1fr; } }
 
 /* cover upload */
 .sp-hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }

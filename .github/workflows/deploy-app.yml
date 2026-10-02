@@ -52,13 +52,17 @@ jobs:
           ARGS: "-rlgoDzvc -i"
           EXCLUDE: "*.html"
 
-      # Phase 2: upload HTML and prune stale files — but NEVER delete the old hashed chunks under
-      # assets/ (--exclude protects them from --delete). A browser that loaded the PREVIOUS index.html
-      # keeps lazy-loading its old assets/main-<oldhash>.js; deleting those the instant we deploy is
-      # exactly what white-screens an already-open tab ("то работает, то нет"). Old chunks are pruned on
-      # a grace delay by SCRIPT_AFTER: any asset file not re-uploaded for ~1 day (i.e. from deploys older
-      # than a day — rsync runs without -t, so every uploaded file is stamped "now") gets cleaned up.
-      - name: Deploy HTML + prune stale (keep old chunks for a grace period)
+      # Phase 2: upload HTML and prune stale files — but NEVER delete anything under assets/
+      # (--exclude protects the whole dir from --delete). A browser that loaded the PREVIOUS index.html
+      # keeps resolving its old assets/main-<oldhash>.js and doesn't white-screen on a lazy chunk.
+      #
+      # DO NOT age-prune assets/ by mtime. rsync runs with -c (checksum) and SKIPS unchanged files, so
+      # content-stable vendor chunks (vue runtime, environmentConfig, …) keep an OLD mtime while the
+      # CURRENT build still references them. A `find -mtime +N -delete` deletes exactly those and 404s
+      # the whole app for every fresh load (this happened: f721233). Old *unreferenced* chunks are left
+      # to accumulate — disk is cheap; if it ever matters, prune by REFERENCE (grep the live *.html for
+      # asset names, delete only files no HTML mentions), never by age.
+      - name: Deploy HTML + prune stale (keep all chunks under assets/)
         uses: easingthemes/ssh-deploy@v6
         with:
           SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -68,8 +72,6 @@ jobs:
           SOURCE: "dist/"
           TARGET: "/home/arseny/www-app/"
           ARGS: "-rlgoDzvc -i --delete --exclude=assets/"
-          SCRIPT_AFTER: |
-            find /home/arseny/www-app/assets -type f -mtime +1 -delete 2>/dev/null || true
 
       # ── Landing (meetgu.ru) — same two-phase deploy to avoid the chunk cache-poisoning race ──
       - name: Deploy landing assets first (no delete)
@@ -84,9 +86,9 @@ jobs:
           ARGS: "-rlgoDzvc -i"
           EXCLUDE: "*.html"
 
-      # Same grace-period prune as the app deploy above: keep old hashed chunks so already-open landing
-      # tabs don't 404 on a lazy chunk the moment we deploy; clean up assets older than ~1 day.
-      - name: Deploy landing HTML + prune stale (keep old chunks for a grace period)
+      # Same as the app deploy: keep ALL hashed chunks (--exclude=assets/ from --delete) so already-open
+      # landing tabs don't 404 on a lazy chunk. No mtime prune — see the note on the app step above.
+      - name: Deploy landing HTML + prune stale (keep all chunks under assets/)
         uses: easingthemes/ssh-deploy@v6
         with:
           SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -96,5 +98,3 @@ jobs:
           SOURCE: "dist-landing/"
           TARGET: "/home/arseny/www-landing/"
           ARGS: "-rlgoDzvc -i --delete --exclude=assets/"
-          SCRIPT_AFTER: |
-            find /home/arseny/www-landing/assets -type f -mtime +1 -delete 2>/dev/null || true

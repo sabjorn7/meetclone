@@ -52,7 +52,13 @@ jobs:
           ARGS: "-rlgoDzvc -i"
           EXCLUDE: "*.html"
 
-      - name: Deploy HTML + prune stale (delete)
+      # Phase 2: upload HTML and prune stale files — but NEVER delete the old hashed chunks under
+      # assets/ (--exclude protects them from --delete). A browser that loaded the PREVIOUS index.html
+      # keeps lazy-loading its old assets/main-<oldhash>.js; deleting those the instant we deploy is
+      # exactly what white-screens an already-open tab ("то работает, то нет"). Old chunks are pruned on
+      # a grace delay by SCRIPT_AFTER: any asset file not re-uploaded for ~1 day (i.e. from deploys older
+      # than a day — rsync runs without -t, so every uploaded file is stamped "now") gets cleaned up.
+      - name: Deploy HTML + prune stale (keep old chunks for a grace period)
         uses: easingthemes/ssh-deploy@v6
         with:
           SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -61,7 +67,9 @@ jobs:
           REMOTE_PORT: ${{ secrets.DEPLOY_PORT }}
           SOURCE: "dist/"
           TARGET: "/home/arseny/www-app/"
-          ARGS: "-rlgoDzvc -i --delete"
+          ARGS: "-rlgoDzvc -i --delete --exclude=assets/"
+          SCRIPT_AFTER: |
+            find /home/arseny/www-app/assets -type f -mtime +1 -delete 2>/dev/null || true
 
       # ── Landing (meetgu.ru) — same two-phase deploy to avoid the chunk cache-poisoning race ──
       - name: Deploy landing assets first (no delete)
@@ -76,7 +84,9 @@ jobs:
           ARGS: "-rlgoDzvc -i"
           EXCLUDE: "*.html"
 
-      - name: Deploy landing HTML + prune stale (delete)
+      # Same grace-period prune as the app deploy above: keep old hashed chunks so already-open landing
+      # tabs don't 404 on a lazy chunk the moment we deploy; clean up assets older than ~1 day.
+      - name: Deploy landing HTML + prune stale (keep old chunks for a grace period)
         uses: easingthemes/ssh-deploy@v6
         with:
           SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -85,4 +95,6 @@ jobs:
           REMOTE_PORT: ${{ secrets.DEPLOY_PORT }}
           SOURCE: "dist-landing/"
           TARGET: "/home/arseny/www-landing/"
-          ARGS: "-rlgoDzvc -i --delete"
+          ARGS: "-rlgoDzvc -i --delete --exclude=assets/"
+          SCRIPT_AFTER: |
+            find /home/arseny/www-landing/assets -type f -mtime +1 -delete 2>/dev/null || true

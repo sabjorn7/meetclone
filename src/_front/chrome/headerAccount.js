@@ -160,11 +160,34 @@ export async function signOutUser(sb) {
 // "Оформить заказ" runs and the same as streamsApi.purchaseStream — create an `order` from the cart,
 // fetch a Prodamus payment link (do=link), persist it, then redirect the buyer to Prodamus. It does
 // NOT move funds itself; the buyer completes payment on Prodamus (n8n BuyCourse finalizes via callback).
-export async function checkoutCart(sb, { user, cart }) {
+export async function checkoutCart(sb, { user, cart, promoCode = null }) {
     if (!sb || !user?.id || !cart?.length) return;
-    const summ = cartTotal(cart);
+
+    // Promo (optional). Re-validate server-side at checkout so the discount is authoritative and
+    // reflects the CURRENT cart (not a stale "applied" snapshot). preview_promo returns per-line
+    // new prices; we persist them to shop.price so n8n BuyCourse bills the author's commission on the
+    // discounted price (the invariant order.summ == Σ shop.price == amount charged stays intact).
+    const priceById = {};
+    let promoId = null, promoDiscount = 0;
+    if (promoCode) {
+        const { data: pv, error: pErr } = await sb.rpc('preview_promo', {
+            p_code: promoCode, p_shop_ids: cart.map((r) => r.id),
+        });
+        if (pErr) throw new Error(`Промокод: ${pErr.message}`);
+        if (!pv?.valid) throw new Error('Промокод больше не действует — обновите корзину.');
+        promoId = pv.promo_id;
+        promoDiscount = Number(pv.discount) || 0;
+        for (const l of (pv.lines || [])) {
+            priceById[l.shop_id] = Number(l.new_price);
+            await sb.from('shop').update({ price: Number(l.new_price) }).eq('id', l.shop_id);
+        }
+    }
+    const priceOf = (r) => (priceById[r.id] !== undefined ? priceById[r.id] : Number(r.price || 0));
+    const summ = cart.reduce((s, r) => s + priceOf(r), 0);
+
     const { data: orderRows, error } = await sb.from('order')
-        .insert({ summ, owner: user.id, course_positions: cart.map((r) => r.id) })
+        .insert({ summ, owner: user.id, course_positions: cart.map((r) => r.id),
+                  promo_code_id: promoId, promo_discount: promoId ? promoDiscount : null })
         .select('id');
     if (error) throw new Error(`Заказ: ${error.message}`);
     const orderId = orderRows?.[0]?.id;
@@ -174,7 +197,7 @@ export async function checkoutCart(sb, { user, cart }) {
     // no single ?course=<id> to deep-link, and bare /my_courses now shows "Курс не найден".
     const urlSuccess = 'https://app.meetgu.ru/';
     const products = cart.map((r, i) =>
-        `products[${i}][price]=${encodeURIComponent(r.price)}` +
+        `products[${i}][price]=${encodeURIComponent(priceOf(r))}` +
         `&products[${i}][quantity]=${encodeURIComponent(r.quantity || 1)}` +
         `&products[${i}][name]=${encodeURIComponent(r.course_name || 'Курс')}`
     ).join('&');

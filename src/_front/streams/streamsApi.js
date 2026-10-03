@@ -91,7 +91,7 @@ export async function createBackingCourse(supabase, { owner, title, price, month
  * The actual settlement (mark paid, grant user_course, sales, balance) is handled entirely by
  * the UNTOUCHED n8n `BuyCourse` workflow via the Prodamus callback. Returns the payment URL.
  */
-export async function purchaseStream(supabase, { buyer, stream }) {
+export async function purchaseStream(supabase, { buyer, stream, promoCode = null }) {
     if (!stream.backing_course_id) throw new Error('У эфира нет курса-подложки.');
 
     // 1) cart row in `shop` (clone of course action 90ddb3ae; +quantity:1, read by the Prodamus builder)
@@ -117,10 +117,25 @@ export async function purchaseStream(supabase, { buyer, stream }) {
     if (shopErr) throw new Error(`Корзина: ${shopErr.message}`);
     const shopId = shopRows?.[0]?.id;
 
+    // 1b) optional promo — validate server-side, persist the discounted price to shop so n8n
+    // BuyCourse bills the author's commission on the discounted price; carry markers on the order.
+    let price = Number(stream.price) || 0;
+    let promoId = null, promoDiscount = 0;
+    if (promoCode) {
+        const { data: pv, error: pErr } = await supabase.rpc('preview_promo', { p_code: promoCode, p_shop_ids: [shopId] });
+        if (pErr) throw new Error(`Промокод: ${pErr.message}`);
+        if (!pv?.valid) throw new Error('Промокод недействителен для этого эфира.');
+        price = Number(pv.new_total);
+        promoId = pv.promo_id;
+        promoDiscount = Number(pv.discount) || 0;
+        await supabase.from('shop').update({ price }).eq('id', shopId);
+    }
+
     // 2) order (clone of 21527f28) — ISOLATED to just this stream (only its shop row)
     const { data: orderRows, error: orderErr } = await supabase
         .from('order')
-        .insert({ summ: stream.price, owner: buyer, course_positions: [shopId] })
+        .insert({ summ: price, owner: buyer, course_positions: [shopId],
+                  promo_code_id: promoId, promo_discount: promoId ? promoDiscount : null })
         .select('id')
         .limit(1);
     if (orderErr) throw new Error(`Заказ: ${orderErr.message}`);
@@ -130,7 +145,7 @@ export async function purchaseStream(supabase, { buyer, stream }) {
     const base = 'https://meetguru.payform.ru/?do=link&sys=meetguru';
     const urlSuccess = `https://app.meetgu.ru/streams?stream=${stream.id}`;
     const products =
-        `products[0][price]=${encodeURIComponent(stream.price)}` +
+        `products[0][price]=${encodeURIComponent(price)}` +
         `&products[0][quantity]=1` +
         `&products[0][name]=${encodeURIComponent(stream.title)}`;
     const buildUrl = `${base}&order_id=${encodeURIComponent(orderId)}&${products}&urlSuccess=${encodeURIComponent(urlSuccess)}`;

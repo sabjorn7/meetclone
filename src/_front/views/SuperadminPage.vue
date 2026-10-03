@@ -219,6 +219,77 @@
                 </template>
             </section>
 
+            <!-- LIVE: Промокоды -->
+            <section v-else-if="active === 'promo'" class="sa-panel sa-pad">
+                <div class="sa-panelhead">
+                    <h2>Промокоды</h2>
+                    <span class="sa-note">Скидка применяется в корзине при оформлении заказа</span>
+                </div>
+
+                <form class="promo-form" @submit.prevent="createPromo">
+                    <div class="promo-grid">
+                        <label class="pf">Код
+                            <input v-model="promoForm.code" type="text" placeholder="SALE20" autocapitalize="characters" />
+                        </label>
+                        <label class="pf">Тип скидки
+                            <select v-model="promoForm.type">
+                                <option value="percent">Процент, %</option>
+                                <option value="fixed">Фиксированная, ₽</option>
+                            </select>
+                        </label>
+                        <label class="pf">{{ promoForm.type === 'percent' ? 'Процент (1–100)' : 'Сумма, ₽' }}
+                            <input v-model.number="promoForm.value" type="number" min="1" :max="promoForm.type === 'percent' ? 100 : null" step="1" />
+                        </label>
+                        <label class="pf">Область действия
+                            <select v-model="promoForm.scope">
+                                <option value="all">Любой товар</option>
+                                <option value="course">Конкретный курс</option>
+                            </select>
+                        </label>
+                        <label class="pf">Лимит активаций
+                            <input v-model.number="promoForm.limit" type="number" min="1" step="1" placeholder="без лимита" />
+                        </label>
+                        <label class="pf">Действует до
+                            <input v-model="promoForm.expires" type="date" />
+                        </label>
+                    </div>
+                    <div v-if="promoForm.scope === 'course'" class="promo-course">
+                        <div v-if="promoCourse.picked" class="promo-picked">
+                            Курс: <b>{{ promoCourse.picked.Title }}</b>
+                            <button type="button" @click="clearPromoCourse">×</button>
+                        </div>
+                        <template v-else>
+                            <input v-model="promoCourse.q" type="search" placeholder="Поиск курса по названию…" @input="searchPromoCourse" />
+                            <ul v-if="promoCourse.results.length" class="promo-results">
+                                <li v-for="c in promoCourse.results" :key="c.id" @click="pickPromoCourse(c)">{{ c.Title || 'Без названия' }}</li>
+                            </ul>
+                        </template>
+                    </div>
+                    <p v-if="promoForm.error" class="sa-modal__err">{{ promoForm.error }}</p>
+                    <div class="promo-formacts">
+                        <button type="submit" class="btn btn-ok" :disabled="promoForm.busy">{{ promoForm.busy ? 'Создание…' : 'Создать промокод' }}</button>
+                    </div>
+                </form>
+
+                <div v-if="promos.loading" class="sa-empty">Загрузка…</div>
+                <div v-else-if="!promos.rows.length" class="sa-empty">Промокодов пока нет</div>
+                <div v-else class="sa-tablewrap">
+                    <table class="sa-table">
+                        <thead><tr><th>Код</th><th>Скидка</th><th>Область</th><th class="ta-r">Лимит / исп.</th><th>Действует до</th><th class="ta-r">Действия</th></tr></thead>
+                        <tbody>
+                            <tr v-for="p in promos.rows" :key="p.id">
+                                <td class="ttl strong">{{ p.code }}</td>
+                                <td>{{ p.discount_type === 'percent' ? p.discount_value + '%' : fmtRub(p.discount_value) }}</td>
+                                <td>{{ p.scope_type === 'course' ? (p.scopeCourseTitle || 'курс') : 'любой товар' }}</td>
+                                <td class="ta-r muted">{{ p.used_count }} / {{ p.usage_limit == null ? '∞' : p.usage_limit }}</td>
+                                <td class="muted">{{ p.expires_at ? fmtDate(p.expires_at) : '—' }}</td>
+                                <td class="ta-r acts"><button type="button" class="btn btn-danger" @click="askDeletePromo(p)">Удалить</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <!-- Placeholders for the other phases -->
             <section v-else class="sa-panel sa-soon">
                 <div class="soon">
@@ -277,6 +348,7 @@ const TABS = [
     { key: 'commission', label: 'Комиссия', phase: 'S4', descr: 'Комиссия авторов и корректировка баланса пользователей.' },
     { key: 'payouts', label: 'Выплаты', phase: 'S5', descr: 'Одобрение и отклонение заявок на вывод средств. Самое ответственное — реальные деньги.' },
     { key: 'video', label: 'Видео', phase: 'S6', descr: 'Инфраструктура видео (PeerTube): токены, обработка загрузок.' },
+    { key: 'promo', label: 'Промокоды', phase: 'S7', descr: 'Промокоды на скидку: процент или фиксированная сумма, общий или на конкретный курс.' },
 ];
 const active = ref('courses');
 const activeTab = computed(() => TABS.find((t) => t.key === active.value) || TABS[0]);
@@ -316,6 +388,7 @@ const storage = reactive({ loading: false, owners: [], total: 0, totalVids: 0, w
 const modal = reactive({ open: false, entity: null, mode: null, item: null, value: null, comment: '', busy: false, error: '' });
 const modalCfg = computed(() => {
     const e = modal.entity, m = modal.mode;
+    if (e === 'promo' && m === 'delete') return { title: 'Удалить промокод?', warn: '⚠️ Промокод перестанет действовать. История активаций сохранится.', confirm: 'Удалить', btn: 'btn-danger', needsComment: false, needsValue: false };
     if (e === 'payout' && m === 'approve') return { title: 'Подтвердить выплату?', warn: '⚠️ Это НЕ автоматический перевод. Отмечайте «Подтверждено» только ПОСЛЕ того, как сделали перевод вручную через банк.', confirm: 'Подтвердить выплату', btn: 'btn-ok', needsComment: false, needsValue: false, optionalComment: true, commentHint: 'Комментарий (необязательно) — сохранится в аудит-лог.', commentPlaceholder: 'Например: перевод сделан 12.09' };
     if (e === 'payout' && m === 'reject') return { title: 'Отклонить заявку на вывод?', warn: `Сумма ${fmtRub(modal.item?.amount)} вернётся на баланс автора.`, confirm: 'Отклонить и вернуть', btn: 'btn-danger', needsComment: false, needsValue: false, optionalComment: true, commentHint: 'Комментарий (необязательно) — сохранится в аудит-лог.', commentPlaceholder: 'Причина отклонения' };
     if (e === 'report' && m === 'delete') return { title: 'Удалить сообщение?', warn: '⚠️ Сообщение будет удалено безвозвратно для всех участников чата.', confirm: 'Удалить', btn: 'btn-danger', needsComment: false, needsValue: false };
@@ -329,6 +402,7 @@ const modalItemLabel = computed(() => {
     if (modal.entity === 'report') return modal.item.targetUserName ? `сообщение пользователя ${modal.item.targetUserName}` : 'сообщение';
     if (modal.entity === 'payout') return `${modal.item.authorName || '—'} · ${fmtRub(modal.item.amount)}`;
     if (modal.entity === 'commission') return modal.item.Name || '—';
+    if (modal.entity === 'promo') return modal.item.code || '';
     return modal.item.Title || '';
 });
 const isValidCommission = computed(() => { const v = modal.value; return typeof v === 'number' && !Number.isNaN(v) && v >= 0 && v <= 100; });
@@ -430,6 +504,69 @@ async function loadStorage() {
     storage.loading = false;
 }
 
+/* ── S7: Промокоды — create / list / delete (admin RPCs) ────────────────────── */
+const promos = reactive({ loading: false, rows: [] });
+const promoForm = reactive({ code: '', type: 'percent', value: null, scope: 'all', limit: null, expires: '', busy: false, error: '' });
+const promoCourse = reactive({ q: '', results: [], picked: null, timer: null });
+
+async function loadPromos() {
+    promos.loading = true;
+    try {
+        const { data, error } = await sb.rpc('admin_list_promos');
+        if (error) throw error;
+        const rows = data || [];
+        const cids = [...new Set(rows.filter((r) => r.scope_type === 'course' && r.scope_course_id).map((r) => r.scope_course_id))];
+        const titles = {};
+        if (cids.length) { const { data: cs } = await sb.from('course').select('id,"Title"').in('id', cids); for (const c of (cs || [])) titles[c.id] = c.Title; }
+        promos.rows = rows.map((r) => ({ ...r, scopeCourseTitle: titles[r.scope_course_id] }));
+    } catch (e) { console.warn('loadPromos failed', e); }
+    promos.loading = false;
+}
+
+function searchPromoCourse() {
+    if (promoCourse.timer) clearTimeout(promoCourse.timer);
+    const q = promoCourse.q.trim();
+    if (q.length < 2) { promoCourse.results = []; return; }
+    promoCourse.timer = setTimeout(async () => {
+        try {
+            const { data } = await sb.from('course').select('id,"Title"').ilike('Title', `%${q}%`).limit(10);
+            promoCourse.results = data || [];
+        } catch (e) { promoCourse.results = []; }
+    }, 250);
+}
+function pickPromoCourse(c) { promoCourse.picked = c; promoCourse.results = []; promoCourse.q = c.Title || ''; }
+function clearPromoCourse() { promoCourse.picked = null; promoCourse.q = ''; promoCourse.results = []; }
+
+async function createPromo() {
+    if (promoForm.busy) return;
+    promoForm.error = '';
+    const code = (promoForm.code || '').trim();
+    if (!code) { promoForm.error = 'Укажите код.'; return; }
+    if (!(Number(promoForm.value) > 0)) { promoForm.error = 'Значение скидки должно быть больше 0.'; return; }
+    if (promoForm.type === 'percent' && Number(promoForm.value) > 100) { promoForm.error = 'Процент не больше 100.'; return; }
+    if (promoForm.scope === 'course' && !promoCourse.picked) { promoForm.error = 'Выберите курс для привязки.'; return; }
+    promoForm.busy = true;
+    try {
+        const res = await sb.rpc('admin_create_promo', {
+            p_code: code,
+            p_type: promoForm.type,
+            p_value: Number(promoForm.value),
+            p_scope: promoForm.scope,
+            p_course_id: promoForm.scope === 'course' ? promoCourse.picked.id : null,
+            p_limit: promoForm.limit ? Number(promoForm.limit) : null,
+            p_expires: promoForm.expires ? new Date(promoForm.expires + 'T23:59:59').toISOString() : null,
+        });
+        if (res.error) throw res.error;
+        promoForm.code = ''; promoForm.value = null; promoForm.scope = 'all'; promoForm.limit = null; promoForm.expires = '';
+        clearPromoCourse();
+        toast('Промокод создан');
+        await loadPromos();
+    } catch (e) { promoForm.error = friendlyError(e); }
+    promoForm.busy = false;
+}
+
+function askDeletePromo(p) { modal.open = true; modal.entity = 'promo'; modal.mode = 'delete'; modal.item = p; modal.comment = ''; modal.error = ''; }
+
 async function loadQueue() {
     queue.loading = true;
     try {
@@ -500,6 +637,7 @@ function closeModal() { if (modal.busy) return; modal.open = false; modal.item =
 function friendlyError(e) {
     const m = e?.message || '';
     if (/forbidden/i.test(m)) return 'Нет прав администратора.';
+    if (/already exists/i.test(m)) return 'Такой код уже существует.';
     if (/not in moderation queue/i.test(m)) return 'Курс уже не в очереди — обновите список.';
     if (/not found/i.test(m)) return 'Курс не найден.';
     if (/comment required/i.test(m)) return 'Укажите комментарий для автора.';
@@ -525,6 +663,8 @@ async function confirmAction() {
             res = modal.mode === 'dismiss'
                 ? await sb.rpc('admin_dismiss_report', { p_report: id })
                 : await sb.rpc('admin_delete_reported_message', { p_report: id });
+        } else if (modal.entity === 'promo') {
+            res = await sb.rpc('admin_delete_promo', { p_id: id });
         } else if (modal.entity === 'course') {
             res = modal.mode === 'approve'
                 ? await sb.rpc('admin_approve_course', { p_course: id })
@@ -544,6 +684,9 @@ async function confirmAction() {
         } else if (modal.entity === 'report') {
             rqueue.rows = rqueue.rows.filter((r) => r.id !== id); counts.reports = rqueue.rows.length;
             done = modal.mode === 'dismiss' ? 'Жалоба отклонена' : 'Сообщение удалено, жалоба закрыта';
+        } else if (modal.entity === 'promo') {
+            promos.rows = promos.rows.filter((r) => r.id !== id);
+            done = 'Промокод удалён';
         } else if (modal.entity === 'course') {
             queue.rows = queue.rows.filter((r) => r.id !== id); counts.courses = queue.rows.length;
             done = modal.mode === 'approve' ? 'Курс опубликован' : 'Курс возвращён на доработку';
@@ -565,6 +708,7 @@ watch(active, (t) => {
     if (t === 'commission') loadAuthors();
     if (t === 'payouts') loadPayoutQueue();
     if (t === 'video') { loadStorage(); loadVideoStatus(); }
+    if (t === 'promo') loadPromos();
 });
 
 onMounted(async () => {
@@ -687,6 +831,22 @@ onMounted(async () => {
 .scaret { display: inline-block; width: 14px; color: #8a94a6; }
 .ssub td { background: #fafbfc; font-size: 13px; }
 .ssub__title { padding-left: 26px !important; color: #5b6472; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* S7 Промокоды — create form */
+.promo-form { border: 1px solid #eceef2; border-radius: 14px; padding: 16px; margin-bottom: 18px; }
+.promo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.pf { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: #5b6472; }
+.pf input, .pf select { height: 38px; border: 1px solid #e1e5ea; border-radius: 10px; padding: 0 10px; font: inherit; font-size: 14px; background: #fff; }
+.promo-course { position: relative; margin-top: 12px; }
+.promo-course input { width: 100%; max-width: 420px; height: 38px; border: 1px solid #e1e5ea; border-radius: 10px; padding: 0 12px; font: inherit; font-size: 14px; }
+.promo-results { list-style: none; margin: 4px 0 0; padding: 4px; max-width: 420px; border: 1px solid #e1e5ea; border-radius: 10px; background: #fff; max-height: 220px; overflow-y: auto; box-shadow: 0 10px 30px rgba(11,31,77,.12); }
+.promo-results li { padding: 8px 10px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+.promo-results li:hover { background: #eef4ff; color: #5495f3; }
+.promo-picked { font-size: 14px; color: #1b1f27; }
+.promo-picked button { appearance: none; border: none; background: #fdeceb; color: #d1483d; border-radius: 6px; width: 22px; height: 22px; margin-left: 8px; cursor: pointer; font-size: 14px; line-height: 1; }
+.promo-formacts { margin-top: 14px; }
+@media (max-width: 680px) { .promo-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 460px) { .promo-grid { grid-template-columns: 1fr; } }
 
 .sa-modal { position: fixed; inset: 0; z-index: 1000; background: rgba(11, 31, 77, .38); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .sa-modal__box { background: #fff; border-radius: 16px; padding: 24px; max-width: 440px; width: 100%; box-shadow: 0 20px 60px rgba(11, 31, 77, .25); }

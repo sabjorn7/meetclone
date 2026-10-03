@@ -312,7 +312,7 @@ export async function getMyEventRegistration(supabase, eventId, userId) {
  * Gates: already-paid → blocked; a leftover 'pending' registration is reused (unique(event,user));
  * capacity (if set) → blocked when paid registrations already fill it.
  */
-export async function purchaseEvent(supabase, { buyer, event, paymentType }) {
+export async function purchaseEvent(supabase, { buyer, event, paymentType, promoCode = null }) {
     if (!event?.backing_course_id) throw new Error('У мероприятия нет курса-подложки.');
     if (paymentType !== 'full' && paymentType !== 'deposit') throw new Error('Неверный тип оплаты.');
     const amount = eventAmount(event, paymentType);
@@ -359,10 +359,27 @@ export async function purchaseEvent(supabase, { buyer, event, paymentType }) {
     if (shopErr) throw new Error(`Корзина: ${shopErr.message}`);
     const shopId = shopRows?.[0]?.id;
 
+    // 1b) optional promo — FULL payment only (variant В). Deposit + promo is disallowed to avoid the
+    // "discount is tiny / partially lost" ambiguity of discounting a partial payment. Validated
+    // server-side; the discounted price is persisted to shop so n8n BuyCourse bills commission on it.
+    let price = amount;
+    let promoId = null, promoDiscount = 0;
+    if (promoCode) {
+        if (paymentType !== 'full') throw new Error('Промокод доступен только при полной оплате.');
+        const { data: pv, error: pErr } = await supabase.rpc('preview_promo', { p_code: promoCode, p_shop_ids: [shopId] });
+        if (pErr) throw new Error(`Промокод: ${pErr.message}`);
+        if (!pv?.valid) throw new Error('Промокод недействителен для этого мероприятия.');
+        price = Number(pv.new_total);
+        promoId = pv.promo_id;
+        promoDiscount = Number(pv.discount) || 0;
+        await supabase.from('shop').update({ price }).eq('id', shopId);
+    }
+
     // 2) order — isolated to this event; event_id is the trigger marker (invisible to BuyCourse)
     const { data: orderRows, error: orderErr } = await supabase
         .from('order')
-        .insert({ summ: amount, owner: buyer, course_positions: [shopId], event_id: event.id })
+        .insert({ summ: price, owner: buyer, course_positions: [shopId], event_id: event.id,
+                  promo_code_id: promoId, promo_discount: promoId ? promoDiscount : null })
         .select('id')
         .limit(1);
     if (orderErr) throw new Error(`Заказ: ${orderErr.message}`);
@@ -372,7 +389,7 @@ export async function purchaseEvent(supabase, { buyer, event, paymentType }) {
     //    Reuse a leftover pending row (unique(event,user)) or insert a fresh one.
     const regFields = {
         payment_type: paymentType,
-        amount_paid: amount,
+        amount_paid: price,
         amount_total: Number(event.price),
         order: orderId,
         status: 'pending',
@@ -394,7 +411,7 @@ export async function purchaseEvent(supabase, { buyer, event, paymentType }) {
     const base = 'https://meetguru.payform.ru/?do=link&sys=meetguru';
     const urlSuccess = `https://app.meetgu.ru/events?event=${event.id}`;
     const products =
-        `products[0][price]=${encodeURIComponent(amount)}` +
+        `products[0][price]=${encodeURIComponent(price)}` +
         `&products[0][quantity]=1` +
         `&products[0][name]=${encodeURIComponent(event.title)}`;
     const buildUrl = `${base}&order_id=${encodeURIComponent(orderId)}&${products}&urlSuccess=${encodeURIComponent(urlSuccess)}`;

@@ -30,6 +30,7 @@
                         <div v-if="canBuy">
                             <div class="sp-msg-title">Платный эфир — {{ priceLabel(detail) }}</div>
                             <div class="sp-muted">Доступ к эфиру и записи на {{ detail.access_months }} мес. с даты эфира.</div>
+                            <input v-model="streamPromo" type="text" class="sp-promo-input" placeholder="Промокод (необязательно)" />
                             <button class="sp-btn sp-btn-primary sp-buy-btn" :disabled="buying" @click="buyStream">
                                 {{ buying ? 'Переход к оплате…' : 'Купить за ' + priceLabel(detail) }}
                             </button>
@@ -486,6 +487,7 @@ const detailInfo = ref(null);
 const detailLoading = ref(false);
 const bought = ref(false);
 const buying = ref(false);
+const streamPromo = ref('');
 let pollTimer = null;
 
 // multi-host (co-host) detail state — only used when detail.mode === 'multi'
@@ -767,7 +769,7 @@ async function buyStream() {
     buying.value = true;
     error.value = '';
     try {
-        const payLink = await purchaseStream(supa(), { buyer: me.value.id, stream: detail.value });
+        const payLink = await purchaseStream(supa(), { buyer: me.value.id, stream: detail.value, promoCode: streamPromo.value.trim() || null });
         window.location.href = payLink; // redirect to Prodamus (clone of the course change-page step)
     } catch (e) {
         error.value = e.message || String(e);
@@ -1309,6 +1311,20 @@ textarea.pd-input { resize: vertical; }
 .sp-buy-btn {
     margin-top: 14px;
 }
+.sp-promo-input {
+    display: block;
+    width: 100%;
+    max-width: 280px;
+    margin-top: 14px;
+    height: 42px;
+    padding: 0 14px;
+    border: 1px solid #d7dee8;
+    border-radius: 10px;
+    font: inherit;
+    font-size: 15px;
+    box-sizing: border-box;
+}
+.sp-promo-input:focus { outline: none; border-color: #5495f3; }
 
 /* buttons */
 .sp-btn {

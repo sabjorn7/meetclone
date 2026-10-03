@@ -67,6 +67,9 @@
                                         <span class="ed-choice__sub">остаток {{ money(event.price - depositAmount) }} ₽ на месте</span>
                                     </label>
                                 </div>
+                                <!-- promo only for full payment (variant В) -->
+                                <input v-if="choice === 'full'" v-model="eventPromo" type="text" class="ed-promo-input" placeholder="Промокод (необязательно)" />
+                                <p v-else class="ed-promo-note">Промокод доступен только при полной оплате.</p>
                                 <label class="ed-agree">
                                     <input type="checkbox" v-model="agreed" />
                                     <span>Я ознакомился(ась) и принимаю
@@ -221,6 +224,7 @@ const reg = ref(null);
 const paidCount = ref(0);
 const choice = ref('full');
 const agreed = ref(false); // обязательное согласие с офертой + правилами отмены перед оплатой
+const eventPromo = ref('');
 const busy = ref(false);
 const payError = ref('');
 const contactPhone = ref('');
@@ -325,7 +329,7 @@ async function pay(paymentType) {
     if (busy.value || !event.value || !me.value) return;
     busy.value = true; payError.value = '';
     try {
-        const payLink = await purchaseEvent(sb(), { buyer: me.value.id, event: event.value, paymentType });
+        const payLink = await purchaseEvent(sb(), { buyer: me.value.id, event: event.value, paymentType, promoCode: paymentType === 'full' ? (eventPromo.value.trim() || null) : null });
         window.location.href = payLink;
     } catch (e) {
         payError.value = e.message || 'Не удалось перейти к оплате.';
@@ -401,6 +405,9 @@ onMounted(async () => {
 .pd-buycard__ok { font-weight: 700; font-size: 1.4rem; color: #21a366; margin-bottom: 14px; }
 .pd-buycard__note { margin: 0 0 14px; font-size: 0.9rem; color: #5b6472; }
 .pd-buycard .ed-choices { margin-bottom: 16px; }
+.ed-promo-input { display: block; width: 100%; height: 44px; margin-bottom: 14px; padding: 0 14px; border: 1px solid #d7dee8; border-radius: 12px; font: inherit; font-size: 15px; box-sizing: border-box; }
+.ed-promo-input:focus { outline: none; border-color: #5495f3; }
+.ed-promo-note { margin: 0 0 14px; font-size: 0.85rem; color: #98a0ad; }
 .pd-statlist { list-style: none; margin: 22px 0 0; padding: 20px 0 0; border-top: 1px solid #e4e9f1; display: grid; gap: 14px; }
 .pd-statlist li { display: flex; align-items: center; gap: 12px; color: #5b6472; font-size: 0.98rem; }
 .pd-statlist .pd-ic { flex: none; width: 20px; height: 20px; stroke: #1f5fc9; fill: none; stroke-width: 2; }

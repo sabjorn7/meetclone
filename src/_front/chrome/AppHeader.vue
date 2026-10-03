@@ -40,6 +40,24 @@
                                 </li>
                             </ul>
                             <div class="mgh__cart-total"><span>Итого</span><b>{{ money(total) }} ₽</b></div>
+
+                            <!-- Промокод -->
+                            <div class="mgh__promo">
+                                <template v-if="promo.applied">
+                                    <div class="mgh__promo-on">
+                                        <span>Промокод <b>{{ promo.applied.code }}</b></span>
+                                        <button type="button" class="mgh__cart-x" aria-label="Убрать промокод" @click="clearPromo">×</button>
+                                    </div>
+                                    <div class="mgh__cart-total mgh__promo-disc"><span>Скидка</span><b>−{{ money(promo.applied.discount) }} ₽</b></div>
+                                    <div class="mgh__cart-total"><span>К оплате</span><b>{{ money(promo.applied.new_total) }} ₽</b></div>
+                                </template>
+                                <div v-else class="mgh__promo-row">
+                                    <input v-model="promo.code" type="text" placeholder="Промокод" @keyup.enter="applyPromo" />
+                                    <button type="button" class="mgh__promo-apply" :disabled="promo.checking || !promo.code.trim()" @click="applyPromo">{{ promo.checking ? '…' : 'Применить' }}</button>
+                                </div>
+                                <p v-if="promo.error" class="mgh__err">{{ promo.error }}</p>
+                            </div>
+
                             <button class="mgh__btn mgh__btn--block" type="button" :disabled="busy" @click="doCheckout">
                                 {{ busy ? 'Переход к оплате…' : 'Оформить заказ' }}
                             </button>
@@ -96,7 +114,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import {
     getSupabase, loadUser, avatarUrl, initials, loadCart, removeCartItem, cartTotal, signOutUser, checkoutCart,
@@ -132,6 +150,7 @@ const avatar = ref('');
 const cart = ref([]);
 const busy = ref(false);
 const err = ref('');
+const promo = reactive({ code: '', applied: null, checking: false, error: '' });
 
 const total = computed(() => cartTotal(cart.value));
 const initialsStr = computed(() => initials(user.value));
@@ -170,15 +189,40 @@ async function refreshUser() {
 }
 async function reloadCart() {
     if (user.value?.id) cart.value = await loadCart(sb, user.value.id);
+    // the cart changed → any applied promo is now stale; make the user re-apply against the new set
+    promo.applied = null; promo.error = '';
 }
 async function remove(id) {
     await removeCartItem(sb, id);
     await reloadCart();
 }
+
+const PROMO_REASONS = {
+    not_found: 'Промокод не найден.',
+    expired: 'Срок действия промокода истёк.',
+    limit_reached: 'Лимит активаций исчерпан.',
+    not_applicable: 'Промокод не действует на товары в корзине.',
+    auth: 'Войдите, чтобы применить промокод.',
+};
+async function applyPromo() {
+    const code = promo.code.trim();
+    if (!code || promo.checking || !cart.value.length) return;
+    promo.checking = true; promo.error = '';
+    try {
+        const shopIds = cart.value.map((r) => r.id);
+        const { data, error } = await sb.rpc('preview_promo', { p_code: code, p_shop_ids: shopIds });
+        if (error) throw error;
+        if (data?.valid) { promo.applied = data; }
+        else { promo.applied = null; promo.error = PROMO_REASONS[data?.reason] || 'Промокод недействителен.'; }
+    } catch (e) { promo.error = 'Не удалось проверить промокод.'; }
+    promo.checking = false;
+}
+function clearPromo() { promo.applied = null; promo.code = ''; promo.error = ''; }
+
 async function doCheckout() {
     if (busy.value || !cart.value.length) return;
     busy.value = true; err.value = '';
-    try { await checkoutCart(sb, { user: user.value, cart: cart.value }); }
+    try { await checkoutCart(sb, { user: user.value, cart: cart.value, promoCode: promo.applied?.code || null }); }
     catch (e) { err.value = e?.message || 'Ошибка оформления'; busy.value = false; }
 }
 async function doSignOut() {
@@ -313,6 +357,17 @@ function ensureFont() {
 .mgh__cart-total { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 6px 2px; font-size: 15px; }
 .mgh__cart-total b { font-size: 18px; letter-spacing: -0.01em; }
 .mgh__err { margin: 8px 0 0; color: #c2410c; font-size: 13px; }
+
+/* promo code */
+.mgh__promo { margin-top: 8px; }
+.mgh__promo-row { display: flex; gap: 8px; }
+.mgh__promo-row input { flex: 1; min-width: 0; height: 38px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; font: inherit; font-size: 14px; }
+.mgh__promo-row input:focus { outline: none; border-color: var(--blue); }
+.mgh__promo-apply { flex: none; appearance: none; border: 1px solid var(--line); background: #fff; color: var(--blue-ink); border-radius: 10px; padding: 0 14px; font: inherit; font-weight: 600; font-size: 13px; cursor: pointer; }
+.mgh__promo-apply:disabled { opacity: 0.5; cursor: default; }
+@media (hover: hover) and (pointer: fine) { .mgh__promo-apply:not(:disabled):hover { border-color: var(--blue); color: var(--blue); } }
+.mgh__promo-on { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 6px; font-size: 14px; color: var(--ink); }
+.mgh__promo-disc b { color: #c2410c; }
 
 /* burger */
 .mgh__burger { position: relative; width: 40px; height: 40px; border: none; background: none; cursor: pointer; }

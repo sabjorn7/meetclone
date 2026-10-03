@@ -38,6 +38,14 @@
                         <defs><clipPath id="mgf_rustore_clip"><rect width="111" height="40" fill="white" /></clipPath></defs>
                     </svg>
                 </a>
+                <div class="mgf__social">
+                    <a class="mgf__soc" href="https://vk.com/meetguruonline" target="_blank" rel="noopener noreferrer" aria-label="ВКонтакте">
+                        <svg viewBox="0 0 24 24" stroke="none" fill="currentColor" aria-hidden="true"><path d="M12.8 16.3c-5 0-8-3.5-8.1-9.3h2.5c.1 4.3 2 6.1 3.5 6.5V7h2.4v3.6c1.5-.2 3-1.8 3.6-3.6h2.4c-.5 2.2-2.1 3.8-3.2 4.5 1.1.6 2.9 2 3.6 4.8h-2.6c-.5-1.7-1.9-3-3.8-3.2v3.2h-.3z"/></svg>
+                    </a>
+                    <a class="mgf__soc" href="https://t.me/qwezaq" target="_blank" rel="noopener noreferrer" aria-label="Telegram">
+                        <svg viewBox="0 0 24 24" stroke="none" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3l-3.3 15.5c-.2 1-.9 1.3-1.8.8l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.3-5 9.1-8.2c.4-.3-.1-.6-.6-.3L6.3 13.1l-4.8-1.5c-1-.3-1-1 .2-1.5L20.6 2.9c.9-.3 1.6.2 1.3 1.4z"/></svg>
+                    </a>
+                </div>
             </div>
             <nav class="mgf__cols" aria-label="Навигация в подвале">
                 <div class="mgf__col" v-for="col in columns" :key="col.title">
@@ -99,6 +107,10 @@ const columns = [
 .mgf__app { display: inline-block; opacity: 0.85; transition: opacity 0.18s var(--ease-out); }
 .mgf__app-badge { display: block; height: 40px; width: auto; }
 @media (hover: hover) and (pointer: fine) { .mgf__app:hover { opacity: 1; } }
+.mgf__social { display: flex; gap: 10px; margin-top: 22px; }
+.mgf__soc { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.8); text-decoration: none; transition: background 0.18s var(--ease-out), color 0.18s var(--ease-out); }
+.mgf__soc svg { width: 20px; height: 20px; display: block; }
+@media (hover: hover) and (pointer: fine) { .mgf__soc:hover { background: var(--blue-soft); color: #fff; } }
 .mgf__cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; }
 .mgf__col h4 { margin: 0 0 12px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.5); }
 .mgf__col a { display: block; padding: 5px 0; color: rgba(255, 255, 255, 0.8); text-decoration: none; font-size: 0.95rem; transition: color 0.18s var(--ease-out); }

@@ -7,7 +7,7 @@
         <div class="mgf__top">
             <div class="mgf__brand">
                 <a class="mgf__logo" href="/" @click.prevent="go('/')">meetguru<span>.</span></a>
-                <p class="mgf__note">Образовательная платформа по прикладной кинезиологии. Курсы, трансляции и семинары.</p>
+                <p class="mgf__note">Сообщество экспертов в сфере оздоровления. Курсы, трансляции и семинары.</p>
                 <span class="mgf__app-cap">Мобильное приложение</span>
                 <a
                     class="mgf__app" :href="rustoreUrl" target="_blank" rel="noopener noreferrer"

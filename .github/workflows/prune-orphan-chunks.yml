@@ -1,0 +1,59 @@
+name: Prune orphan chunks
+
+# Manual-only. Cleans superseded hashed chunks that accumulate in the deployed assets/ dir
+# (the deploy intentionally keeps old chunks so open tabs don't 404). Prunes BY REFERENCE
+# (reachability from live HTML), never by age, and MOVES orphans to a sibling backup dir
+# rather than hard-deleting. See .github/scripts/prune-orphan-chunks.sh for the logic.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which web root(s) to prune"
+        type: choice
+        options: [both, app, landing]
+        default: both
+      dry_run:
+        description: "Dry run — report only, move nothing"
+        type: boolean
+        default: true
+
+concurrency:
+  group: prune-orphan-chunks
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (for the prune script)
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Prune
+        env:
+          DRY: ${{ inputs.dry_run }}
+          TGT: ${{ inputs.target }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          case "$TGT" in
+            app)     roots="/home/arseny/www-app" ;;
+            landing) roots="/home/arseny/www-landing" ;;
+            *)       roots="/home/arseny/www-app /home/arseny/www-landing" ;;
+          esac
+          rc=0
+          for r in $roots; do
+            echo "::group::$r (dry_run=$DRY)"
+            ssh -i ~/.ssh/id_deploy -p "$DEPLOY_PORT" -o StrictHostKeyChecking=accept-new \
+              "$DEPLOY_USER@$DEPLOY_HOST" 'bash -s' "$r" "$DRY" < .github/scripts/prune-orphan-chunks.sh || rc=$?
+            echo "::endgroup::"
+          done
+          exit $rc

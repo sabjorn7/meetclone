@@ -39,6 +39,13 @@ export function logClientEvent(eventType, message, extra) {
     send(eventType, extra ? `${message} ${JSON.stringify(extra).slice(0, 400)}` : message, null);
 }
 
+// Log a thrown Error WITH its stack (e.g. a Vue render/lifecycle crash — those don't reach
+// window.onerror, so they are the main reason a "white screen" leaves no log otherwise).
+export function logException(eventType, err, extra) {
+    const msg = (err && (err.message || String(err))) || 'error';
+    send(eventType, extra ? `${msg} ${JSON.stringify(extra).slice(0, 300)}` : msg, err?.stack);
+}
+
 // Spinner watchdog: logs `loading_timeout` if not cancelled within `ms`. Does NOT abort the request —
 // just records that a key query was still pending. Returns a cancel fn to call once the request returns.
 export function loadTimeout(label, ms = 15000) {

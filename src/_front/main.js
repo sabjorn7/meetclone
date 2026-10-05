@@ -18,7 +18,7 @@ import { initMyFinanseSales } from '@/_front/myFinanseSales.js';
 import { initCoursesManageStyle } from '@/_front/coursesManageStyle.js';
 import { initArticlesStyle } from '@/_front/articlesStyle.js';
 import { initStreamsNavLink } from '@/_front/helpers/streamsNavLink.js';
-import { initErrorLogger } from '@/_front/chrome/errorLogger.js';
+import { initErrorLogger, logException } from '@/_front/chrome/errorLogger.js';
 
 let store;
 let pinia;
@@ -91,6 +91,13 @@ window.wwServerClient = wwServerClient;
 /* wwFront:end */
 
 const app = createApp(App);
+
+// Vue render/lifecycle errors do NOT reach window.onerror — capture them too, with stack + route,
+// so a component crash that white-screens a user leaves a diagnosable record (not just a blank page).
+app.config.errorHandler = (err, instance, info) => {
+    try { logException('vue_error', err, { info, route: location.pathname }); } catch (e) { /* never throw from the handler */ }
+    console.error(err);
+};
 
 const init = async function () {
     window.vm = app;

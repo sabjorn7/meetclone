@@ -18,6 +18,7 @@ import { initMyFinanseSales } from '@/_front/myFinanseSales.js';
 import { initCoursesManageStyle } from '@/_front/coursesManageStyle.js';
 import { initArticlesStyle } from '@/_front/articlesStyle.js';
 import { initStreamsNavLink } from '@/_front/helpers/streamsNavLink.js';
+import { initErrorLogger } from '@/_front/chrome/errorLogger.js';
 
 let store;
 let pinia;
@@ -33,6 +34,10 @@ import { createPinia } from 'pinia';
 store = storeImport;
 pinia = createPinia();
 window.wwLib = wwLibImport;
+
+// Install global client error/diagnostics handlers as early as possible (before the app boots),
+// so runtime crashes, failed promises and lazy-chunk 404s are captured from the start.
+initErrorLogger();
 
 if ('serviceWorker' in navigator) {
     if (window.wwg_disableManifest) {

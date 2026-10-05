@@ -146,6 +146,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
+import { loadTimeout } from '@/_front/chrome/errorLogger.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
 import { getBuyerRow, ownsCourse, enrollFree, addToCart, courseInCart } from '@/_front/course/coursesApi.js';
 
@@ -321,12 +322,14 @@ function courseWord(n) {
 async function load() {
     const sb = getSupabase();
     if (!sb) { loading.value = false; return; }
+    const cancelTimeout = loadTimeout('all_course_catalog'); // logs loading_timeout if the catalog query hangs >15s
     buyerId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null; // guest = null (no supabase call)
     const { data } = await sb.from('course')
         .select('id, "Title", "Price", "Free", old_price, "Category", slug, owner, video_id, cover, "Less_Id", comment, rating, created_at')
         .eq('ModStatus', 'Опубликовано')
         .eq('Buy', true)   // «Доступен к покупке» — не показываем в каталоге снятые с продажи (но опубликованные) курсы
         .order('created_at', { ascending: false });
+    cancelTimeout(); // key query returned → cancel the watchdog
     courses.value = data || [];
     // authors (school / teacher) — name for the card footer, name+photo for the quick-view popup.
     const ownerIds = [...new Set(courses.value.map((c) => c.owner).filter(Boolean))];

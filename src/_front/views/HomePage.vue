@@ -124,6 +124,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { getSupabase, readStoredSession, authCookieUser, waitForUid } from '@/_front/chrome/headerAccount.js';
 import { loadTimeout } from '@/_front/chrome/errorLogger.js';
+import { sbWithRetry } from '@/_front/chrome/sbFetch.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
 import { listPublishedEvents } from '@/_front/streams/eventsApi.js';
 import { listAllStreams } from '@/_front/streams/streamsApi.js';
@@ -208,15 +209,20 @@ async function load() {
     if (!sb || !uid) { loading.value = false; return; }
     const cancelTimeout = loadTimeout('home_personal_data'); // logs loading_timeout if the personal load hangs >15s
 
-    const { data: urows } = await sb.from('users').select('"Name", last_open').eq('id', uid).limit(1);
+    // timeout+retry on the personal queries so a stalled request (flaky/throttled mobile) recovers
+    let urows = null;
+    try { ({ data: urows } = await sbWithRetry('home_user', () => sb.from('users').select('"Name", last_open').eq('id', uid).limit(1))); } catch (e) { /* logged */ }
     const user = urows?.[0] || {};
     name.value = (user.Name || '').split(/\s+/)[0] || user.Name || '';
 
     // the user's course enrollments (one row per course access window)
-    const { data: ucs } = await sb.from('user_course')
-        .select('id, course, end_period, created_at')
-        .eq('user', uid)
-        .order('created_at', { ascending: false });
+    let ucs = null;
+    try {
+        ({ data: ucs } = await sbWithRetry('home_user_course', () => sb.from('user_course')
+            .select('id, course, end_period, created_at')
+            .eq('user', uid)
+            .order('created_at', { ascending: false })));
+    } catch (e) { /* logged */ }
     const rows = ucs || [];
 
     // fetch the course details for every referenced course (enrollments + last_open) in one query

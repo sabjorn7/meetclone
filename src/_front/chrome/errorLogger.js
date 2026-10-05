@@ -53,8 +53,12 @@ export function initErrorLogger() {
     // capture=true → also catches RESOURCE load failures (e.g. a lazy chunk 404 = deploy-race recurrence),
     // which do not bubble and carry no .error — detect them via the event target's src/href.
     window.addEventListener('error', (e) => {
-        if (e?.error) send('window_error', e.error.message || String(e.message || 'error'), e.error.stack);
-        else if (e?.target && (e.target.src || e.target.href)) send('resource_error', `Не загрузился ресурс: ${e.target.src || e.target.href}`, null);
+        if (e?.error) { send('window_error', e.error.message || String(e.message || 'error'), e.error.stack); return; }
+        // Resource load failures: ONLY our own bundle chunks matter (a lazy-chunk 404 = deploy-race
+        // recurrence). Skip broken images and third-party CDN CSS (weweb icon fonts etc.) — that noise
+        // would drown the real signal.
+        const u = (e?.target && (e.target.src || e.target.href)) || '';
+        if (/\/assets\/[^?]*\.(js|mjs|css)(\?|$)/.test(u)) send('resource_error', `Не загрузился ресурс: ${u}`, null);
     }, true);
     window.addEventListener('unhandledrejection', (e) => {
         const r = e?.reason;

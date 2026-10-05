@@ -19,6 +19,7 @@ import { initCoursesManageStyle } from '@/_front/coursesManageStyle.js';
 import { initArticlesStyle } from '@/_front/articlesStyle.js';
 import { initStreamsNavLink } from '@/_front/helpers/streamsNavLink.js';
 import { initErrorLogger, logException } from '@/_front/chrome/errorLogger.js';
+import { initSbImageProxy } from '@/_front/chrome/sbImageProxy.js';
 
 let store;
 let pinia;
@@ -38,6 +39,8 @@ window.wwLib = wwLibImport;
 // Install global client error/diagnostics handlers as early as possible (before the app boots),
 // so runtime crashes, failed promises and lazy-chunk 404s are captured from the start.
 initErrorLogger();
+// Phase 2: route storage images through the same-origin /sb proxy (mobile DPI-throttle of sb.meetgu.ru).
+initSbImageProxy();
 
 if ('serviceWorker' in navigator) {
     if (window.wwg_disableManifest) {

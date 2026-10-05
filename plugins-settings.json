@@ -22,7 +22,7 @@
         "pluginId": "1fa0dd68-5069-436c-9a7d-3b54c340f1fa",
         "publicData": {
             "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICAgInJvbGUiOiAiYW5vbiIsCiAgICAiaXNzIjogInN1cGFiYXNlIiwKICAgICJpYXQiOiAxNzQ1NDQyMDAwLAogICAgImV4cCI6IDE5MDMyMDg0MDAKfQ.6o8FlA2X8jsM4lUKF1mqKSC-v_GX5iE0dY20b6x8bnw",
-            "projectUrl": "https://sb.meetgu.ru"
+            "projectUrl": "https://app.meetgu.ru/sb"
         }
     },
     "f9ef41c3-1c53-4857-855b-f2f6a40b7186": {
@@ -32,11 +32,11 @@
         "pluginId": "f9ef41c3-1c53-4857-855b-f2f6a40b7186",
         "publicData": {
             "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICAgInJvbGUiOiAiYW5vbiIsCiAgICAiaXNzIjogInN1cGFiYXNlIiwKICAgICJpYXQiOiAxNzQ1NDQyMDAwLAogICAgImV4cCI6IDE5MDMyMDg0MDAKfQ.6o8FlA2X8jsM4lUKF1mqKSC-v_GX5iE0dY20b6x8bnw",
-            "projectUrl": "https://sb.meetgu.ru",
+            "projectUrl": "https://app.meetgu.ru/sb",
             "environments": {
                 "production": {
                     "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICAgInJvbGUiOiAiYW5vbiIsCiAgICAiaXNzIjogInN1cGFiYXNlIiwKICAgICJpYXQiOiAxNzQ1NDQyMDAwLAogICAgImV4cCI6IDE5MDMyMDg0MDAKfQ.6o8FlA2X8jsM4lUKF1mqKSC-v_GX5iE0dY20b6x8bnw",
-                    "projectUrl": "https://sb.meetgu.ru"
+                    "projectUrl": "https://app.meetgu.ru/sb"
                 }
             },
             "realtimeTables": {

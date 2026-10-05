@@ -122,7 +122,8 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue';
-import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
+import { getSupabase, readStoredSession, authCookieUser, waitForUid } from '@/_front/chrome/headerAccount.js';
+import { loadTimeout } from '@/_front/chrome/errorLogger.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
 import { listPublishedEvents } from '@/_front/streams/eventsApi.js';
 import { listAllStreams } from '@/_front/streams/streamsApi.js';
@@ -201,8 +202,11 @@ async function load() {
     // (shared across meetgu.ru + app.meetgu.ru) while localStorage is per-origin, so a user who signed
     // in on one host has no localStorage session on the other — without the cookie fallback uid would
     // be null there and «Ваши курсы» would render empty. Same fallback as MyCoursePage/ProfileEditPage.
-    const uid = readStoredSession()?.user?.id || authCookieUser()?.id;
+    // Wait for the auth session to be restored before deciding there's no user — a one-shot read here
+    // loses the boot race on slow mobile and renders «Ваши курсы» empty forever until a manual reload.
+    const uid = (!sb) ? null : await waitForUid();
     if (!sb || !uid) { loading.value = false; return; }
+    const cancelTimeout = loadTimeout('home_personal_data'); // logs loading_timeout if the personal load hangs >15s
 
     const { data: urows } = await sb.from('users').select('"Name", last_open').eq('id', uid).limit(1);
     const user = urows?.[0] || {};
@@ -237,6 +241,7 @@ async function load() {
         list.push({ id: r.id, course, end_period: r.end_period, created_at: r.created_at, expired: isExpired(r, course) });
     }
     courses.value = list;
+    cancelTimeout(); // personal data (name + courses) loaded → cancel the watchdog
 
     // "Вы смотрели недавно": the last opened course, carrying its access state if the user owns it
     if (user.last_open && byId[user.last_open]) {

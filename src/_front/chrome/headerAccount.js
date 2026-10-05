@@ -63,6 +63,21 @@ export function isLikelyLoggedIn() {
     } catch (e) { return true; }
 }
 
+// Resolve the logged-in uid, WAITING briefly for the auth session to be restored. The supabase auth
+// plugin restores the localStorage session / sets the cookie asynchronously after boot, so a page that
+// reads the uid once in onMounted can lose the race (uid=null) and render empty per-user blocks forever
+// («Ваши курсы» empty, greeting with no name). Poll until the uid appears or the timeout elapses.
+// Returns the uid, or null for a genuine guest (no session after waiting).
+export async function waitForUid(timeoutMs = 3000, stepMs = 150) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+        const uid = readStoredSession()?.user?.id || authCookieUser()?.id;
+        if (uid) return uid;
+        if (Date.now() >= deadline) return null;
+        await new Promise((r) => setTimeout(r, stepMs));
+    }
+}
+
 // Resolve the logged-in user's `users` row (users.id == auth uid for this project; fall back to email).
 // Guests (no stored session AND no auth cookie) return null WITHOUT any Supabase call, so the header
 // never touches auth on public pages.
@@ -70,11 +85,18 @@ export async function loadUser(sb) {
     if (!sb) return null;
     const authUser = readStoredSession()?.user || authCookieUser();
     if (!authUser?.id) return null;
-    let { data } = await sb.from('users').select(USER_COLS).eq('id', authUser.id).limit(1);
-    if (!data?.length && authUser.email) {
-        ({ data } = await sb.from('users').select(USER_COLS).eq('email', authUser.email).limit(1));
+    // Retry on an EMPTY result: the users row always exists for a logged-in user, so a transient empty
+    // response (observed intermittently, esp. on slow mobile) is a race/hiccup, not "no such user" —
+    // falling back to {id,email} here is what makes the header show email-initials ("2M") with no name.
+    for (let attempt = 0; attempt < 3; attempt++) {
+        let { data } = await sb.from('users').select(USER_COLS).eq('id', authUser.id).limit(1);
+        if (!data?.length && authUser.email) {
+            ({ data } = await sb.from('users').select(USER_COLS).eq('email', authUser.email).limit(1));
+        }
+        if (data?.length) return data[0];
+        await new Promise((r) => setTimeout(r, 300));
     }
-    return data?.[0] || { id: authUser.id, email: authUser.email };
+    return { id: authUser.id, email: authUser.email };
 }
 
 export function avatarUrl(user) {

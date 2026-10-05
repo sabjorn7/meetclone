@@ -117,7 +117,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import {
-    getSupabase, loadUser, avatarUrl, initials, loadCart, removeCartItem, cartTotal, signOutUser, checkoutCart,
+    getSupabase, loadUser, waitForUid, avatarUrl, initials, loadCart, removeCartItem, cartTotal, signOutUser, checkoutCart,
 } from './headerAccount.js';
 import { hasUnread, initUnread, resetUnread } from './unread.js';
 
@@ -183,7 +183,10 @@ function go(path) { open.value = null; menuOpen.value = false; router.push(path)
 function hardGo(path) { open.value = null; menuOpen.value = false; window.location.assign(path); }
 
 async function refreshUser() {
-    user.value = await loadUser(sb);
+    // Wait for the auth session to be restored before resolving the profile — a one-shot read on a slow
+    // boot leaves a logged-in user showing the guest/email-initials header until a manual reload.
+    const uid = await waitForUid();
+    user.value = uid ? await loadUser(sb) : null;
     avatar.value = avatarUrl(user.value);
     if (user.value) reloadCart(); else cart.value = [];
 }

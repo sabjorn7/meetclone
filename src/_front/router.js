@@ -33,6 +33,8 @@ import SoglasheniePage from './views/legal/SoglasheniePage.vue';
 import PodpiskaPage from './views/legal/PodpiskaPage.vue';
 import CookiePage from './views/legal/CookiePage.vue';
 import SoglasieRasprostraneniePage from './views/legal/SoglasieRasprostraneniePage.vue';
+import RekvizityPage from './views/legal/RekvizityPage.vue';
+import DocumentsPage from './views/legal/DocumentsPage.vue';
 import FaqPage from './views/FaqPage.vue';
 
 import {
@@ -250,6 +252,8 @@ const PAGE_OVERRIDES = [
     { path: '/podpiska', name: 'legal-podpiska', component: PodpiskaPage },
     { path: '/cookie', name: 'legal-cookie', component: CookiePage },
     { path: '/soglasie-rasprostranenie', name: 'legal-soglasie-rasprostranenie', component: SoglasieRasprostraneniePage },
+    { path: '/rekvizity', name: 'legal-rekvizity', component: RekvizityPage },
+    { path: '/documents', name: 'legal-documents', component: DocumentsPage },
     { path: '/faq', name: 'faq', component: FaqPage, wwPath: 'faq' },
     // Public profile: promo-styled ProfilePage replaces the WeWeb /profile_page (reads ?user=<uuid>).
     { path: '/profile_page', name: 'profile-page', component: ProfilePage, wwPath: 'profile_page' },

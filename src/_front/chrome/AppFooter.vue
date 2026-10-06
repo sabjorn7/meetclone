@@ -49,7 +49,10 @@
             </div>
             <nav class="mgf__cols" aria-label="Навигация в подвале">
                 <div class="mgf__col" v-for="col in columns" :key="col.title">
-                    <h4>{{ col.title }}</h4>
+                    <h4 v-if="col.path" class="mgf__col-h--link">
+                        <a :href="col.path" @click.prevent="go(col.path)">{{ col.title }}</a>
+                    </h4>
+                    <h4 v-else>{{ col.title }}</h4>
                     <template v-for="l in col.links" :key="l.label">
                         <!-- l.url = absolute external link (e.g. the meetgu.ru marketing subpages,
                              which exist ONLY on that host); l.path = in-app route via go(). -->
@@ -88,15 +91,13 @@ const columns = [
         { label: 'Ученикам', url: 'https://meetgu.ru/uchenikam' },
         { label: 'Учебным заведениям', url: 'https://meetgu.ru/uchz' },
     ] },
-    { title: 'Документы', links: [
-        { label: 'Политика конфиденциальности', path: '/politica' },
-        { label: 'Оферта', path: '/oferta' },
+    // Title links to the full documents hub (/documents lists ALL legal docs); the column itself
+    // keeps only the four primary docs (3 оферта, 4 политика, 5 реквизиты, 6 соглашение).
+    { title: 'Документы', path: '/documents', links: [
+        { label: 'Публичная оферта', path: '/oferta' },
+        { label: 'Политика обработки ПД', path: '/politica' },
+        { label: 'Реквизиты', path: '/rekvizity' },
         { label: 'Пользовательское соглашение', path: '/soglashenie' },
-        { label: 'Согласие на обработку ПД', path: '/soglasie' },
-        { label: 'Согласие на распространение ПД', path: '/soglasie-rasprostranenie' },
-        { label: 'Условия подписки', path: '/podpiska' },
-        { label: 'Политика cookie', path: '/cookie' },
-        { label: 'Правила отмены', path: '/vozvrat' },
     ] },
 ];
 </script>
@@ -124,6 +125,10 @@ const columns = [
 .mgf__col h4 { margin: 0 0 12px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.5); }
 .mgf__col a { display: block; padding: 5px 0; color: rgba(255, 255, 255, 0.8); text-decoration: none; font-size: 0.95rem; transition: color 0.18s var(--ease-out); }
 @media (hover: hover) and (pointer: fine) { .mgf__col a:hover { color: var(--blue-soft); } }
+/* "Документы" heading is itself a link to the hub — keep the heading look, not the row-link look. */
+h4.mgf__col-h--link { cursor: pointer; }
+h4.mgf__col-h--link a { display: inline; padding: 0; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; }
+@media (hover: hover) and (pointer: fine) { h4.mgf__col-h--link a:hover { color: var(--blue-soft); } }
 .mgf__bottom { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-top: 24px; font-size: 0.88rem; color: rgba(255, 255, 255, 0.45); }
 @media (max-width: 900px) {
     .mgf__top { grid-template-columns: 1fr; gap: 28px; padding-inline: 22px; }

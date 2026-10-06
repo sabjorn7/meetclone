@@ -214,7 +214,10 @@ let vkScript = null;
 function loadVkSdk() {
     if (window.VKIDSDK) { initVkOneTap(); return; }
     vkScript = document.createElement('script');
-    vkScript.src = 'https://unpkg.com/@vkid/sdk@2.6.0/dist-sdk/umd/index.js';
+    // Self-hosted from app.meetgu.ru (byte-identical to unpkg @vkid/sdk@2.6.0) — unpkg.com is an
+    // external CDN that can be throttled/blocked on RU mobile carriers, which would fail the SDK load
+    // (script onerror → vkError) before anything reaches n8n. Same-origin removes that dependency.
+    vkScript.src = '/vendor/vkid-sdk-2.6.0.js';
     vkScript.async = true;
     vkScript.onload = initVkOneTap;
     vkScript.onerror = () => { vkError.value = true; };

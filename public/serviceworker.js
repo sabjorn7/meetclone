@@ -36,8 +36,9 @@ self.addEventListener('fetch', (event) => {
     if (url.origin !== self.location.origin) return;              // cross-origin → native
     if (url.pathname.startsWith('/sb/') || url.pathname.startsWith('/data/')) return; // always fresh
 
-    // hashed static assets → cache-first (immutable)
-    if (url.pathname.startsWith('/assets/')) {
+    // hashed /assets/* and version-pinned /vendor/* (e.g. the self-hosted VK SDK) → cache-first
+    // (immutable names → safe; only `res.ok` is cached, never a failed/empty response)
+    if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/vendor/')) {
         event.respondWith((async () => {
             const cached = await caches.match(req).catch(() => null);
             if (cached) return cached;

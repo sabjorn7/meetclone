@@ -61,11 +61,18 @@ export function initErrorLogger() {
     // which do not bubble and carry no .error — detect them via the event target's src/href.
     window.addEventListener('error', (e) => {
         if (e?.error) { send('window_error', e.error.message || String(e.message || 'error'), e.error.stack); return; }
-        // Resource load failures: ONLY our own bundle chunks matter (a lazy-chunk 404 = deploy-race
-        // recurrence). Skip broken images and third-party CDN CSS (weweb icon fonts etc.) — that noise
-        // would drown the real signal.
+        // Resource load failures. Log our own bundle chunks (a lazy-chunk 404 = deploy-race recurrence)
+        // AND an explicit allowlist of CRITICAL external scripts (vkid / unpkg / id.vk.com — the VK ID
+        // SDK) so a blocked/throttled CDN load is diagnosable. Everything else (images, weweb icon CDNs)
+        // stays filtered out so the table isn't drowned in noise. The [self-hosted]/[external] tag lets
+        // us tell our own chunk failures from a third-party CDN failure at a glance.
         const u = (e?.target && (e.target.src || e.target.href)) || '';
-        if (/\/assets\/[^?]*\.(js|mjs|css)(\?|$)/.test(u)) send('resource_error', `Не загрузился ресурс: ${u}`, null);
+        const own = /\/assets\/[^?]*\.(js|mjs|css)(\?|$)/.test(u);
+        const critExternal = /(unpkg\.com|id\.vk\.com|vkid)/i.test(u);
+        if (own || critExternal) {
+            const srcTag = u.startsWith(location.origin) ? 'self-hosted' : 'external';
+            send('resource_error', `Не загрузился ресурс [${srcTag}]: ${u}`, null);
+        }
     }, true);
     window.addEventListener('unhandledrejection', (e) => {
         const r = e?.reason;

@@ -80,9 +80,18 @@
                             <input :type="showPass ? 'text' : 'password'" v-model="password2" autocomplete="new-password" placeholder="Ещё раз тот же пароль" :disabled="loading" required />
                         </label>
 
+                        <label class="pd-auth__agree">
+                            <input type="checkbox" v-model="agreedReg" :disabled="loading" />
+                            <span>Я принимаю
+                                <a href="/soglashenie" target="_blank" rel="noopener">Пользовательское соглашение</a>
+                                и подтверждаю, что персональные данные обрабатываются в соответствии с
+                                <a href="/politica" target="_blank" rel="noopener">Политикой обработки персональных данных</a>.
+                            </span>
+                        </label>
+
                         <p v-if="authError" class="pd-auth__err" role="alert">{{ authError }}</p>
 
-                        <button class="pd-btn pd-btn--wide" type="submit" :disabled="loading">
+                        <button class="pd-btn pd-btn--wide" type="submit" :disabled="loading || !agreedReg">
                             {{ loading ? 'Создаём аккаунт…' : 'Зарегистрироваться' }}
                         </button>
                     </form>
@@ -124,6 +133,7 @@ const password2 = ref('');
 const showPass = ref(false);
 const loading = ref(false);
 const authError = ref('');
+const agreedReg = ref(false);   // обязательное принятие Пользовательского соглашения + Политики ПД
 
 const vkContainer = ref(null);
 const vkError = ref(false);
@@ -162,6 +172,7 @@ async function submitRegister() {
     if (!role.value) { authError.value = 'Выберите, кто вы'; return; }
     if (p.length < 6) { authError.value = 'Пароль должен быть не короче 6 символов'; return; }
     if (p !== p2) { authError.value = 'Пароли не совпадают'; return; }
+    if (!agreedReg.value) { authError.value = 'Необходимо принять Пользовательское соглашение'; return; }
 
     loading.value = true;
     try {
@@ -332,6 +343,10 @@ function ensureFonts() {
 .pd-field__chev .pd-ic { width: 20px; height: 20px; }
 
 .pd-auth__err { margin: 2px 0 0; color: var(--red); font-size: 0.88rem; font-weight: 500; }
+.pd-auth__agree { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 2px; font-size: 0.82rem; line-height: 1.45; color: var(--ink-2); cursor: pointer; }
+.pd-auth__agree input { margin-top: 3px; flex: 0 0 auto; }
+.pd-auth__agree a { color: var(--brand, #2e6fd6); text-decoration: none; }
+.pd-auth__agree a:hover { text-decoration: underline; }
 
 .pd-btn { border: none; border-radius: var(--r-pill); background: var(--blue); color: #fff; font-family: inherit; font-weight: 700; font-size: 1rem; padding: 14px 22px; cursor: pointer; transition: background 0.15s var(--ease-out), transform 0.15s var(--ease-out); }
 .pd-btn--wide { width: 100%; }

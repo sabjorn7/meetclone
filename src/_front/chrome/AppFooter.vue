@@ -88,7 +88,16 @@ const columns = [
         { label: 'Ученикам', url: 'https://meetgu.ru/uchenikam' },
         { label: 'Учебным заведениям', url: 'https://meetgu.ru/uchz' },
     ] },
-    { title: 'Документы', links: [{ label: 'Политика', path: '/politica' }, { label: 'Оферта', path: '/oferta' }, { label: 'Согласие', path: '/soglasie' }, { label: 'Правила отмены', path: '/vozvrat' }] },
+    { title: 'Документы', links: [
+        { label: 'Политика конфиденциальности', path: '/politica' },
+        { label: 'Оферта', path: '/oferta' },
+        { label: 'Пользовательское соглашение', path: '/soglashenie' },
+        { label: 'Согласие на обработку ПД', path: '/soglasie' },
+        { label: 'Согласие на распространение ПД', path: '/soglasie-rasprostranenie' },
+        { label: 'Условия подписки', path: '/podpiska' },
+        { label: 'Политика cookie', path: '/cookie' },
+        { label: 'Правила отмены', path: '/vozvrat' },
+    ] },
 ];
 </script>
 

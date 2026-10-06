@@ -27,7 +27,11 @@
             <nav class="lp-links" aria-label="Юридические документы">
                 <a href="/politica">Политика конфиденциальности</a>
                 <a href="/oferta">Оферта</a>
+                <a href="/soglashenie">Пользовательское соглашение</a>
                 <a href="/soglasie">Согласие на обработку ПД</a>
+                <a href="/soglasie-rasprostranenie">Согласие на распространение ПД</a>
+                <a href="/podpiska">Условия подписки</a>
+                <a href="/cookie">Политика cookie</a>
                 <a href="/vozvrat">Правила отмены и возврата</a>
             </nav>
         </main>

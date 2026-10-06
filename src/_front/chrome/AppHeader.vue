@@ -58,7 +58,15 @@
                                 <p v-if="promo.error" class="mgh__err">{{ promo.error }}</p>
                             </div>
 
-                            <button class="mgh__btn mgh__btn--block" type="button" :disabled="busy" @click="doCheckout">
+                            <label class="mgh__agree">
+                                <input type="checkbox" v-model="agreedCart" />
+                                <span>Я принимаю
+                                    <a href="/oferta?tab=kursy" target="_blank" rel="noopener">Публичную оферту</a>
+                                    и согласен(на) с тем, что персональные данные обрабатываются в соответствии с
+                                    <a href="/politica" target="_blank" rel="noopener">Политикой обработки персональных данных</a>.
+                                </span>
+                            </label>
+                            <button class="mgh__btn mgh__btn--block" type="button" :disabled="busy || !agreedCart" @click="doCheckout">
                                 {{ busy ? 'Переход к оплате…' : 'Оформить заказ' }}
                             </button>
                             <p v-if="err" class="mgh__err">{{ err }}</p>
@@ -150,6 +158,7 @@ const avatar = ref('');
 const cart = ref([]);
 const busy = ref(false);
 const err = ref('');
+const agreedCart = ref(false);   // обязательное согласие с офертой + политикой ПД перед оплатой корзины
 const promo = reactive({ code: '', applied: null, checking: false, error: '' });
 
 const total = computed(() => cartTotal(cart.value));
@@ -360,6 +369,10 @@ function ensureFont() {
 .mgh__cart-total { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 6px 2px; font-size: 15px; }
 .mgh__cart-total b { font-size: 18px; letter-spacing: -0.01em; }
 .mgh__err { margin: 8px 0 0; color: #c2410c; font-size: 13px; }
+.mgh__agree { display: flex; gap: 8px; align-items: flex-start; margin: 12px 2px 0; font-size: 12px; line-height: 1.45; color: var(--ink-2); cursor: pointer; }
+.mgh__agree input { margin-top: 2px; flex: 0 0 auto; }
+.mgh__agree a { color: #2e6fd6; text-decoration: none; }
+.mgh__agree a:hover { text-decoration: underline; }
 
 /* promo code */
 .mgh__promo { margin-top: 8px; }

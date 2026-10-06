@@ -29,6 +29,10 @@ import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
 import VozvratPage from './views/legal/VozvratPage.vue';
+import SoglasheniePage from './views/legal/SoglasheniePage.vue';
+import PodpiskaPage from './views/legal/PodpiskaPage.vue';
+import CookiePage from './views/legal/CookiePage.vue';
+import SoglasieRasprostraneniePage from './views/legal/SoglasieRasprostraneniePage.vue';
 import FaqPage from './views/FaqPage.vue';
 
 import {
@@ -241,6 +245,11 @@ const PAGE_OVERRIDES = [
     // /soglasie is brand-new (no WeWeb page at that path), so no wwPath to skip.
     { path: '/soglasie', name: 'legal-soglasie', component: SoglasiePage },
     { path: '/vozvrat', name: 'legal-vozvrat', component: VozvratPage },
+    // Brand-new legal pages (no WeWeb page at these paths, so no wwPath to skip).
+    { path: '/soglashenie', name: 'legal-soglashenie', component: SoglasheniePage },
+    { path: '/podpiska', name: 'legal-podpiska', component: PodpiskaPage },
+    { path: '/cookie', name: 'legal-cookie', component: CookiePage },
+    { path: '/soglasie-rasprostranenie', name: 'legal-soglasie-rasprostranenie', component: SoglasieRasprostraneniePage },
     { path: '/faq', name: 'faq', component: FaqPage, wwPath: 'faq' },
     // Public profile: promo-styled ProfilePage replaces the WeWeb /profile_page (reads ?user=<uuid>).
     { path: '/profile_page', name: 'profile-page', component: ProfilePage, wwPath: 'profile_page' },

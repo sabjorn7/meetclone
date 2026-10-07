@@ -418,6 +418,16 @@ function ensureFont() {
     .mgh__menu-nav { padding-inline: 22px; }
     .mgh__menu .mgh__btn--block { margin-inline: 22px; width: calc(100% - 44px); }
     .mgh__auth .mgh__btn--sm { display: none; } /* keep just "Войти" + burger on mobile */
-    .mgh__dd--cart { width: min(320px, calc(100vw - 44px)); }
+    /* On mobile pin the cart panel to the viewport (not the icon) so it can't drift off-screen
+       horizontally and can't overflow below the fold — it scrolls internally if tall. */
+    .mgh__dd--cart {
+        position: fixed;
+        top: 66px;
+        right: 12px;
+        left: 12px;
+        width: auto;
+        max-height: calc(100vh - 80px);
+        overflow-y: auto;
+    }
 }
 </style>

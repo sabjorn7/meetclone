@@ -21,7 +21,13 @@
                 for (var i = 0; i < nodes.length; i++) {
                   var u = nodes[i].src || nodes[i].href; if (!u || u.indexOf('/assets/') < 0) continue; total++;
                   var r = byName[u];
-                  if (!r || (r.responseEnd === 0 && r.transferSize === 0)) missing.push(u.split('/assets/')[1]);
+                  // "загрузился успешно" = есть resource-entry И (Chromium: responseStatus 2xx/3xx;
+                  // Safari без responseStatus: получены байты тела или из сети). Иначе — missing
+                  // (ловит abort/404/network-fail; кэш-хиты (responseStatus=200 / encodedBodySize>0) НЕ ловит).
+                  var ok = r && (r.responseStatus === undefined
+                    ? (r.encodedBodySize > 0 || r.transferSize > 0)
+                    : (r.responseStatus >= 200 && r.responseStatus < 400));
+                  if (!ok) missing.push(u.split('/assets/')[1]);
                 }
                 var sw = (navigator.serviceWorker && navigator.serviceWorker.controller) ? 'sw' : 'nosw';
                 var appKids = (document.getElementById('app') || {}).childElementCount || 0;

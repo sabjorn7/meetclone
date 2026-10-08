@@ -30,6 +30,7 @@ export async function ownsCourse(sb, courseId, uid) {
 // 89156b89): insert the enrollment, then append its id to buied_courses and the course id to
 // buied_course_orig. No payment, no Prodamus.
 export async function enrollFree(sb, { buyer, course }) {
+    if (window.__mgGuestAuth) throw new Error('Нет связи с аккаунтом. Обновите страницу.'); // (a') guard
     const { data: ucRows, error } = await sb.from('user_course')
         .insert({ user: buyer.id, course: course.id, Free: true })
         .select('id').limit(1);
@@ -59,6 +60,7 @@ export async function courseInCart(sb, courseId, uid) {
 // there. Guards against a duplicate row so repeated clicks don't stack the same course. Returns true
 // if a row was inserted.
 export async function addToCart(sb, { buyer, course, renewal = false }) {
+    if (window.__mgGuestAuth) throw new Error('Нет связи с аккаунтом. Обновите страницу.'); // (a') guard
     if (await courseInCart(sb, course.id, buyer.id)) return false; // already in cart → header shows it
     const { count } = await sb.from('shop')
         .select('id', { count: 'exact', head: true })

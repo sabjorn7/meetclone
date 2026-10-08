@@ -183,6 +183,7 @@ export async function signOutUser(sb) {
 // fetch a Prodamus payment link (do=link), persist it, then redirect the buyer to Prodamus. It does
 // NOT move funds itself; the buyer completes payment on Prodamus (n8n BuyCourse finalizes via callback).
 export async function checkoutCart(sb, { user, cart, promoCode = null }) {
+    if (window.__mgGuestAuth) throw new Error('Нет связи с аккаунтом. Обновите страницу.'); // (a') guard
     if (!sb || !user?.id || !cart?.length) return;
 
     // Promo (optional). Re-validate server-side at checkout so the discount is authoritative and

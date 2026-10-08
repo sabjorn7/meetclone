@@ -92,6 +92,7 @@ export async function createBackingCourse(supabase, { owner, title, price, month
  * the UNTOUCHED n8n `BuyCourse` workflow via the Prodamus callback. Returns the payment URL.
  */
 export async function purchaseStream(supabase, { buyer, stream, promoCode = null }) {
+    if (window.__mgGuestAuth) throw new Error('Нет связи с аккаунтом. Обновите страницу.'); // (a') guard
     if (!stream.backing_course_id) throw new Error('У эфира нет курса-подложки.');
 
     // 1) cart row in `shop` (clone of course action 90ddb3ae; +quantity:1, read by the Prodamus builder)

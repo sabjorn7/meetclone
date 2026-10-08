@@ -1,4 +1,5 @@
 <template>
+    <AuthBanner />
     <AppHeader v-if="useNewChrome" />
     <!-- wwFront:start -->
     <router-view />
@@ -11,6 +12,7 @@ import { reactive, computed, provide, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppHeader from '@/_front/chrome/AppHeader.vue';
 import AppFooter from '@/_front/chrome/AppFooter.vue';
+import AuthBanner from '@/_front/chrome/AuthBanner.vue';
 import { isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
 
 // The new MeetGuru chrome (AppHeader/AppFooter) is the DEFAULT on every route. This is a denylist,
@@ -41,7 +43,7 @@ const CHROME_EXCLUDE = [
 const CHROME_EXCLUDE_PREFIX = [];
 
 export default {
-    components: { AppHeader, AppFooter },
+    components: { AppHeader, AppFooter, AuthBanner },
     setup() {
         const wwFrontState = reactive({
             lang: computed(() => wwLib.$store.getters['front/getLang']),

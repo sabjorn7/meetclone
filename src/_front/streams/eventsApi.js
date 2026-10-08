@@ -313,6 +313,7 @@ export async function getMyEventRegistration(supabase, eventId, userId) {
  * capacity (if set) → blocked when paid registrations already fill it.
  */
 export async function purchaseEvent(supabase, { buyer, event, paymentType, promoCode = null }) {
+    if (window.__mgGuestAuth) throw new Error('Нет связи с аккаунтом. Обновите страницу.'); // (a') guard
     if (!event?.backing_course_id) throw new Error('У мероприятия нет курса-подложки.');
     if (paymentType !== 'full' && paymentType !== 'deposit') throw new Error('Неверный тип оплаты.');
     const amount = eventAmount(event, paymentType);

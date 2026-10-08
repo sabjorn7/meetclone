@@ -336,15 +336,19 @@ async function load() {
     } catch (e) { /* retries exhausted — render empty state (already logged) instead of an endless spinner */ }
     cancelTimeout(); // key query returned (or gave up) → cancel the watchdog
     courses.value = data || [];
-    // authors (school / teacher) — name for the card footer, name+photo for the quick-view popup.
-    const ownerIds = [...new Set(courses.value.map((c) => c.owner).filter(Boolean))];
-    if (ownerIds.length) {
-        const { data: us } = await sb.from('users').select('id, "Name", "Photo"').in('id', ownerIds);
-        authorsById.value = Object.fromEntries((us || []).map((u) => [u.id, u]));
-    }
+    // The catalog is ready — clear the spinner NOW, before the secondary authors query. That query
+    // only fills in card footer names; if it stalls on flaky mobile the grid is already rendered, so
+    // it can never leave the user stuck on «загрузка». (A raw await here used to hang the whole page.)
     loading.value = false;
     await nextTick();
     ready.value = true;
+    // authors (school / teacher) — name for the card footer, name+photo for the quick-view popup.
+    const ownerIds = [...new Set(courses.value.map((c) => c.owner).filter(Boolean))];
+    if (ownerIds.length) {
+        let us = null;
+        try { ({ data: us } = await sbWithRetry('catalog_authors', () => sb.from('users').select('id, "Name", "Photo"').in('id', ownerIds))); } catch (e) { /* logged */ }
+        authorsById.value = Object.fromEntries((us || []).map((u) => [u.id, u]));
+    }
 }
 
 onMounted(() => { ensureFonts(); load(); });

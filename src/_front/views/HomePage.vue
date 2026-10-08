@@ -229,9 +229,14 @@ async function load() {
     const ids = [...new Set([...rows.map((r) => r.course).filter(Boolean), user.last_open].filter(Boolean))];
     let byId = {};
     if (ids.length) {
-        const { data: cs } = await sb.from('course')
-            .select('id, "Title", "Category", slug, "DurationLong", video_id, owner, "ModStatus"')
-            .in('id', ids);
+        // timeout+retry: a raw await here can hang forever on flaky/throttled mobile and freeze
+        // the whole «загрузка» spinner — wrap it so a stalled request aborts and retries instead.
+        let cs = null;
+        try {
+            ({ data: cs } = await sbWithRetry('home_courses', () => sb.from('course')
+                .select('id, "Title", "Category", slug, "DurationLong", video_id, owner, "ModStatus"')
+                .in('id', ids)));
+        } catch (e) { /* logged */ }
         // Exclude hidden backing courses (paid streams 'Трансляции' / events 'Мероприятия', all
         // 'Черновик') so they don't appear as broken "courses" (slug=null) in «Ваши курсы».
         byId = Object.fromEntries((cs || []).filter((c) => c.ModStatus !== 'Черновик').map((c) => [c.id, c]));
@@ -254,6 +259,13 @@ async function load() {
         recent.value = list.find((x) => x.course.id === user.last_open)
             || { course: byId[user.last_open], end_period: null, created_at: null, expired: false };
     }
+
+    // Primary personal data (name + «Ваши курсы») is ready — clear the spinner NOW, BEFORE the
+    // secondary "upcoming" block below. That block does more network calls; if any of them stalls
+    // on flaky mobile the page is already rendered, so it can never hang «загрузка» for the user.
+    loading.value = false;
+    await nextTick();
+    ready.value = true;
 
     // "Ближайшие мероприятия и эфиры": nearest FUTURE published events + scheduled streams, merged
     // and sorted by date (nearest-first). Public — block hidden when none.
@@ -278,21 +290,17 @@ async function load() {
         // enrich only the EVENT rows with speaker names (streams already carry theirs)
         const eventIds = upcoming.value.filter((x) => x._kind === 'event').map((x) => x.id);
         if (eventIds.length) {
-            const { data: erows } = await sb.from('events').select('id, speaker_id').in('id', eventIds);
+            const { data: erows } = await sbWithRetry('home_event_speakers', () => sb.from('events').select('id, speaker_id').in('id', eventIds));
             const spkIds = [...new Set((erows || []).map((r) => r.speaker_id).filter(Boolean))];
             let nameById = {};
             if (spkIds.length) {
-                const { data: us } = await sb.from('users').select('id, "Name"').in('id', spkIds);
+                const { data: us } = await sbWithRetry('home_speaker_names', () => sb.from('users').select('id, "Name"').in('id', spkIds));
                 nameById = Object.fromEntries((us || []).map((u) => [u.id, u.Name]));
             }
             const spkByEvent = Object.fromEntries((erows || []).map((r) => [r.id, nameById[r.speaker_id] || '']));
             upcoming.value = upcoming.value.map((x) => (x._kind === 'event' ? { ...x, speaker: spkByEvent[x.id] || '' } : x));
         }
     } catch (e) { upcoming.value = []; }
-
-    loading.value = false;
-    await nextTick();
-    ready.value = true;
 }
 
 onMounted(() => { ensureFonts(); load(); });

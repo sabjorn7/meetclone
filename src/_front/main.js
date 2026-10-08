@@ -129,6 +129,11 @@ const init = async function () {
     // We select ourself app element, because Vue does not know how to do it properly (Editor + Front Iframe)
     const el = document.getElementById('app');
     app.mount(el);
+    // Defuse the boot watchdog (template.html): the app mounted, so no white-screen beacon.
+    try {
+        window.__mgMounted = true;
+        if (window.__mgBootFired) { try { new Image().src = '/_l?t=boot_late&m=' + encodeURIComponent('mountedAt=' + Math.round(performance.now())); } catch (e) {} }
+    } catch (e) { /* never throw */ }
 
     initHeaderMenuOutsideClick();
     initProfileFollowButton(router);

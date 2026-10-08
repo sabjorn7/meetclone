@@ -11,6 +11,34 @@ import { getSupabase, readStoredSession, authCookieUser } from './headerAccount.
 const THROTTLE_MS = 10000;
 const lastSent = new Map(); // "type|msgPrefix" -> ts
 
+// Critical types also sent via a GET beacon to /_l — reaches the server even when /sb (Supabase) is
+// dead (the usual case when these fire). auth_preflight_timeout is the auth-stall signal.
+const BEACON_TYPES = new Set(['loading_timeout', 'video_load_timeout', 'window_error', 'vue_error', 'auth_preflight_timeout']);
+
+// Strip secrets from a string before it leaves the client (both the DB insert and the beacon go
+// through send(), so sanitizing there covers both). Removes JWTs, Bearer tokens, the values of
+// sensitive params in JSON/colon/query form, and the query/fragment of any URL.
+function sanitize(s) {
+    s = String(s == null ? '' : s);
+    s = s.replace(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]*/g, '[jwt]');
+    s = s.replace(/Bearer\s+[A-Za-z0-9._~+/=\-]+/gi, 'Bearer [redacted]');
+    s = s.replace(/"?(access_token|refresh_token|token|code|apikey|password)"?\s*[:=]\s*"?[^&\s",}]+/gi, '$1=…');
+    s = s.replace(/\b(access_token|refresh_token|token|code|apikey|key|password)=[^&\s"']+/gi, '$1=…');
+    s = s.replace(/(https?:\/\/[^\s"'?#]+)[?#][^\s"']*/gi, '$1');
+    return s;
+}
+
+// GET beacon to /_l. Message is TRUNCATED (not dropped) to keep the URL under ~1800 chars.
+export function beacon(type, msg) {
+    try {
+        const base = '/_l?t=' + encodeURIComponent(String(type).slice(0, 40)) + '&m=';
+        let m = encodeURIComponent(sanitize(msg));
+        const room = 1800 - base.length;
+        if (m.length > room) m = m.slice(0, room).replace(/%[0-9A-Fa-f]?$/, ''); // drop a dangling half-escape
+        new Image().src = base + m;
+    } catch (e) { /* logging must never break the app */ }
+}
+
 function currentUserId() {
     try { return readStoredSession()?.user?.id || authCookieUser()?.id || null; } catch (e) { return null; }
 }
@@ -21,13 +49,18 @@ async function send(eventType, message, stack) {
         const now = Date.now();
         if (now - (lastSent.get(key) || 0) < THROTTLE_MS) return; // throttle cyclic errors
         lastSent.set(key, now);
+        // Sanitize centrally → covers BOTH the beacon and the DB insert (message/stack/url).
+        message = sanitize(message);
+        stack = stack ? sanitize(stack) : stack;
+        // Fire the beacon in parallel with the insert — it arrives even when /sb is dead.
+        if (BEACON_TYPES.has(eventType)) beacon(eventType, message);
         const sb = getSupabase();
         if (!sb) return;
         await sb.from('client_error_log').insert({
             event_type: eventType,
             message: (message || '').slice(0, 2000),
             stack: stack ? String(stack).slice(0, 8000) : null,
-            url: (location.href || '').slice(0, 1000),
+            url: sanitize(location.href).slice(0, 1000),
             user_agent: (navigator.userAgent || '').slice(0, 500),
             user_id: currentUserId(),
         });

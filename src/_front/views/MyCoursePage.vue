@@ -46,7 +46,20 @@
                     <!-- video -->
                     <div class="pd-video">
                         <template v-if="currentLesson && currentLesson.video_id">
-                            <iframe v-if="videoStarted" :key="currentLesson.id" :src="videoUrl" title="Урок" frameborder="0" allowfullscreen allow="autoplay; fullscreen; picture-in-picture"></iframe>
+                            <template v-if="videoStarted">
+                                <iframe :key="`${currentLesson.id}-${videoReload}`" :src="videoUrl" title="Урок" frameborder="0" allowfullscreen allow="autoplay; fullscreen; picture-in-picture" @load="videoLoaded = true"></iframe>
+                                <!-- Until the embed fires @load (it can stall on some mobile networks — observed on MTS LTE,
+                                     where the embed hangs but the direct PeerTube page still opens), show a spinner, a retry
+                                     (re-mounts the iframe), and a direct-watch link so the player is never a silent blank box. -->
+                                <div v-if="!videoLoaded" class="pd-video__loading">
+                                    <span class="pd-video__spinner" aria-hidden="true"></span>
+                                    <span class="pd-video__loading-txt">Видео загружается…</span>
+                                    <span class="pd-video__loading-actions">
+                                        <button type="button" class="pd-video__retry" @click="reloadVideo">Обновить</button>
+                                        <a :href="watchUrl" target="_blank" rel="noopener" class="pd-video__fallback">Открыть напрямую</a>
+                                    </span>
+                                </div>
+                            </template>
                             <button v-else type="button" class="pd-video__poster" @click="videoStarted = true" aria-label="Смотреть урок">
                                 <img v-if="posterUrl" :src="posterUrl" alt="" />
                                 <span class="pd-video__play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
@@ -173,6 +186,8 @@ const certBusy = ref(false);
 const lessons = ref([]);
 const currentLessonId = ref(null);
 const videoStarted = ref(false);
+const videoLoaded = ref(false);   // iframe fired @load — until then show a spinner (slow/stalled PeerTube embed on mobile)
+const videoReload = ref(0);       // bumping this re-mounts the iframe (the «Обновить» retry)
 const posterUrl = ref('');
 
 // review form
@@ -185,6 +200,9 @@ const reviewError = ref('');
 
 const currentLesson = computed(() => lessons.value.find((l) => l.id === currentLessonId.value) || null);
 const videoUrl = computed(() => (currentLesson.value?.video_id ? embedUrl(currentLesson.value.video_id, { autoplay: true }) : ''));
+// Direct PeerTube watch page — fallback link when the embedded player is slow/stalled (e.g. a
+// throttled mobile carrier or a cold PeerTube embed render), so the user isn't stuck on a blank box.
+const watchUrl = computed(() => (currentLesson.value?.video_id ? `${PEERTUBE}/w/${encodeURIComponent(currentLesson.value.video_id)}` : ''));
 const ratingAvg = computed(() => {
     const r = course.value?.rating;
     if (!Array.isArray(r) || !r.length) return '';
@@ -338,8 +356,14 @@ async function load() {
 function selectLesson(id) {
     currentLessonId.value = id;
     videoStarted.value = false;
+    videoLoaded.value = false;
     posterUrl.value = '';
     loadPoster(currentLesson.value?.video_id);
+}
+// «Обновить» — re-mount the iframe (bump the :key) to retry a stalled/cold embed load.
+function reloadVideo() {
+    videoLoaded.value = false;
+    videoReload.value += 1;
 }
 async function loadPoster(uuid) {
     if (!uuid) return;
@@ -411,6 +435,17 @@ function ensureFonts() {
 .pd-video__play svg { width: 32px; height: 32px; fill: var(--blue); margin-left: 3px; }
 @media (hover: hover) and (pointer: fine) { .pd-video__poster:hover .pd-video__play { transform: scale(1.08); } }
 .pd-video__empty { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255, 255, 255, 0.7); font-size: 0.95rem; }
+/* Loading overlay shown over the iframe until it fires @load (slow/stalled PeerTube embed on mobile). */
+.pd-video__loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #0b1e52; color: rgba(255, 255, 255, 0.85); text-align: center; padding: 20px; pointer-events: none; }
+.pd-video__loading-actions { pointer-events: auto; display: flex; align-items: center; gap: 14px; margin-top: 2px; }
+.pd-video__spinner { width: 38px; height: 38px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.25); border-top-color: #fff; animation: pd-video-spin 0.8s linear infinite; }
+.pd-video__loading-txt { font-size: 0.95rem; }
+.pd-video__retry { appearance: none; border: 1px solid rgba(255, 255, 255, 0.6); background: transparent; color: #fff; font: inherit; font-size: 0.9rem; font-weight: 600; padding: 7px 16px; border-radius: 999px; cursor: pointer; }
+@media (hover: hover) and (pointer: fine) { .pd-video__retry:hover { background: rgba(255, 255, 255, 0.14); } }
+.pd-video__fallback { color: #fff; font-size: 0.9rem; text-decoration: underline; opacity: 0.85; }
+@media (hover: hover) and (pointer: fine) { .pd-video__fallback:hover { opacity: 1; } }
+@keyframes pd-video-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pd-video__spinner { animation-duration: 2s; } }
 
 .pd-lessons { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 18px; }
 .pd-lessons__title { margin: 0 0 12px; font-weight: 800; font-size: 1.1rem; letter-spacing: -0.02em; }

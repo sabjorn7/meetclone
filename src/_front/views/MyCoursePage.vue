@@ -47,7 +47,7 @@
                     <div class="pd-video">
                         <template v-if="currentLesson && currentLesson.video_id">
                             <template v-if="videoStarted">
-                                <iframe :key="`${currentLesson.id}-${videoReload}`" :src="videoUrl" title="Урок" frameborder="0" allowfullscreen allow="autoplay; fullscreen; picture-in-picture" @load="videoLoaded = true"></iframe>
+                                <iframe :key="`${currentLesson.id}-${videoReload}`" :src="videoUrl" title="Урок" frameborder="0" allowfullscreen allow="autoplay; fullscreen; picture-in-picture" @load="onVideoLoaded"></iframe>
                                 <!-- Until the embed fires @load (it can stall on some mobile networks — observed on MTS LTE,
                                      where the embed hangs but the direct PeerTube page still opens), show a spinner, a retry
                                      (re-mounts the iframe), and a direct-watch link so the player is never a silent blank box. -->
@@ -60,7 +60,7 @@
                                     </span>
                                 </div>
                             </template>
-                            <button v-else type="button" class="pd-video__poster" @click="videoStarted = true" aria-label="Смотреть урок">
+                            <button v-else type="button" class="pd-video__poster" @click="startVideo" aria-label="Смотреть урок">
                                 <img v-if="posterUrl" :src="posterUrl" alt="" />
                                 <span class="pd-video__play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
                             </button>
@@ -162,11 +162,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import { ownsCourse } from '@/_front/course/coursesApi.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
+import { logClientEvent } from '@/_front/chrome/errorLogger.js';
 import CourseCertificate from '@/_front/course/CourseCertificate.vue';
 import { certNumber, certDate, downloadCertificatePdf, certFilename } from '@/_front/course/certificate.js';
 
@@ -353,7 +354,53 @@ async function load() {
     ready.value = true;
 }
 
+// Stall watchdog: if the embed iframe hasn't fired @load within VIDEO_STALL_MS after the user hit
+// play, log a `video_load_timeout` to client_error_log (video url in the message; user_agent + the
+// course url + user_id are captured by the logger). Gives us real numbers on how many people the
+// PeerTube embed stalls for; the carrier can be recovered afterwards by matching user_id+time to
+// the nginx access log (client_error_log itself has no IP).
+const VIDEO_STALL_MS = 15000;
+let stallTimer = null;
+// Network info from the Network Information API (not on Safari/iOS — then it's just absent).
+function netInfo() {
+    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    return c ? { conn: c.type || null, eff: c.effectiveType || null } : {};
+}
+// Probe the PeerTube host directly (no-cors, 5s cap). `ok` = host reachable → the stall is inside the
+// embed/iframe; `error`/`timeout` = the video host itself isn't reachable on this connection. This is
+// what separates «host недоступен» from «проблема внутри iframe» in the logged event.
+async function probeVideoHost() {
+    try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 5000);
+        await fetch(`${PEERTUBE}/`, { mode: 'no-cors', cache: 'no-store', signal: ctrl.signal });
+        clearTimeout(t);
+        return 'ok';
+    } catch (e) {
+        return e && e.name === 'AbortError' ? 'timeout' : 'error';
+    }
+}
+function armStall() {
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(async () => {
+        if (videoLoaded.value) return;
+        const probe = await probeVideoHost();
+        if (videoLoaded.value) return; // loaded during the 5s probe → not a real stall, don't log
+        logClientEvent('video_load_timeout', videoUrl.value, { lesson: currentLesson.value?.id || null, probe, ...netInfo() });
+    }, VIDEO_STALL_MS);
+}
+function startVideo() {
+    videoStarted.value = true;
+    videoLoaded.value = false;
+    armStall();
+}
+function onVideoLoaded() {
+    videoLoaded.value = true;
+    clearTimeout(stallTimer);
+}
+
 function selectLesson(id) {
+    clearTimeout(stallTimer);
     currentLessonId.value = id;
     videoStarted.value = false;
     videoLoaded.value = false;
@@ -364,7 +411,9 @@ function selectLesson(id) {
 function reloadVideo() {
     videoLoaded.value = false;
     videoReload.value += 1;
+    armStall();
 }
+onBeforeUnmount(() => clearTimeout(stallTimer));
 async function loadPoster(uuid) {
     if (!uuid) return;
     try {

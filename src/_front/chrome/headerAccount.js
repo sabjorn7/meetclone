@@ -172,10 +172,30 @@ function clearStoredSession() {
 // The synchronous clears below are the guarantee; the network signOut is fired best-effort and NOT
 // awaited because it acquires the Web Locks auth lock and can hang.
 export async function signOutUser(sb) {
-    try { getAuthPlugin()?.signOut(); } catch (e) { /* ignore */ }
-    try { sb?.auth?.signOut(); } catch (e) { /* ignore */ }
+    // Read the access token BEFORE clearing — needed for server-side revocation below.
+    const token = readStoredSession()?.access_token || null;
+    // Clear local state FIRST and synchronously — network-independent (pure cookie/localStorage ops,
+    // no `sb`/getSupabase dependency) — so logout "sticks" and the caller can redirect immediately
+    // even if the network sign-out below never responds.
     clearAuthCookies();
     clearStoredSession();
+    // Server-side revocation, fire-and-forget with keepalive (survives the imminent redirect). We send
+    // it MANUALLY because clearing storage first means auth-js's own signOut() finds no session and
+    // sends nothing. Uses the client's own URL+anon key, so it works on every host (/sb proxy or sb.*).
+    try {
+        // supabase-js doesn't expose supabaseKey; the anon key lives on the GoTrue client's headers.
+        const authUrl = sb?.auth?.url || (sb?.supabaseUrl ? `${sb.supabaseUrl}/auth/v1` : null);
+        const key = sb?.supabaseKey || sb?.auth?.headers?.apikey || sb?.headers?.apikey || null;
+        if (token && authUrl && key) {
+            fetch(`${authUrl}/logout`, {
+                method: 'POST', keepalive: true,
+                headers: { apikey: key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            }).catch(() => { /* ignore */ });
+        }
+    } catch (e) { /* ignore */ }
+    // Reset the plugin's UI state (user=null / isAuthenticated=false); its network call is a no-op now.
+    try { getAuthPlugin()?.signOut(); } catch (e) { /* ignore */ }
+    try { sb?.auth?.signOut(); } catch (e) { /* ignore */ }
 }
 
 // MONEY (reviewed before deploy): verbatim port of the site's cart checkout, same flow the WeWeb

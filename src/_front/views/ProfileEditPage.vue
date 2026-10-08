@@ -163,7 +163,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, nextTick } from 'vue';
-import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
+import { getSupabase, readStoredSession, authCookieUser, signOutUser } from '@/_front/chrome/headerAccount.js';
 import { listBlockedUserIds, unblockUser } from '@/_front/moderation/moderationApi.js';
 
 const STORAGE_URL = 'https://sb.meetgu.ru/storage/v1/object/public/profile//';
@@ -330,9 +330,13 @@ async function changePw() {
     } finally { pwBusy.value = false; }
 }
 
-function logout() {
-    try { window.wwLib.wwPlugins.supabaseAuth.signOut(); } catch (e) { /* ignore */ }
-    window.location.href = '/login';
+async function logout() {
+    // signOutUser чистит LS+куки СНАЧАЛА и синхронно (не только через плагин), иначе в гостевом режиме
+    // (a′) removeItem(sk)=no-op и сессия в localStorage пережила бы выход → разлогин «не прилипал» бы.
+    // Race с таймаутом + redirect в finally → выход всегда уводит на /login, даже если /logout завис.
+    try { await Promise.race([signOutUser(getSupabase()), new Promise((r) => setTimeout(r, 1500))]); }
+    catch (e) { /* ignore */ }
+    finally { window.location.href = '/login'; }
 }
 
 onMounted(() => { ensureFonts(); document.title = 'Профиль — МитГуру'; load(); });

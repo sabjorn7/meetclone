@@ -44,6 +44,8 @@ import {
     onPageUnload,
 } from '@/_common/helpers/data';
 import { convertPathToRouterFormat } from '@/_common/helpers/urlParametersParsing';
+import { withTimeoutRetry, showLoadError, allowHardReload } from './chrome/bootResilience.js';
+import { logClientEvent } from './chrome/errorLogger.js';
 import { getRuntimeEnvironment } from '@/helpers/frontEnv.js';
 import { useBackAuthStore } from '@/pinia/backAuth.js';
 
@@ -212,8 +214,24 @@ const registerRoute = (page, lang, forcedPath) => {
             }
 
             try {
-                await import(`@/pages/${page.id.split('_')[0]}.js`);
-                await wwLib.wwWebsiteData.fetchPage(page.id);
+                // import(chunk) and page-data fetch are independent network ops → run them in
+                // PARALLEL (saves one RTT on the critical boot path). The component only executes
+                // after initFront (awaited in main.js before router.isReady), so loading its chunk
+                // early is safe. Each step is timed out + retried once (bootResilience); data.json
+                // fails first (8s+8s) before the chunk (10s+10s), so a double-hang lands on the
+                // error screen rather than the chunk's hard-reload path.
+                const chunkId = page.id.split('_')[0];
+                await Promise.all([
+                    withTimeoutRetry(() => import(`@/pages/${chunkId}.js`), {
+                        timeout: 10000,
+                        type: 'chunk',
+                        path: to.path,
+                    }).catch(err => {
+                        err.chunkLoadFailed = true;
+                        throw err;
+                    }),
+                    wwLib.wwWebsiteData.fetchPage(page.id),
+                ]);
 
                 //Scroll to section or on top after page change
                 if (to.hash) {
@@ -227,12 +245,28 @@ const registerRoute = (page, lang, forcedPath) => {
             } catch (err) {
                 wwLib.$store.dispatch('front/showPageLoadProgress', false);
 
-                if (err.redirectUrl) {
+                // fetchData already navigated away for a fresh bundle (cacheVersion mismatch).
+                if (err && err.reloadUrl) return;
+                if (err && err.redirectUrl) {
                     return { path: err.redirectUrl || '404' };
-                } else {
-                    //Any other error: go to target page using window.location
-                    window.location = to.fullPath;
                 }
+                if (err && err.chunkLoadFailed) {
+                    // Chunk still missing after the retry: a stale cached index.html can reference a
+                    // hash no longer on the server (deploy churn). ONE guarded hard reload pulls a
+                    // fresh index.html with current hashes; if this path was already reloaded in the
+                    // last minute, stop looping and show the error screen instead.
+                    if (allowHardReload(to.path)) {
+                        try { logClientEvent('nav_hard_reload', 'chunk load failed → hard reload', { path: to.path, attempt: 1, reason: 'chunk_load_failed' }); } catch (e) { /* ignore */ }
+                        window.location.assign(to.fullPath);
+                        return;
+                    }
+                    showLoadError();
+                    return;
+                }
+                // Page-data fetch failed after its retry (timeout/network): show the error screen,
+                // NO auto-reload (a reload wouldn't fix a dead connection and risks a loop).
+                showLoadError();
+                return;
             }
         },
     });

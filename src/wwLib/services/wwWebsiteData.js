@@ -1,4 +1,5 @@
- 
+import { logClientEvent } from '@/_front/chrome/errorLogger.js';
+
 export default {
     async init() {
         /* wwFront:start */
@@ -75,6 +76,33 @@ export default {
     },
 };
 
+// Fetch the page data with an 8s timeout and ONE retry (same URL — no cache-bust). Without a
+// timeout a data.json request that never reaches the server (common on throttled mobile carriers)
+// hangs router.isReady indefinitely → the app never mounts (boot_late). Logs `fetch_retry` so we
+// can see whether the retry actually recovers these.
+async function fetchPageData(url) {
+    const opts = {
+        timeout: 8000,
+        // Bypass the HTTP cache so `cacheVersion` always reflects the CURRENTLY deployed data,
+        // even on a fully-stale browser (otherwise a stale bundle re-reads a stale data.json at
+        // the same ?_wwcv version and the mismatch below never fires). Revalidates → mostly 304s.
+        headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    };
+    try {
+        return await axios.get(url, opts);
+    } catch (err) {
+        if (err && err.response) throw err; // got an HTTP response (e.g. a redirect 4xx) → don't retry
+        try {
+            logClientEvent('fetch_retry', 'data.json retry', {
+                path: location.pathname,
+                attempt: 1,
+                reason: err?.code || (err?.message || 'error').slice(0, 80),
+            });
+        } catch (e) { /* logging must never break boot */ }
+        return await axios.get(url, opts);
+    }
+}
+
 async function fetchData(pageId) {
     if (!pageId) return;
 
@@ -101,12 +129,7 @@ async function fetchData(pageId) {
                 workflows,
                 libraryComponents,
             },
-        } = await axios.get(url, {
-            // Bypass the HTTP cache so `cacheVersion` always reflects the CURRENTLY deployed data,
-            // even on a fully-stale browser (otherwise a stale bundle re-reads a stale data.json at
-            // the same ?_wwcv version and the mismatch below never fires). Revalidates → mostly 304s.
-            headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
-        });
+        } = await fetchPageData(url);
 
         //data.json contains a different cacheVersion
         //due to a deploy before the navigation
@@ -133,9 +156,13 @@ async function fetchData(pageId) {
         if (pageData.cmsDataSetPath) {
             url = `${base}data/${pageId}.json?wwlang=${lang}&_wwcv=${window.wwg_cacheVersion}`;
 
+            // Secondary CMS-index fetch (only for cmsDataSetPath pages). 8s timeout but NO retry on
+            // purpose: the primary page-data fetch above already succeeded, so the network is alive;
+            // a single extra attempt keeps this simple, and a failure here still surfaces via the
+            // outer catch → the router's load-error screen (same as any other fetch failure).
             const {
                 data: { page: pageIndexData },
-            } = await axios.get(url);
+            } = await axios.get(url, { timeout: 8000 });
 
             for (const key in pageIndexData) {
                 pageData[key] = pageIndexData[key];
@@ -167,7 +194,11 @@ async function fetchData(pageId) {
         });
     } catch (err) {
         if (err.reloadUrl) throw err;
-        throw { redirectUrl: err.response.data.redirectUrl };
+        // A WeWeb redirect comes back as a structured 4xx body; a timeout/network error (the retry
+        // in fetchPageData also failed) has no response → let the router show the load-error screen.
+        const redirectUrl = err?.response?.data?.redirectUrl;
+        if (redirectUrl) throw { redirectUrl };
+        throw err;
     }
     /* wwFront:end */
 

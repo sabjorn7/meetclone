@@ -17,6 +17,35 @@
             document.addEventListener('visibilitychange', function () {
               if (document.visibilityState === 'hidden') window.__mgWasHidden = true;
             }, { passive: true });
+            // Render-unblock: a <link rel="stylesheet"> in <head> blocks the FIRST PAINT until it
+            // loads or fails. On a throttled mobile link the main CSS can hang → the whole page
+            // (incl. the #mg-boot-loading placeholder AND the #mg-boot-msg overlay) stays UNPAINTED
+            // = pure white, even though the DOM and this watchdog work (confirmed: FCP withheld
+            // until the CSS resolved). After ~5s, drop any still-unloaded stylesheet from render-
+            // blocking (media='not all') so the inline-styled placeholder/overlay can paint; restore
+            // media when the CSS finally arrives. A brief unstyled flash beats an indefinite white.
+            setTimeout(function () {
+              try {
+                var links = document.querySelectorAll('link[rel="stylesheet"]:not([data-mg-reattached])');
+                for (var i = 0; i < links.length; i++) {
+                  var l = links[i];
+                  if (!l.sheet) {
+                    // Safari ignores a media change on an in-flight blocking sheet, so REMOVE it to
+                    // release the paint, then re-append the same href as a non-blocking link
+                    // (media='print' → 'all' on load) so styles still apply if the CSS arrives.
+                    var href = l.href, parent = l.parentNode, co = l.crossOrigin;
+                    if (parent) parent.removeChild(l);
+                    var n = document.createElement('link');
+                    n.rel = 'stylesheet'; n.media = 'print';
+                    if (co != null) n.crossOrigin = co; // same CORS mode → browser dedupes with the in-flight load (no 2nd 35KB fetch)
+                    n.href = href;
+                    n.setAttribute('data-mg-reattached', '1');
+                    n.onload = function () { try { this.media = 'all'; } catch (e) {} };
+                    (parent || document.head).appendChild(n);
+                  }
+                }
+              } catch (e) {}
+            }, 5000);
             setTimeout(function () {
               try {
                 if (window.__mgMounted) return;

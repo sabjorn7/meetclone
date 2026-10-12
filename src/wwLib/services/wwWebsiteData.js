@@ -81,13 +81,13 @@ export default {
 // hangs router.isReady indefinitely → the app never mounts (boot_late). Logs `fetch_retry` so we
 // can see whether the retry actually recovers these.
 async function fetchPageData(url) {
-    const opts = {
-        timeout: 8000,
-        // Bypass the HTTP cache so `cacheVersion` always reflects the CURRENTLY deployed data,
-        // even on a fully-stale browser (otherwise a stale bundle re-reads a stale data.json at
-        // the same ?_wwcv version and the mismatch below never fires). Revalidates → mostly 304s.
-        headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
-    };
+    // No no-cache header: the URL already carries ?_wwcv=<cacheVersion>, which changes on every
+    // deploy (CI rewrites cacheVersion), so each deploy is a DISTINCT, immutable URL safe to cache
+    // long-term (nginx: `Cache-Control: public, max-age=31536000, immutable` gated on $arg__wwcv).
+    // A second visit on the same version then serves data.json from the HTTP cache (no request),
+    // and a new deploy = new ?_wwcv = cache miss = fresh fetch. The cacheVersion-mismatch reload
+    // below still catches a bundle/data skew and is itself loop-guarded (ww-cache-reload-version).
+    const opts = { timeout: 8000 };
     try {
         return await axios.get(url, opts);
     } catch (err) {

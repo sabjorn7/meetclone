@@ -6,6 +6,7 @@
 // Never throws, self-throttles (1 per type+message / 10s), resolves supabase + user lazily at log time
 // (so it works for guests on the anon key too). Reads go through admin_list_client_errors (admin-gated);
 // clients can only INSERT.
+import { isNavigationFailure } from 'vue-router';
 import { getSupabase, readStoredSession, authCookieUser } from './headerAccount.js';
 
 const THROTTLE_MS = 10000;
@@ -37,6 +38,19 @@ export function beacon(type, msg) {
         if (m.length > room) m = m.slice(0, room).replace(/%[0-9A-Fa-f]?$/, ''); // drop a dangling half-escape
         new Image().src = base + m;
     } catch (e) { /* logging must never break the app */ }
+}
+
+// First meaningful stack frame → `basename.js:line:col`. send() → sanitize() strips the origin's
+// query/fragment downstream, so no tokens leak. Lets a generic "Error" rejection (e.g. the
+// /course_info rows: message="Error", stack inside vue-router) be grouped/triaged from the list
+// view without opening the full stack.
+function topFrame(stack) {
+    if (!stack) return '';
+    for (const ln of String(stack).split('\n')) {
+        const m = ln.match(/(?:at\s+|@).*?([^/\\ ()]+\.(?:m?js|ts)):(\d+):(\d+)/);
+        if (m) return `${m[1]}:${m[2]}:${m[3]}`;
+    }
+    return '';
 }
 
 function currentUserId() {
@@ -109,6 +123,14 @@ export function initErrorLogger() {
     }, true);
     window.addEventListener('unhandledrejection', (e) => {
         const r = e?.reason;
-        send('unhandled_rejection', (r && (r.message || String(r))) || 'unhandledrejection', r?.stack);
+        // (B) vue-router aborts/redirects reject the navigation promise as expected control flow,
+        // not errors — these were the bulk of the generic "Error" rows on /course_info. Skip them.
+        if (isNavigationFailure(r)) return;
+        // (A) fold the top stack frame into the message (≤120 chars) so generic rejections are
+        // triageable from the list view.
+        const base = (r && (r.message || String(r))) || 'unhandledrejection';
+        const frame = topFrame(r?.stack);
+        const msg = (frame ? `${base} @ ${frame}` : base).slice(0, 120);
+        send('unhandled_rejection', msg, r?.stack);
     });
 }

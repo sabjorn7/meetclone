@@ -369,24 +369,44 @@ function netInfo() {
 // Probe the PeerTube host directly (no-cors, 5s cap). `ok` = host reachable → the stall is inside the
 // embed/iframe; `error`/`timeout` = the video host itself isn't reachable on this connection. This is
 // what separates «host недоступен» from «проблема внутри iframe» in the logged event.
+// Проба к ДРУГОМУ хосту (video.meetgu.ru), обычно по новому соединению. Возвращает {r, ms}.
 async function probeVideoHost() {
+    const t0 = performance.now();
     try {
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), 5000);
         await fetch(`${PEERTUBE}/`, { mode: 'no-cors', cache: 'no-store', signal: ctrl.signal });
         clearTimeout(t);
-        return 'ok';
+        return { r: 'ok', ms: Math.round(performance.now() - t0) };
     } catch (e) {
-        return e && e.name === 'AbortError' ? 'timeout' : 'error';
+        return { r: e && e.name === 'AbortError' ? 'timeout' : 'error', ms: Math.round(performance.now() - t0) };
+    }
+}
+// Зеркало, но к НАШЕМУ origin (/_l → 204): запрос по УЖЕ ОТКРЫТОМУ соединению к app.meetgu.ru.
+async function probeAppHost() {
+    const t0 = performance.now();
+    try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 5000);
+        await fetch('/_l?t=app_probe&m=reused-conn', { cache: 'no-store', signal: ctrl.signal });
+        clearTimeout(t);
+        return { r: 'ok', ms: Math.round(performance.now() - t0) };
+    } catch (e) {
+        return { r: e && e.name === 'AbortError' ? 'timeout' : 'error', ms: Math.round(performance.now() - t0) };
     }
 }
 function armStall() {
     clearTimeout(stallTimer);
     stallTimer = setTimeout(async () => {
         if (videoLoaded.value) return;
-        const probe = await probeVideoHost();
+        const [v, a] = await Promise.all([probeVideoHost(), probeAppHost()]);
         if (videoLoaded.value) return; // loaded during the 5s probe → not a real stall, don't log
-        logClientEvent('video_load_timeout', videoUrl.value, { lesson: currentLesson.value?.id || null, probe, ...netInfo() });
+        logClientEvent('video_load_timeout', videoUrl.value, {
+            lesson: currentLesson.value?.id || null,
+            probe: v.r, probe_ms: v.ms,
+            app_probe: a.r, app_probe_ms: a.ms, app_probe_conn: 'reused-same-origin',
+            ...netInfo(),
+        });
     }, VIDEO_STALL_MS);
 }
 function startVideo() {

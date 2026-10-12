@@ -28,7 +28,7 @@ async function wire(page) {
     const logs = []; const errs = []; const loads = { n: 0 }; const beacons = [];
     page.on('load', () => { loads.n++; }); // one per full main-frame document load (initial + reloads)
     await page.route('**/serviceworker.js', r => r.fulfill({ status: 204, body: '' }));
-    await page.route('**/_l*', r => { try { beacons.push(new URL(r.request().url()).searchParams.get('t')); } catch (e) {} r.fulfill({ status: 204, body: '' }); });
+    await page.route('**/_l*', r => { try { const q = new URL(r.request().url()).searchParams; beacons.push({ t: q.get('t'), m: q.get('m') || '' }); } catch (e) {} r.fulfill({ status: 204, body: '' }); });
     await page.route('**/sb/rest/v1/client_error_log*', async r => {
         try { logs.push(JSON.parse(r.request().postData() || '{}')); } catch (e) { logs.push({ raw: r.request().postData() }); }
         r.fulfill({ status: 201, contentType: 'application/json', body: '[]' });
@@ -98,9 +98,13 @@ async function runOn(name, browserType) {
         if (errAt != null) { await page.click('#mg-load-error button').catch(() => {}); await page.waitForTimeout(2500); }
         // Chromium reaches the screen at ~16s (2×8s, representative of prod HTTP/2). WebKit on the
         // test's HTTP/1.1 preview server serializes same-URL requests → ~24s; behaviour is identical.
-        out.T2 = { errorScreenAt_ms: errAt, dataAttempts: hits, btn: btnText, overlays, mountedAfter: mounted, errStillThere,
-            beacons: [...new Set(beacons)], loadsBefore, loadsAfter: loads.n, errs,
-            pass: errAt != null && errAt >= 14000 && errAt <= 26000 && btnText === 'Обновить' && overlays === 1 && errStillThere && loads.n > loadsBefore };
+        const bootLate = beacons.find(b => b.t === 'boot_late');
+        const bootLateHasLe = !!bootLate && /(^|\s)le=1(\s|$)/.test(bootLate.m);
+        out.T2 = { errorScreenAt_ms: errAt, dataAttempts: hits, btn: btnText, overlays, mounted, errStillThere,
+            beaconTypes: [...new Set(beacons.map(b => b.t))], bootLate_m: bootLate && bootLate.m, bootLateHasLe,
+            loadsBefore, loadsAfter: loads.n, errs,
+            pass: errAt != null && errAt >= 14000 && errAt <= 26000 && btnText === 'Обновить' && overlays === 1
+                && errStillThere && mounted === true && bootLateHasLe && loads.n > loadsBefore };
         await ctx.close();
     }
 

@@ -45,6 +45,7 @@
                       + ' assets=' + total + ' missing=' + missing.slice(0, 10).join('|')
                       + ' ' + sw + ' online=' + navigator.onLine + ' appkids=' + appKids + ' ph=' + ph
                       + ' vs=' + document.visibilityState + (window.__mgWasHidden ? ' wasHidden=1' : '')
+                      + (document.getElementById('mg-load-error') ? ' le=1' : '')
                       + (window.__mgLegacy ? ' legacy=1' : '');
                 new Image().src = '/_l?t=boot_timeout&m=' + encodeURIComponent(m.slice(0, 1500));
                 // На legacy-браузере (nomodule уже показал «браузер устарел») оверлей НЕ показываем.

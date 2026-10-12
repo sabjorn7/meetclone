@@ -10,6 +10,13 @@
         (function () {
           try {
             window.__mgMounted = false; window.__mgBootFired = false;
+            // A backgrounded/hidden tab legitimately defers work (throttled timers, paused loads) —
+            // that's not a white screen. Track whether the tab was EVER hidden before mount so the
+            // beacon can mark it (wasHidden=1) and we don't count it as a stuck boot.
+            window.__mgWasHidden = (document.visibilityState === 'hidden');
+            document.addEventListener('visibilitychange', function () {
+              if (document.visibilityState === 'hidden') window.__mgWasHidden = true;
+            }, { passive: true });
             setTimeout(function () {
               try {
                 if (window.__mgMounted) return;
@@ -37,6 +44,7 @@
                 var m = 'rs=' + document.readyState + ' t=' + Math.round(performance.now())
                       + ' assets=' + total + ' missing=' + missing.slice(0, 10).join('|')
                       + ' ' + sw + ' online=' + navigator.onLine + ' appkids=' + appKids + ' ph=' + ph
+                      + ' vs=' + document.visibilityState + (window.__mgWasHidden ? ' wasHidden=1' : '')
                       + (window.__mgLegacy ? ' legacy=1' : '');
                 new Image().src = '/_l?t=boot_timeout&m=' + encodeURIComponent(m.slice(0, 1500));
                 // На legacy-браузере (nomodule уже показал «браузер устарел») оверлей НЕ показываем.

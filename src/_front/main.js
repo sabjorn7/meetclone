@@ -132,7 +132,7 @@ const init = async function () {
     // Defuse the boot watchdog (template.html): the app mounted, so no white-screen beacon.
     try {
         window.__mgMounted = true;
-        if (window.__mgBootFired) { try { new Image().src = '/_l?t=boot_late&m=' + encodeURIComponent('mountedAt=' + Math.round(performance.now())); } catch (e) {} }
+        if (window.__mgBootFired) { try { new Image().src = '/_l?t=boot_late&m=' + encodeURIComponent('mountedAt=' + Math.round(performance.now()) + ' vs=' + document.visibilityState + (window.__mgWasHidden ? ' wasHidden=1' : '')); } catch (e) {} }
     } catch (e) { /* never throw */ }
 
     initHeaderMenuOutsideClick();

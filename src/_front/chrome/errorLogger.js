@@ -57,6 +57,29 @@ function currentUserId() {
     try { return readStoredSession()?.user?.id || authCookieUser()?.id || null; } catch (e) { return null; }
 }
 
+// Visibility/freeze tracking: fold vs/wasHidden/hiddenMs into EVERY event (and beacon) so a tab
+// freeze (iOS suspend) — which makes overdue timers fire on wake → false timeouts — can be filtered
+// out of sweeps. hiddenMs accumulates TOTAL hidden time since page start.
+let vsWasHidden = (typeof document !== 'undefined' && document.visibilityState === 'hidden');
+let vsHiddenMs = 0;
+let vsHiddenSince = vsWasHidden ? Date.now() : null;
+function visTrackInit() {
+    try {
+        if (typeof document === 'undefined') return;
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') { vsWasHidden = true; vsHiddenSince = Date.now(); }
+            else if (vsHiddenSince != null) { vsHiddenMs += Date.now() - vsHiddenSince; vsHiddenSince = null; }
+        }, { passive: true });
+    } catch (e) { /* ignore */ }
+}
+function visTag() {
+    try {
+        const extra = vsHiddenSince != null ? Date.now() - vsHiddenSince : 0; // span still hidden right now
+        const wh = (vsWasHidden || (typeof window !== 'undefined' && window.__mgWasHidden)) ? 1 : 0;
+        return ` vs=${document.visibilityState} wh=${wh} hm=${Math.round(vsHiddenMs + extra)}`;
+    } catch (e) { return ''; }
+}
+
 async function send(eventType, message, stack) {
     try {
         const key = `${eventType}|${(message || '').slice(0, 120)}`;
@@ -64,7 +87,9 @@ async function send(eventType, message, stack) {
         if (now - (lastSent.get(key) || 0) < THROTTLE_MS) return; // throttle cyclic errors
         lastSent.set(key, now);
         // Sanitize centrally → covers BOTH the beacon and the DB insert (message/stack/url).
-        message = sanitize(message);
+        // Append vs/wasHidden/hiddenMs (timer A) so EVERY event — incl. video_load_timeout,
+        // fetch_retry, auth_preflight_timeout — carries freeze context for sweep filtering.
+        message = sanitize(message) + visTag();
         stack = stack ? sanitize(stack) : stack;
         // Fire the beacon in parallel with the insert — it arrives even when /sb is dead.
         if (BEACON_TYPES.has(eventType)) beacon(eventType, message);
@@ -104,6 +129,7 @@ let installed = false;
 export function initErrorLogger() {
     if (installed || typeof window === 'undefined') return;
     installed = true;
+    visTrackInit();
     // capture=true → also catches RESOURCE load failures (e.g. a lazy chunk 404 = deploy-race recurrence),
     // which do not bubble and carry no .error — detect them via the event target's src/href.
     window.addEventListener('error', (e) => {

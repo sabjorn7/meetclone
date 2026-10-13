@@ -5,6 +5,14 @@ on:
     branches:
       - main
 
+# Serialize deploys: concurrent pushes to main would otherwise run overlapping two-phase deploys with
+# no ordering, which can publish an index/route HTML referencing a chunk a losing/interrupted run never
+# persisted (observed: main-Cb-NFwo3.js served to a client but never 200 on the server). Queue, don't
+# cancel — a half-finished deploy must complete so assets+HTML stay consistent.
+concurrency:
+  group: deploy-app
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest

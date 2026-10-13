@@ -469,6 +469,10 @@ function selectLesson(id) {
 function reloadVideo() {
     videoLoaded.value = false;
     videoReload.value += 1;
+    // A manual reload is NOT the silent auto-retry — clear the markers so a load that follows it
+    // isn't mis-attributed to video_auto_retry_ok.
+    autoRetried = false;
+    autoRetryAtMs = null;
     armStall();
 }
 onBeforeUnmount(() => { if (stallTimer) stallTimer.clear(); if (autoRetryTimer) autoRetryTimer.clear(); });

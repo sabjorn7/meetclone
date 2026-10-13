@@ -63,7 +63,9 @@ window.__t = (function () {
     }, RETRY_MS, { label: 'video_auto_retry' });
   }
   function startVideo() { videoLoaded = false; autoRetried = false; autoRetryAtMs = null; videoReload = 0; videoStartTs = nowMs(); mount(); armStall(); armAutoRetry(); }
-  return { startVideo, state: () => ({ videoLoaded, videoReload, autoRetried, stallFired, telemetry: telemetry.slice() }) };
+  // manual «Обновить» — clears the auto-retry markers so a following load isn't logged as _ok
+  function reloadVideo() { videoLoaded = false; videoReload += 1; autoRetried = false; autoRetryAtMs = null; mount(); armStall(); }
+  return { startVideo, reloadVideo, state: () => ({ videoLoaded, videoReload, autoRetried, stallFired, telemetry: telemetry.slice() }) };
 })();
 </script></body></html>`;
 
@@ -130,8 +132,30 @@ async function runOn(name, bt) {
         await ctx.close();
     }
 
+    // CASE 3: auto-retry fires (both auto attempts hang), then a MANUAL reload loads → NO _ok
+    // (manual «Обновить» must not be attributed to the silent auto-retry).
+    {
+        const ctx = await browser.newContext(); const page = await ctx.newPage();
+        await page.route('**/video-embed**', (route) => {
+            const v = Number(new URL(route.request().url()).searchParams.get('v') || '0');
+            if (v <= 1) return; // v=0 (first) and v=1 (auto-retry) hang; v=2 (manual reload) succeeds
+            route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body>embed ok</body></html>' });
+        });
+        await serveHarness(page);
+        await page.goto('http://localhost/harness').catch(() => {});
+        await page.evaluate(() => window.__t.startVideo());
+        await wait(page, 900);                               // auto-retry has fired (v=1, hangs)
+        await page.evaluate(() => window.__t.reloadVideo()); // user clicks «Обновить» → v=2 loads
+        await wait(page, 1000);                              // past STALL_MS from start; manual load done
+        out.case3 = await page.evaluate(() => window.__t.state());
+        const t = out.case3.telemetry;
+        out.case3.pass = out.case3.videoLoaded === true && out.case3.videoReload === 2
+            && t.includes('video_auto_retry') && !t.includes('video_auto_retry_ok');
+        await ctx.close();
+    }
+
     await browser.close();
-    out.pass = out.case0.pass && out.case1.pass && out.case2.pass;
+    out.pass = out.case0.pass && out.case1.pass && out.case2.pass && out.case3.pass;
     return out;
 }
 
@@ -140,5 +164,5 @@ results.push(await runOn('chromium', chromium));
 results.push(await runOn('webkit', webkit));
 console.log(JSON.stringify(results, null, 2));
 let bad = 0;
-for (const r of results) { if (!r.pass) bad++; console.log(`${r.browser}: ${r.pass ? 'PASS' : 'FAIL'} (case0=${r.case0.pass} case1=${r.case1.pass} case2=${r.case2.pass})`); }
+for (const r of results) { if (!r.pass) bad++; console.log(`${r.browser}: ${r.pass ? 'PASS' : 'FAIL'} (case0=${r.case0.pass} case1=${r.case1.pass} case2=${r.case2.pass} case3=${r.case3.pass})`); }
 process.exit(bad === 0 ? 0 : 1);

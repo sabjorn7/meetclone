@@ -61,7 +61,7 @@ async function apBuild(p, k, sk) {
     // ВАЖНО: сохраняем handle и гасим его ПОСЛЕ гонки — иначе при победе apRefresh таймер доживает
     // и может позже перезапуститься/отправить лишний timer_rearmed (лимит 3 общий на страницу).
     let apTimer = null;
-    const race = await Promise.race([P, new Promise(r => { apTimer = guardedTimeout(() => r('TIMEOUT'), AP_BLOCK_MS, { label: 'auth_preflight_timeout', onRearm: (i) => apLog('timer_rearmed', i) }); })]);
+    const race = await Promise.race([P, new Promise(r => { apTimer = guardedTimeout(() => r('TIMEOUT'), AP_BLOCK_MS, { label: 'auth_preflight_timeout', onRearm: (i) => logClientEvent('timer_rearmed', `${i.label} rearm`, i) }); })]);
     if (apTimer) apTimer.clear();
     if (race !== 'TIMEOUT') {
         if (race.code === 200 && apApply(sk, race.body)) return createClient(p, k, { auth: { storageKey: sk } });

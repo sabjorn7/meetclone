@@ -58,7 +58,11 @@ async function apBuild(p, k, sk) {
     const sentRT = apReadRT(sk), t0 = Date.now(); const P = apRefresh(p, k, sentRT);
     // guardedTimeout: если вкладку заморозили (iOS suspend) в течение блокирующего окна, перезапускаем
     // окно один раз вместо ложного TIMEOUT на пробуждении (ждём настоящий ответ apRefresh).
-    const race = await Promise.race([P, new Promise(r => guardedTimeout(() => r('TIMEOUT'), AP_BLOCK_MS, { label: 'auth_preflight_timeout', onRearm: (i) => apLog('timer_rearmed', i) }))]);
+    // ВАЖНО: сохраняем handle и гасим его ПОСЛЕ гонки — иначе при победе apRefresh таймер доживает
+    // и может позже перезапуститься/отправить лишний timer_rearmed (лимит 3 общий на страницу).
+    let apTimer = null;
+    const race = await Promise.race([P, new Promise(r => { apTimer = guardedTimeout(() => r('TIMEOUT'), AP_BLOCK_MS, { label: 'auth_preflight_timeout', onRearm: (i) => apLog('timer_rearmed', i) }); })]);
+    if (apTimer) apTimer.clear();
     if (race !== 'TIMEOUT') {
         if (race.code === 200 && apApply(sk, race.body)) return createClient(p, k, { auth: { storageKey: sk } });
         if (race.code === 400) { if (apReadRT(sk) === sentRT) apClear(sk); return createClient(p, k, { auth: { storageKey: sk } }); }

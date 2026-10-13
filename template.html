@@ -23,6 +23,7 @@
               else if (__mgHiddenSince != null) { window.__mgHiddenMs += Date.now() - __mgHiddenSince; __mgHiddenSince = null; }
             }, { passive: true });
             function __mgHid() { return window.__mgHiddenMs + (__mgHiddenSince != null ? Date.now() - __mgHiddenSince : 0); }
+            window.__mgHid = __mgHid; // SINGLE SOURCE of hidden-time — freezeGuard.getHiddenMs() reads this
             // Render-unblock: a <link rel="stylesheet"> in <head> blocks the FIRST PAINT until it
             // loads or fails. On a throttled mobile link the main CSS can hang → the whole page
             // (incl. the #mg-boot-loading placeholder AND the #mg-boot-msg overlay) stays UNPAINTED

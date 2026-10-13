@@ -18,8 +18,14 @@ let hiddenMs = 0, hiddenSince = null, wasHidden = false;
     } catch (e) { /* ignore */ }
 })();
 
-// Total hidden time since page start (includes the span currently hidden).
-export function getHiddenMs() { return hiddenMs + (hiddenSince != null ? Date.now() - hiddenSince : 0); }
+// Total hidden time since page start (includes the span currently hidden). SINGLE SOURCE: the inline
+// template.html watchdog starts tracking hidden time BEFORE this module loads and exposes window.__mgHid;
+// prefer it so hm covers the pre-module-load hidden span too. Fall back to our own counter (tests /
+// no inline watchdog).
+export function getHiddenMs() {
+    try { if (typeof window !== 'undefined' && typeof window.__mgHid === 'function') return window.__mgHid(); } catch (e) { /* fall through */ }
+    return hiddenMs + (hiddenSince != null ? Date.now() - hiddenSince : 0);
+}
 export function getWasHidden() { return wasHidden || (typeof window !== 'undefined' && !!window.__mgWasHidden); }
 
 // A window counts as "frozen" if the timer fired >=2s late by EITHER clock (perf or wall) OR the tab

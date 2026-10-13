@@ -362,6 +362,13 @@ async function load() {
 // the nginx access log (client_error_log itself has no IP).
 const VIDEO_STALL_MS = 15000;
 let stallTimer = null;
+// Silent one-shot auto-retry: if the embed iframe hasn't fired @load within AUTO_RETRY_MS, re-mount it
+// once (new :key → fresh connection attempt) WITHOUT resetting the 15s stall clock — so the original
+// video_load_timeout / spinner behaviour still fires at 15s if the retry also fails. No UI, no telemetry
+// type yet (video_auto_retry is NOT in the client_error_log whitelist — see report for the proposal).
+const AUTO_RETRY_MS = 7000;
+let autoRetryTimer = null;
+let autoRetried = false;
 // Network info from the Network Information API (not on Safari/iOS — then it's just absent).
 function netInfo() {
     const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -412,18 +419,34 @@ function armStall() {
         });
     }, VIDEO_STALL_MS, { label: 'video_load_timeout', onRearm: (i) => logClientEvent('timer_rearmed', `${i.label} rearm`, i) });
 }
+// One silent auto-retry at AUTO_RETRY_MS: re-mount the iframe once if it hasn't loaded, leaving the
+// 15s stall timer untouched (so prior behaviour still triggers at 15s). guardedTimeout → freeze-safe.
+function armAutoRetry() {
+    if (autoRetryTimer) autoRetryTimer.clear();
+    autoRetryTimer = guardedTimeout(() => {
+        if (videoLoaded.value || autoRetried) return;
+        autoRetried = true;
+        videoLoaded.value = false;
+        videoReload.value += 1; // bump :key → fresh iframe load attempt (no armStall → 15s clock intact)
+    }, AUTO_RETRY_MS, { label: 'video_auto_retry', onRearm: (i) => logClientEvent('timer_rearmed', `${i.label} rearm`, i) });
+}
 function startVideo() {
     videoStarted.value = true;
     videoLoaded.value = false;
+    autoRetried = false;
     armStall();
+    armAutoRetry();
 }
 function onVideoLoaded() {
     videoLoaded.value = true;
     if (stallTimer) stallTimer.clear();
+    if (autoRetryTimer) autoRetryTimer.clear();
 }
 
 function selectLesson(id) {
     if (stallTimer) stallTimer.clear();
+    if (autoRetryTimer) autoRetryTimer.clear();
+    autoRetried = false;
     currentLessonId.value = id;
     videoStarted.value = false;
     videoLoaded.value = false;
@@ -436,7 +459,7 @@ function reloadVideo() {
     videoReload.value += 1;
     armStall();
 }
-onBeforeUnmount(() => { if (stallTimer) stallTimer.clear(); });
+onBeforeUnmount(() => { if (stallTimer) stallTimer.clear(); if (autoRetryTimer) autoRetryTimer.clear(); });
 async function loadPoster(uuid) {
     if (!uuid) return;
     try {
@@ -448,7 +471,19 @@ async function loadPoster(uuid) {
     } catch (e) { /* no poster */ }
 }
 
-onMounted(() => { ensureFonts(); load(); });
+// Warm the TLS/TCP connection to the video host early (before the user clicks play) so the embed's
+// first request doesn't pay DNS+TCP+TLS cold — the main cost when a mobile network stalls new
+// connections. Idempotent; crossorigin because the embed is a cross-origin document.
+function preconnectVideo() {
+    try {
+        if (typeof document === 'undefined' || document.querySelector('link[data-mg-preconnect-video]')) return;
+        const l = document.createElement('link');
+        l.rel = 'preconnect'; l.href = PEERTUBE; l.crossOrigin = 'anonymous';
+        l.setAttribute('data-mg-preconnect-video', '1');
+        document.head.appendChild(l);
+    } catch (e) { /* preconnect is best-effort */ }
+}
+onMounted(() => { ensureFonts(); preconnectVideo(); load(); });
 
 function ensureFonts() {
     if (document.getElementById('pd-fonts')) return;

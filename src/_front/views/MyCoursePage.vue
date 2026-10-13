@@ -168,6 +168,7 @@ import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/
 import { ownsCourse } from '@/_front/course/coursesApi.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
 import { logClientEvent } from '@/_front/chrome/errorLogger.js';
+import { guardedTimeout } from '@/_front/chrome/freezeGuard.js';
 import CourseCertificate from '@/_front/course/CourseCertificate.vue';
 import { certNumber, certDate, downloadCertificatePdf, certFilename } from '@/_front/course/certificate.js';
 
@@ -396,8 +397,10 @@ async function probeAppHost() {
     }
 }
 function armStall() {
-    clearTimeout(stallTimer);
-    stallTimer = setTimeout(async () => {
+    if (stallTimer) stallTimer.clear();
+    // guardedTimeout: if the tab was frozen (iOS suspend) during the 15s window, re-arm once instead
+    // of firing a false video_load_timeout on wake.
+    stallTimer = guardedTimeout(async () => {
         if (videoLoaded.value) return;
         const [v, a] = await Promise.all([probeVideoHost(), probeAppHost()]);
         if (videoLoaded.value) return; // loaded during the 5s probe → not a real stall, don't log
@@ -407,7 +410,7 @@ function armStall() {
             app_probe: a.r, app_probe_ms: a.ms, app_probe_conn: 'reused-same-origin',
             ...netInfo(),
         });
-    }, VIDEO_STALL_MS);
+    }, VIDEO_STALL_MS, { label: 'video_load_timeout', onRearm: (i) => logClientEvent('timer_rearmed', `${i.label} rearm`, i) });
 }
 function startVideo() {
     videoStarted.value = true;
@@ -416,11 +419,11 @@ function startVideo() {
 }
 function onVideoLoaded() {
     videoLoaded.value = true;
-    clearTimeout(stallTimer);
+    if (stallTimer) stallTimer.clear();
 }
 
 function selectLesson(id) {
-    clearTimeout(stallTimer);
+    if (stallTimer) stallTimer.clear();
     currentLessonId.value = id;
     videoStarted.value = false;
     videoLoaded.value = false;
@@ -433,7 +436,7 @@ function reloadVideo() {
     videoReload.value += 1;
     armStall();
 }
-onBeforeUnmount(() => clearTimeout(stallTimer));
+onBeforeUnmount(() => { if (stallTimer) stallTimer.clear(); });
 async function loadPoster(uuid) {
     if (!uuid) return;
     try {

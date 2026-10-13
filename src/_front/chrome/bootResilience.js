@@ -5,19 +5,25 @@
 // See report-investigation-dataflow.txt (items 5/8) for the why (data.json that never reached the
 // server → fetchData hung with no timeout → router.isReady blocked → boot_late).
 import { logClientEvent } from './errorLogger.js';
+import { guardedTimeout } from './freezeGuard.js';
+
+// Report a timer re-arm (tab was frozen → window restarted once). Capped at 3/page by freezeGuard.
+export function reportRearm(info) { try { logClientEvent('timer_rearmed', `${info.label} rearm`, info); } catch (e) { /* telemetry must not break boot */ } }
 
 // Reject if `promise` doesn't settle within `ms`. The underlying work is NOT cancelled (fetch/
-// import keep running); we just stop awaiting it so the boot path can proceed/retry.
+// import keep running); we just stop awaiting it so the boot path can proceed/retry. Uses
+// guardedTimeout: if the tab was frozen (iOS suspend) the window re-arms once instead of a false
+// timeout.
 export function withTimeout(promise, ms, label) {
-    let t;
+    let handle;
     const timeout = new Promise((_, reject) => {
-        t = setTimeout(() => {
+        handle = guardedTimeout(() => {
             const e = new Error(`timeout:${label || ''}:${ms}ms`);
             e.isTimeout = true;
             reject(e);
-        }, ms);
+        }, ms, { label: label || 'timeout', onRearm: reportRearm });
     });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+    return Promise.race([promise, timeout]).finally(() => { if (handle) handle.clear(); });
 }
 
 function reasonOf(err) {

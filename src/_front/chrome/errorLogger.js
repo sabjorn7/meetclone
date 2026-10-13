@@ -8,6 +8,7 @@
 // clients can only INSERT.
 import { isNavigationFailure } from 'vue-router';
 import { getSupabase, readStoredSession, authCookieUser } from './headerAccount.js';
+import { guardedTimeout, getHiddenMs, getWasHidden } from './freezeGuard.js';
 
 const THROTTLE_MS = 10000;
 const lastSent = new Map(); // "type|msgPrefix" -> ts
@@ -59,24 +60,11 @@ function currentUserId() {
 
 // Visibility/freeze tracking: fold vs/wasHidden/hiddenMs into EVERY event (and beacon) so a tab
 // freeze (iOS suspend) — which makes overdue timers fire on wake → false timeouts — can be filtered
-// out of sweeps. hiddenMs accumulates TOTAL hidden time since page start.
-let vsWasHidden = (typeof document !== 'undefined' && document.visibilityState === 'hidden');
-let vsHiddenMs = 0;
-let vsHiddenSince = vsWasHidden ? Date.now() : null;
-function visTrackInit() {
-    try {
-        if (typeof document === 'undefined') return;
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') { vsWasHidden = true; vsHiddenSince = Date.now(); }
-            else if (vsHiddenSince != null) { vsHiddenMs += Date.now() - vsHiddenSince; vsHiddenSince = null; }
-        }, { passive: true });
-    } catch (e) { /* ignore */ }
-}
+// out of sweeps. The tracker lives in freezeGuard (single source, shared with bootResilience's
+// guardedTimeout); hiddenMs = TOTAL hidden time since page start.
 function visTag() {
     try {
-        const extra = vsHiddenSince != null ? Date.now() - vsHiddenSince : 0; // span still hidden right now
-        const wh = (vsWasHidden || (typeof window !== 'undefined' && window.__mgWasHidden)) ? 1 : 0;
-        return ` vs=${document.visibilityState} wh=${wh} hm=${Math.round(vsHiddenMs + extra)}`;
+        return ` vs=${document.visibilityState} wh=${getWasHidden() ? 1 : 0} hm=${Math.round(getHiddenMs())}`;
     } catch (e) { return ''; }
 }
 
@@ -121,15 +109,19 @@ export function logException(eventType, err, extra) {
 // Spinner watchdog: logs `loading_timeout` if not cancelled within `ms`. Does NOT abort the request —
 // just records that a key query was still pending. Returns a cancel fn to call once the request returns.
 export function loadTimeout(label, ms = 15000) {
-    const t = setTimeout(() => logClientEvent('loading_timeout', `Долгая загрузка: ${label}`), ms);
-    return () => clearTimeout(t);
+    const h = guardedTimeout(
+        () => logClientEvent('loading_timeout', `Долгая загрузка: ${label}`),
+        ms,
+        { label: 'loading_timeout', onRearm: (i) => logClientEvent('timer_rearmed', `${i.label} rearm`, i) },
+    );
+    return () => h.clear();
 }
 
 let installed = false;
 export function initErrorLogger() {
     if (installed || typeof window === 'undefined') return;
     installed = true;
-    visTrackInit();
+    // (freezeGuard self-inits the hidden-time tracker on import — nothing to wire here.)
     // capture=true → also catches RESOURCE load failures (e.g. a lazy chunk 404 = deploy-race recurrence),
     // which do not bubble and carry no .error — detect them via the event target's src/href.
     window.addEventListener('error', (e) => {

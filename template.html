@@ -14,9 +14,15 @@
             // that's not a white screen. Track whether the tab was EVER hidden before mount so the
             // beacon can mark it (wasHidden=1) and we don't count it as a stuck boot.
             window.__mgWasHidden = (document.visibilityState === 'hidden');
+            // Accumulate TOTAL hidden time so the watchdog can tell an iOS-suspend freeze (overdue
+            // timer fires on wake) from a genuinely stuck boot — same model as freezeGuard in the bundle.
+            window.__mgHiddenMs = 0;
+            var __mgHiddenSince = window.__mgWasHidden ? Date.now() : null;
             document.addEventListener('visibilitychange', function () {
-              if (document.visibilityState === 'hidden') window.__mgWasHidden = true;
+              if (document.visibilityState === 'hidden') { window.__mgWasHidden = true; __mgHiddenSince = Date.now(); }
+              else if (__mgHiddenSince != null) { window.__mgHiddenMs += Date.now() - __mgHiddenSince; __mgHiddenSince = null; }
             }, { passive: true });
+            function __mgHid() { return window.__mgHiddenMs + (__mgHiddenSince != null ? Date.now() - __mgHiddenSince : 0); }
             // Render-unblock: a <link rel="stylesheet"> in <head> blocks the FIRST PAINT until it
             // loads or fails. On a throttled mobile link the main CSS can hang → the whole page
             // (incl. the #mg-boot-loading placeholder AND the #mg-boot-msg overlay) stays UNPAINTED
@@ -46,9 +52,23 @@
                 }
               } catch (e) {}
             }, 5000);
-            setTimeout(function () {
+            var __mgBootRearmed = false;
+            function __mgArmBoot() {
+              var dueWall = Date.now() + 15000;
+              var duePerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() + 15000 : null;
+              var hidAtStart = __mgHid();
+              setTimeout(function () {
               try {
                 if (window.__mgMounted) return;
+                // Lateness check: if this fired >=2s late by EITHER clock, or the tab was hidden >=1s
+                // during the window, the tab was frozen (iOS suspend) — re-arm ONE fresh window instead
+                // of a false boot_timeout. Only once per load.
+                var lateWall = Date.now() - dueWall;
+                var latePerf = duePerf != null ? performance.now() - duePerf : 0;
+                var dHidden = __mgHid() - hidAtStart;
+                if (!__mgBootRearmed && (lateWall >= 2000 || latePerf >= 2000 || dHidden >= 1000)) {
+                  __mgBootRearmed = true; __mgArmBoot(); return;
+                }
                 window.__mgBootFired = true;
                 var res = (performance.getEntriesByType && performance.getEntriesByType('resource')) || [];
                 var byName = {}; res.forEach(function (r) { byName[r.name] = r; });
@@ -74,6 +94,7 @@
                       + ' assets=' + total + ' missing=' + missing.slice(0, 10).join('|')
                       + ' ' + sw + ' online=' + navigator.onLine + ' appkids=' + appKids + ' ph=' + ph
                       + ' vs=' + document.visibilityState + (window.__mgWasHidden ? ' wasHidden=1' : '')
+                      + ' hm=' + Math.round(__mgHid()) + (__mgBootRearmed ? ' rearmed=1' : '')
                       + (document.getElementById('mg-load-error') ? ' le=1' : '')
                       + (window.__mgLegacy ? ' legacy=1' : '');
                 new Image().src = '/_l?t=boot_timeout&m=' + encodeURIComponent(m.slice(0, 1500));
@@ -94,7 +115,9 @@
                   }, 500);
                 }
               } catch (e) {}
-            }, 15000);
+              }, 15000);
+            }
+            __mgArmBoot();
           } catch (e) {}
         })();
         </script>

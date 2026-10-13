@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { getCurrentSupabaseSettings, resolveRuntimeProjectUrl } from './helpers/environmentConfig';
 import { logClientEvent } from '@/_front/chrome/errorLogger.js';
+import { guardedTimeout } from '@/_front/chrome/freezeGuard.js';
 
 // (a') v5 — неблокирующий pre-flight (локальная проверка; см. candA2-wwPlugin.diff.txt)
 const AP_REUSE_MS = 10000, AP_BLOCK_MS = 3000, AP_MARGIN_MS = 3000;
@@ -55,7 +56,9 @@ async function buildSupabaseClient(p, k, sk) {
 async function apBuild(p, k, sk) {
     if (!apNeeds(sk)) return createClient(p, k, { auth: { storageKey: sk } });
     const sentRT = apReadRT(sk), t0 = Date.now(); const P = apRefresh(p, k, sentRT);
-    const race = await Promise.race([P, new Promise(r => setTimeout(() => r('TIMEOUT'), AP_BLOCK_MS))]);
+    // guardedTimeout: если вкладку заморозили (iOS suspend) в течение блокирующего окна, перезапускаем
+    // окно один раз вместо ложного TIMEOUT на пробуждении (ждём настоящий ответ apRefresh).
+    const race = await Promise.race([P, new Promise(r => guardedTimeout(() => r('TIMEOUT'), AP_BLOCK_MS, { label: 'auth_preflight_timeout', onRearm: (i) => apLog('timer_rearmed', i) }))]);
     if (race !== 'TIMEOUT') {
         if (race.code === 200 && apApply(sk, race.body)) return createClient(p, k, { auth: { storageKey: sk } });
         if (race.code === 400) { if (apReadRT(sk) === sentRT) apClear(sk); return createClient(p, k, { auth: { storageKey: sk } }); }

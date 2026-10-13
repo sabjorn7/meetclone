@@ -369,6 +369,9 @@ let stallTimer = null;
 const AUTO_RETRY_MS = 7000;
 let autoRetryTimer = null;
 let autoRetried = false;
+let videoStartTs = 0;       // performance.now() at play — to measure ms-to-retry
+let autoRetryAtMs = null;   // ms from play to the auto-retry fire (carried into both telemetry events)
+const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 // Network info from the Network Information API (not on Safari/iOS — then it's just absent).
 function netInfo() {
     const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -426,6 +429,8 @@ function armAutoRetry() {
     autoRetryTimer = guardedTimeout(() => {
         if (videoLoaded.value || autoRetried) return;
         autoRetried = true;
+        autoRetryAtMs = Math.round(nowMs() - videoStartTs);
+        logClientEvent('video_auto_retry', videoUrl.value, { lesson: currentLesson.value?.id || null, embed: currentLesson.value?.video_id || null, ms: autoRetryAtMs });
         videoLoaded.value = false;
         videoReload.value += 1; // bump :key → fresh iframe load attempt (no armStall → 15s clock intact)
     }, AUTO_RETRY_MS, { label: 'video_auto_retry', onRearm: (i) => logClientEvent('timer_rearmed', `${i.label} rearm`, i) });
@@ -434,6 +439,8 @@ function startVideo() {
     videoStarted.value = true;
     videoLoaded.value = false;
     autoRetried = false;
+    autoRetryAtMs = null;
+    videoStartTs = nowMs();
     armStall();
     armAutoRetry();
 }
@@ -441,6 +448,11 @@ function onVideoLoaded() {
     videoLoaded.value = true;
     if (stallTimer) stallTimer.clear();
     if (autoRetryTimer) autoRetryTimer.clear();
+    // if the embed loaded only AFTER the one silent auto-retry, record that the retry rescued it
+    if (autoRetried && autoRetryAtMs != null) {
+        logClientEvent('video_auto_retry_ok', videoUrl.value, { lesson: currentLesson.value?.id || null, embed: currentLesson.value?.video_id || null, ms: autoRetryAtMs });
+        autoRetryAtMs = null; // once
+    }
 }
 
 function selectLesson(id) {
@@ -477,10 +489,17 @@ async function loadPoster(uuid) {
 function preconnectVideo() {
     try {
         if (typeof document === 'undefined' || document.querySelector('link[data-mg-preconnect-video]')) return;
-        const l = document.createElement('link');
-        l.rel = 'preconnect'; l.href = PEERTUBE; l.crossOrigin = 'anonymous';
-        l.setAttribute('data-mg-preconnect-video', '1');
-        document.head.appendChild(l);
+        // NO crossorigin: the embed loads via an iframe NAVIGATION, not a CORS fetch — a crossorigin
+        // preconnect warms a SEPARATE (CORS) connection pool the navigation won't reuse. Plain
+        // preconnect (TCP+TLS) + dns-prefetch (DNS only, for clients that ignore preconnect).
+        const pc = document.createElement('link');
+        pc.rel = 'preconnect'; pc.href = PEERTUBE;
+        pc.setAttribute('data-mg-preconnect-video', '1');
+        const dp = document.createElement('link');
+        dp.rel = 'dns-prefetch'; dp.href = PEERTUBE;
+        dp.setAttribute('data-mg-preconnect-video', '1');
+        document.head.appendChild(pc);
+        document.head.appendChild(dp);
     } catch (e) { /* preconnect is best-effort */ }
 }
 onMounted(() => { ensureFonts(); preconnectVideo(); load(); });

@@ -38,9 +38,10 @@
                         <span class="pd-course__cat">{{ recent.course.Category || 'Курс' }}</span>
                         <h2 class="pd-recent__title">{{ recent.course.Title }}</h2>
                         <div class="pd-recent__foot">
-                            <span class="pd-access" :class="recent.expired ? 'is-expired' : 'is-active'">{{ accessText(recent) }}</span>
-                            <a v-if="recent.expired" class="pd-btn pd-btn--sm" :href="courseHref(recent.course)">Продлить</a>
-                            <a v-else class="pd-btn pd-btn--sm" :href="watchHref(recent)">Продолжить</a>
+                            <span v-if="recent.owned" class="pd-access" :class="recent.expired ? 'is-expired' : 'is-active'">{{ accessText(recent) }}</span>
+                            <a v-if="recent.owned && recent.expired" class="pd-btn pd-btn--sm" :href="courseHref(recent.course)">Продлить</a>
+                            <a v-else-if="recent.owned" class="pd-btn pd-btn--sm" :href="watchHref(recent)">Продолжить</a>
+                            <a v-else class="pd-btn pd-btn--sm" :href="courseHref(recent.course)">Открыть курс</a>
                         </div>
                     </aside>
 
@@ -256,8 +257,13 @@ async function load() {
 
     // "Вы смотрели недавно": the last opened course, carrying its access state if the user owns it
     if (user.last_open && byId[user.last_open]) {
-        recent.value = list.find((x) => x.course.id === user.last_open)
-            || { course: byId[user.last_open], end_period: null, created_at: null, expired: false };
+        // owned → the user's enrollment row (real access state); not owned (last_open from browsing a
+        // course page they haven't bought) → a minimal entry flagged owned:false so the block links to
+        // the course landing instead of the owner-only /my_courses viewer.
+        const ownedRecent = list.find((x) => x.course.id === user.last_open);
+        recent.value = ownedRecent
+            ? { ...ownedRecent, owned: true }
+            : { course: byId[user.last_open], end_period: null, created_at: null, expired: false, owned: false };
     }
 
     // Primary personal data (name + «Ваши курсы») is ready — clear the spinner NOW, BEFORE the

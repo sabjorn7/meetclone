@@ -411,6 +411,13 @@ async function load() {
             // for any paid course, note if it's already in the cart (a fresh buy OR an owner's renewal)
             if (!course.value.Free) inCart.value = await courseInCart(sb, course.value.id, buyerId.value);
         }
+        // Record the last opened course for the homepage «Вы смотрели недавно» block. Logged-in only,
+        // published only, once per page open (load runs on mount), fire-and-forget — never blocks the UI.
+        // (The draft/hidden filter on the homepage read side stays the source of truth for display.)
+        if (buyerId.value && course.value.ModStatus === 'Опубликовано') {
+            Promise.resolve(sb.from('users').update({ last_open: course.value.id }).eq('id', buyerId.value))
+                .then(null, (e) => { try { console.warn('[home] last_open update failed', e); } catch (_) { /* noop */ } });
+        }
     }
     loading.value = false;
     await nextTick();

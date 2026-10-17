@@ -41,7 +41,7 @@
                             <template v-if="!me">
                                 <div class="pd-buycard__price"><span class="pd-buycard__now">{{ money(event.price) }} ₽</span></div>
                                 <a class="pd-btn pd-btn--lg pd-btn--block" href="/login">Войти, чтобы записаться</a>
-                                <button type="button" class="pd-btn pd-btn--lg pd-btn--block pd-btn--ghost" @click="goToContact">Записаться без входа</button>
+                                <button type="button" class="pd-btn pd-btn--lg pd-btn--block pd-btn--ghost ed-btn-or" @click="goToContact">Записаться без входа</button>
                             </template>
                             <!-- registered (paid) -->
                             <template v-else-if="reg && reg.status === 'paid'">
@@ -186,8 +186,8 @@
                         <input v-model="contactHp" name="hp_ref" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" class="ed-hp" />
                         <label class="ed-contact__consent">
                             <input type="checkbox" v-model="contactConsent" />
-                            <span>Согласен(на) на обработку персональных данных
-                                (<a href="/politica" target="_blank" rel="noopener">политика</a>)</span>
+                            <span>Я подтверждаю, что персональные данные обрабатываются в соответствии с
+                                <a href="/politica" target="_blank" rel="noopener">Политикой обработки персональных данных</a>.</span>
                         </label>
                         <button type="submit" class="pd-btn pd-btn--lg" :disabled="contactSending || !contactConsent">
                             {{ contactSending ? 'Отправка…' : 'Оставить заявку' }}
@@ -453,6 +453,7 @@ onMounted(async () => {
 .pd-btn:hover { background: #2360c6; }
 .pd-btn--ghost { background: transparent; color: #2e70dd; border: 1.5px solid #2e70dd; }
 .pd-btn--ghost:hover { background: rgba(46, 112, 221, 0.08); }
+.ed-btn-or { margin-top: 10px; }
 .pd-btn:disabled { opacity: 0.55; cursor: default; }
 .pd-btn--lg { padding: 16px 28px; font-size: 1.05rem; }
 .pd-btn--block { width: 100%; }

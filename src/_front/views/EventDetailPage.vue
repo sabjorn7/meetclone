@@ -41,6 +41,7 @@
                             <template v-if="!me">
                                 <div class="pd-buycard__price"><span class="pd-buycard__now">{{ money(event.price) }} ₽</span></div>
                                 <a class="pd-btn pd-btn--lg pd-btn--block" href="/login">Войти, чтобы записаться</a>
+                                <button type="button" class="pd-btn pd-btn--lg pd-btn--block pd-btn--ghost" @click="goToContact">Записаться без входа</button>
                             </template>
                             <!-- registered (paid) -->
                             <template v-else-if="reg && reg.status === 'paid'">
@@ -168,17 +169,27 @@
                 </div>
             </section>
 
-            <!-- Contact form (call-back lead) -->
-            <section class="pd-section pd-section--tint">
+            <!-- Contact form (call-back lead; works without login) -->
+            <section ref="contactSectionEl" class="pd-section pd-section--tint">
                 <div class="pd-wrap ed-contact">
-                    <h2 class="pd-h2">Остались вопросы?</h2>
-                    <p class="ed-contact__sub">Оставьте телефон — перезвоним и всё расскажем.</p>
+                    <h2 class="pd-h2">{{ me ? 'Остались вопросы?' : 'Записаться без входа' }}</h2>
+                    <p class="ed-contact__sub">
+                        {{ me ? 'Оставьте телефон — перезвоним и всё расскажем.' : 'Оставьте имя и телефон — мы свяжемся и всё расскажем.' }}
+                    </p>
                     <template v-if="contactSent">
                         <div class="ed-contact__ok">✓ Спасибо! Мы свяжемся с вами.</div>
                     </template>
-                    <form v-else class="ed-contact__form" @submit.prevent="sendContact">
+                    <form v-else class="ed-contact__form" @submit.prevent="sendContact" novalidate>
+                        <input v-model="contactName" ref="nameInputEl" type="text" maxlength="80" class="ed-contact__input" placeholder="Ваше имя" autocomplete="name" />
                         <input v-model="contactPhone" type="tel" class="ed-contact__input" placeholder="+7 900 000-00-00" autocomplete="tel" />
-                        <button type="submit" class="pd-btn pd-btn--lg" :disabled="contactSending">
+                        <!-- honeypot: off-screen, not for humans -->
+                        <input v-model="contactHp" name="hp_ref" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" class="ed-hp" />
+                        <label class="ed-contact__consent">
+                            <input type="checkbox" v-model="contactConsent" />
+                            <span>Согласен(на) на обработку персональных данных
+                                (<a href="/politica" target="_blank" rel="noopener">политика</a>)</span>
+                        </label>
+                        <button type="submit" class="pd-btn pd-btn--lg" :disabled="contactSending || !contactConsent">
                             {{ contactSending ? 'Отправка…' : 'Оставить заявку' }}
                         </button>
                     </form>
@@ -227,20 +238,43 @@ const agreed = ref(false); // обязательное согласие с оф�
 const eventPromo = ref('');
 const busy = ref(false);
 const payError = ref('');
+const contactName = ref('');
 const contactPhone = ref('');
+const contactHp = ref('');
+const contactConsent = ref(false);
 const contactSending = ref(false);
 const contactSent = ref(false);
 const contactError = ref('');
+const contactSectionEl = ref(null);
+const nameInputEl = ref(null);
+
+// map RPC error codes -> friendly messages (phone is never logged)
+const CONTACT_ERR = {
+    consent_required: 'Поставьте галочку согласия.',
+    bad_name: 'Введите имя (2–80 символов).',
+    bad_phone: 'Введите корректный номер телефона.',
+    event_required: 'Мероприятие недоступно.',
+    event_not_found: 'Мероприятие недоступно.',
+    too_many: 'Слишком много заявок, попробуйте позже.',
+};
+
+function goToContact() {
+    contactSectionEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => nameInputEl.value?.focus(), 350);
+}
 
 async function sendContact() {
     if (contactSending.value) return;
     contactSending.value = true; contactError.value = '';
     try {
-        await submitContactRequest(sb(), { event: event.value?.id, phone: contactPhone.value });
+        await submitContactRequest(sb(), {
+            event: event.value?.id, name: contactName.value,
+            phone: contactPhone.value, consent: contactConsent.value, hp: contactHp.value,
+        });
         contactSent.value = true;
-        contactPhone.value = '';
+        contactName.value = ''; contactPhone.value = '';
     } catch (e) {
-        contactError.value = e.message || 'Не удалось отправить заявку.';
+        contactError.value = CONTACT_ERR[e.message] || 'Не удалось отправить заявку. Попробуйте позже.';
     } finally {
         contactSending.value = false;
     }
@@ -361,6 +395,9 @@ onMounted(async () => {
 .ed-contact__form { display: flex; gap: 12px; flex-wrap: wrap; }
 .ed-contact__input { flex: 1; min-width: 220px; height: 54px; padding: 0 18px; border: 1px solid #d1d5db; border-radius: 999px; font: inherit; background: #fff; }
 .ed-contact__ok { font-weight: 700; font-size: 1.2rem; color: #21a366; }
+.ed-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.ed-contact__consent { display: flex; align-items: flex-start; gap: 8px; width: 100%; font-size: 0.95rem; line-height: 1.4; color: #5b6472; }
+.ed-contact__consent a { color: #2e70dd; }
 .ed-choices { display: flex; flex-direction: column; gap: 8px; }
 .ed-choice { border: 1px solid #d1d5db; border-radius: 12px; padding: 12px 14px; cursor: pointer; font-size: 15px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ed-choice.on { border-color: #2563eb; background: #eff6ff; }
@@ -414,6 +451,8 @@ onMounted(async () => {
 .pd-buyerr { margin: 12px 0 0; text-align: center; font-size: 0.85rem; color: #dc2626; }
 .pd-btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; border: 0; cursor: pointer; font-family: inherit; font-weight: 700; background: #2e70dd; color: #fff; border-radius: 999px; transition: background 0.16s; }
 .pd-btn:hover { background: #2360c6; }
+.pd-btn--ghost { background: transparent; color: #2e70dd; border: 1.5px solid #2e70dd; }
+.pd-btn--ghost:hover { background: rgba(46, 112, 221, 0.08); }
 .pd-btn:disabled { opacity: 0.55; cursor: default; }
 .pd-btn--lg { padding: 16px 28px; font-size: 1.05rem; }
 .pd-btn--block { width: 100%; }

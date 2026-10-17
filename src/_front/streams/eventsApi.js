@@ -176,12 +176,22 @@ export async function getSpeakerProfile(supabase, userId) {
     return data?.[0] || null;
 }
 
-/** Save a call-back request (phone lead). n8n polls status='new' → emails adv@meetgu.ru → marks notified. */
-export async function submitContactRequest(supabase, { event, phone }) {
-    const p = (phone || '').trim();
-    if (p.replace(/\D/g, '').length < 6) throw new Error('Введите корректный номер телефона.');
-    const { error } = await supabase.from('event_contact_requests').insert({ event: event || null, phone: p });
-    if (error) throw new Error(`Не удалось отправить заявку: ${error.message}`);
+/**
+ * Save a call-back request (name + phone lead) via SECURITY DEFINER RPC (anon allowed).
+ * Server validates consent, normalizes the phone and rate-limits; it throws short error
+ * codes (consent_required / bad_name / bad_phone / event_not_found / too_many) that the
+ * caller maps to a friendly message. The phone is never logged here.
+ * n8n polls status='new' → emails adv@meetgu.ru → marks notified.
+ */
+export async function submitContactRequest(supabase, { event, name, phone, consent, hp }) {
+    const digits = (phone || '').replace(/\D/g, '');
+    if (digits.length < 10) throw new Error('bad_phone');
+    if (!(name || '').trim()) throw new Error('bad_name');
+    if (!consent) throw new Error('consent_required');
+    const { error } = await supabase.rpc('submit_event_contact_request', {
+        p_event: event || null, p_name: name, p_phone: phone, p_consent: true, p_hp: hp || '',
+    });
+    if (error) throw new Error(error.message || 'submit_failed');
 }
 
 /** Search users by name/email for the speaker picker (same pattern as chat member search). */

@@ -324,7 +324,10 @@ async function load() {
     }
 
     document.title = `${course.value.Title} — МитГуру`;
-    sb.from('users').update({ last_open: course.value.id }).eq('id', myId.value);   // parity with WeWeb (fire-and-forget)
+    // fire-and-forget, but MUST adopt the thenable so the request is actually sent — a bare supabase
+    // builder is lazy and never executes without await/.then (this is why last_open never updated here).
+    Promise.resolve(sb.from('users').update({ last_open: course.value.id }).eq('id', myId.value))
+        .then(null, (e) => { try { console.warn('[home] last_open update failed', e); } catch (_) { /* noop */ } });
 
     // current user (name/photo stamped into a comment) + prefill the star input with their existing grade
     const { data: meRow } = await sb.from('users').select('"Name", "Photo"').eq('id', myId.value).limit(1);

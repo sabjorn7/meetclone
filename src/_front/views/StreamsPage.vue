@@ -34,6 +34,8 @@
                             <button class="sp-btn sp-btn-primary sp-buy-btn" :disabled="buying" @click="buyStream">
                                 {{ buying ? 'Переход к оплате…' : 'Купить за ' + priceLabel(detail) }}
                             </button>
+                            <p v-if="error" class="sp-error sp-buy-error">{{ error }}</p>
+                            <button v-if="error && !buying" class="sp-btn sp-btn-secondary sp-retry-btn" @click="buyStream">↻ Повторить</button>
                         </div>
                         <div v-else>
                             <div class="sp-msg-title">Доступ к записи завершён</div>
@@ -442,6 +444,7 @@ import {
 // Multi-host (co-host) live: orchestrator client + roster reads. Solo path is untouched.
 import { startLive, stopLive, inviteCohost, removeCohost, LiveApiError } from '@/_front/streams/liveApi.js';
 import { listCohosts, getMyCohostRole } from '@/_front/streams/cohosts.js';
+import { logClientEvent } from '@/_front/chrome/errorLogger.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -778,9 +781,11 @@ async function buyStream() {
     error.value = '';
     try {
         const payLink = await purchaseStream(supa(), { buyer: me.value.id, stream: detail.value, promoCode: streamPromo.value.trim() || null });
-        window.location.href = payLink; // redirect to Prodamus (clone of the course change-page step)
+        window.location.href = payLink; // same-origin edge fn returned the link → go to Prodamus
     } catch (e) {
-        error.value = e.message || String(e);
+        error.value = e.message || 'Не удалось перейти к оплате. Попробуйте ещё раз.';
+        // Record the failure (UA + user_id added by the logger) so "не открывается оплата" leaves data.
+        try { logClientEvent('payment_link_error', `stream=${detail.value?.id} ${e.message || e}`); } catch (_) { /* logging must not break */ }
         buying.value = false;
     }
 }
@@ -1390,6 +1395,8 @@ textarea.pd-input { resize: vertical; }
     font-size: 14px;
     margin: 12px 0 0;
 }
+.sp-buy-error { margin-top: 10px; }
+.sp-retry-btn { margin-top: 10px; }
 
 /* creds */
 .sp-creds {

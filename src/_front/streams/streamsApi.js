@@ -85,81 +85,49 @@ export async function createBackingCourse(supabase, { owner, title, price, month
     return data?.[0]?.id;
 }
 
+// Friendly messages for the error codes the stream-pay-link edge function returns.
+function mapPayError(code) {
+    return ({
+        promo_invalid: 'Промокод недействителен для этого эфира.',
+        no_backing_course: 'У эфира нет курса-подложки.',
+        stream_not_found: 'Эфир не найден.',
+        unauthorized: 'Нужно войти в аккаунт.',
+        link_failed: 'Платёжная система временно недоступна. Попробуйте ещё раз.',
+    })[code] || '';
+}
+
 /**
- * MONEY: initiate a paid-stream purchase — a verbatim port of the site's course purchase
- * client flow (shop cart row → order → Prodamus link → order update → return link to redirect).
- * The actual settlement (mark paid, grant user_course, sales, balance) is handled entirely by
- * the UNTOUCHED n8n `BuyCourse` workflow via the Prodamus callback. Returns the payment URL.
+ * MONEY: initiate a paid-stream purchase (variant B — server builds the link).
+ *
+ * The browser no longer touches meetguru.payform.ru: that cross-origin fetch was failing on
+ * mobile / in-app browsers (carrier DPI, WebView) and dead-ending the purchase. Instead we call
+ * our SAME-ORIGIN edge function `stream-pay-link` (via /sb/functions/v1/…), which builds the
+ * shop/order rows and fetches the Prodamus link server-side, and returns the ready payLink.
+ *
+ * Settlement is unchanged: the UNTOUCHED n8n `BuyCourse` workflow marks paid / grants access via
+ * the Prodamus callback. The `buyer` arg is kept for the call signature but the server derives
+ * the real buyer from the auth JWT (not trusted from the client). Returns the payment URL.
  */
 export async function purchaseStream(supabase, { buyer, stream, promoCode = null }) {
+    void buyer; // identity is taken from the JWT server-side; kept for signature compatibility
     if (window.__mgGuestAuth) throw new Error('Нет связи с аккаунтом. Обновите страницу.'); // (a') guard
-    if (!stream.backing_course_id) throw new Error('У эфира нет курса-подложки.');
+    if (!stream?.backing_course_id) throw new Error('У эфира нет курса-подложки.');
 
-    // 1) cart row in `shop` (clone of course action 90ddb3ae; +quantity:1, read by the Prodamus builder)
-    const { count } = await supabase
-        .from('shop')
-        .select('id', { count: 'exact', head: true })
-        .eq('owner', buyer)
-        .eq('status', 'cart');
-    const { data: shopRows, error: shopErr } = await supabase
-        .from('shop')
-        .insert({
-            owner: buyer,
-            price: stream.price,
-            status: 'cart',
-            prolong: 12,
-            position: (count || 0) + 1,
-            quantity: 1,
-            course_id: stream.backing_course_id,
-            course_name: stream.title,
-        })
-        .select('id')
-        .limit(1);
-    if (shopErr) throw new Error(`Корзина: ${shopErr.message}`);
-    const shopId = shopRows?.[0]?.id;
+    const { data, error } = await supabase.functions.invoke('stream-pay-link', {
+        body: { stream_id: stream.id, promo_code: promoCode || null },
+    });
 
-    // 1b) optional promo — validate server-side, persist the discounted price to shop so n8n
-    // BuyCourse bills the author's commission on the discounted price; carry markers on the order.
-    let price = Number(stream.price) || 0;
-    let promoId = null, promoDiscount = 0;
-    if (promoCode) {
-        const { data: pv, error: pErr } = await supabase.rpc('preview_promo', { p_code: promoCode, p_shop_ids: [shopId] });
-        if (pErr) throw new Error(`Промокод: ${pErr.message}`);
-        if (!pv?.valid) throw new Error('Промокод недействителен для этого эфира.');
-        price = Number(pv.new_total);
-        promoId = pv.promo_id;
-        promoDiscount = Number(pv.discount) || 0;
-        await supabase.from('shop').update({ price }).eq('id', shopId);
+    if (error) {
+        // functions.invoke wraps a non-2xx in a FunctionsHttpError; surface the server code if any.
+        let code = '';
+        try { code = (await error.context?.json?.())?.error || ''; } catch (e) { /* non-json body */ }
+        throw new Error(mapPayError(code) || 'Не удалось связаться с платёжной системой. Попробуйте ещё раз.');
     }
-
-    // 2) order (clone of 21527f28) — ISOLATED to just this stream (only its shop row)
-    const { data: orderRows, error: orderErr } = await supabase
-        .from('order')
-        .insert({ summ: price, owner: buyer, course_positions: [shopId],
-                  promo_code_id: promoId, promo_discount: promoId ? promoDiscount : null })
-        .select('id')
-        .limit(1);
-    if (orderErr) throw new Error(`Заказ: ${orderErr.message}`);
-    const orderId = orderRows?.[0]?.id;
-
-    // 3) build + fetch the Prodamus payment link (clone of d70ac6c3). do=link returns the link.
-    const base = 'https://meetguru.payform.ru/?do=link&sys=meetguru';
-    const urlSuccess = `https://app.meetgu.ru/streams?stream=${stream.id}`;
-    const products =
-        `products[0][price]=${encodeURIComponent(price)}` +
-        `&products[0][quantity]=1` +
-        `&products[0][name]=${encodeURIComponent(stream.title)}`;
-    const buildUrl = `${base}&order_id=${encodeURIComponent(orderId)}&${products}&urlSuccess=${encodeURIComponent(urlSuccess)}`;
-    const res = await fetch(buildUrl);
-    if (!res.ok) throw new Error(`Prodamus (${res.status})`);
-    const payLink = (await res.text()).trim();
-    if (!/^https?:\/\//.test(payLink)) throw new Error('Prodamus вернул не ссылку.');
-
-    // 4) store num + pageUrl on the order (clone of 1edef42a)
-    await supabase.from('order').update({ num: orderId, pageUrl: payLink }).eq('id', orderId);
-
-    // 5) caller redirects the browser to payLink (clone of change-page a434302a)
-    return payLink;
+    if (!data?.payLink || !/^https?:\/\//.test(data.payLink)) {
+        throw new Error('Платёжная система не вернула ссылку. Попробуйте ещё раз.');
+    }
+    // caller redirects the browser to payLink (same-origin → external payform page)
+    return data.payLink;
 }
 
 // ---------- access gate (NOT money) ----------

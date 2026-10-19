@@ -248,27 +248,6 @@
                     <p v-if="error" class="sp-error">{{ error }}</p>
                 </section>
 
-                <!-- OBS credentials -->
-                <section v-if="creds" class="sp-card sp-creds">
-                    <div class="sp-card-head">
-                        <h2>Данные для OBS</h2>
-                        <button class="sp-close" @click="creds = null" aria-label="Закрыть">✕</button>
-                    </div>
-                    <p class="sp-muted">«{{ creds.title }}». Вставьте в OBS → Настройки → Трансляция → «Особый…»:</p>
-                    <div class="sp-cred-row">
-                        <span class="sp-cred-label">Сервер (URL)</span>
-                        <code class="sp-cred-val">{{ creds.rtmpUrl }}</code>
-                        <button class="sp-btn sp-btn-mini" @click="copy(creds.rtmpUrl)">Копировать</button>
-                    </div>
-                    <div class="sp-cred-row">
-                        <span class="sp-cred-label">Ключ потока</span>
-                        <code class="sp-cred-val">{{ maskKey ? '••••••••••••' : creds.streamKey }}</code>
-                        <button class="sp-btn sp-btn-mini" @click="maskKey = !maskKey">{{ maskKey ? 'Показать' : 'Скрыть' }}</button>
-                        <button class="sp-btn sp-btn-mini" @click="copy(creds.streamKey)">Копировать</button>
-                    </div>
-                    <p class="sp-note">Никому не передавайте ключ потока — по нему можно вести эфир от вашего имени.</p>
-                </section>
-
                 <!-- All streams (catalog style, like /all_course) -->
                 <section class="sp-catalog">
                     <h2 class="pd-h2">Все эфиры</h2>
@@ -337,6 +316,26 @@
                                         <button v-if="!s.hidden" class="sp-btn sp-btn-mini sp-btn-danger" :disabled="busyId === s.id" @click="confirmDeleteId = s.id">Удалить</button>
                                     </template>
                                 </template>
+                            </div>
+                            <!-- Данные OBS — раскрывается внутри карточки этого эфира, под рядом кнопок -->
+                            <div v-if="creds && creds.id === s.id" class="sp-card sp-creds sp-item-creds">
+                                <div class="sp-card-head">
+                                    <h2>Данные для OBS</h2>
+                                    <button class="sp-close" @click="creds = null" aria-label="Закрыть">✕</button>
+                                </div>
+                                <p class="sp-muted">«{{ creds.title }}». Вставьте в OBS → Настройки → Трансляция → «Особый…»:</p>
+                                <div class="sp-cred-row">
+                                    <span class="sp-cred-label">Сервер (URL)</span>
+                                    <code class="sp-cred-val">{{ creds.rtmpUrl }}</code>
+                                    <button class="sp-btn sp-btn-mini" @click="copy(creds.rtmpUrl)">Копировать</button>
+                                </div>
+                                <div class="sp-cred-row">
+                                    <span class="sp-cred-label">Ключ потока</span>
+                                    <code class="sp-cred-val">{{ maskKey ? '••••••••••••' : creds.streamKey }}</code>
+                                    <button class="sp-btn sp-btn-mini" @click="maskKey = !maskKey">{{ maskKey ? 'Показать' : 'Скрыть' }}</button>
+                                    <button class="sp-btn sp-btn-mini" @click="copy(creds.streamKey)">Копировать</button>
+                                </div>
+                                <p class="sp-note">Никому не передавайте ключ потока — по нему можно вести эфир от вашего имени.</p>
                             </div>
                             <div v-if="expandedBuyers[s.id]" class="sp-buyers">
                                 <div v-if="buyersLoading[s.id]" class="sp-muted">Загрузка…</div>
@@ -1022,7 +1021,7 @@ async function createBroadcast() {
             router.push(`/streams?stream=${row.id}`);
             return;
         }
-        creds.value = { title: row.title, rtmpUrl: live.rtmpUrl, streamKey: live.streamKey };
+        creds.value = { id: row.id, title: row.title, rtmpUrl: live.rtmpUrl, streamKey: live.streamKey };
         maskKey.value = false;
         cancelForm();
     } catch (e) {
@@ -1032,11 +1031,12 @@ async function createBroadcast() {
     }
 }
 async function showCreds(s) {
+    if (creds.value && creds.value.id === s.id) { creds.value = null; return; }  // повторное нажатие — свернуть
     busyId.value = s.id;
     error.value = '';
     try {
         const c = await getLiveCredentials(supa(), s.peertube_video_id);
-        creds.value = { title: s.title, rtmpUrl: c.rtmpUrl, streamKey: c.streamKey };
+        creds.value = { id: s.id, title: s.title, rtmpUrl: c.rtmpUrl, streamKey: c.streamKey };
         maskKey.value = true;
     } catch (e) {
         error.value = e.message || String(e);
@@ -1421,6 +1421,9 @@ textarea.pd-input { resize: vertical; }
     overflow-x: auto;
     white-space: nowrap;
 }
+/* OBS-блок внутри карточки эфира */
+.sp-item-creds { margin-top: 10px; }
+.sp-item-creds .sp-cred-val { min-width: 0; }   /* не распирать узкую карточку на 375px — длинное прокручивается внутри */
 
 /* grid of stream tiles */
 .sp-grid {

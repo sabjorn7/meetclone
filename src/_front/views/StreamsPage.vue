@@ -322,11 +322,20 @@
                                     <button class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="confirmDeleteId = null">Отмена</button>
                                 </template>
                                 <template v-else>
-                                    <button v-if="s.status !== 'live'" class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="goLive(s)">Я в эфире</button>
-                                    <button v-else class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="endLive(s)">Завершить</button>
-                                    <button class="sp-btn sp-btn-mini" @click="openManage(s)">✏️ Редактировать</button>
-                                    <button class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="showCreds(s)">Данные OBS</button>
-                                    <button v-if="!s.hidden" class="sp-btn sp-btn-mini sp-btn-danger" :disabled="busyId === s.id" @click="confirmDeleteId = s.id">Удалить</button>
+                                    <!-- завершён: запись + редактирование + удаление (без «Я в эфире»/«Данные OBS»/«Завершить») -->
+                                    <template v-if="s.status === 'ended'">
+                                        <button class="sp-btn sp-btn-mini" @click="openStream(s.id)">Смотреть запись</button>
+                                        <button class="sp-btn sp-btn-mini" @click="openManage(s)">✏️ Редактировать</button>
+                                        <button v-if="!s.hidden" class="sp-btn sp-btn-mini sp-btn-danger" :disabled="busyId === s.id" @click="confirmDeleteId = s.id">Удалить</button>
+                                    </template>
+                                    <!-- live / запланирован: как было; «Данные OBS» только при наличии peertube_video_id (не мультихост) -->
+                                    <template v-else>
+                                        <button v-if="s.status !== 'live'" class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="goLive(s)">Я в эфире</button>
+                                        <button v-else class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="endLive(s)">Завершить</button>
+                                        <button class="sp-btn sp-btn-mini" @click="openManage(s)">✏️ Редактировать</button>
+                                        <button v-if="s.peertube_video_id" class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="showCreds(s)">Данные OBS</button>
+                                        <button v-if="!s.hidden" class="sp-btn sp-btn-mini sp-btn-danger" :disabled="busyId === s.id" @click="confirmDeleteId = s.id">Удалить</button>
+                                    </template>
                                 </template>
                             </div>
                             <div v-if="expandedBuyers[s.id]" class="sp-buyers">

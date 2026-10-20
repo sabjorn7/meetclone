@@ -25,10 +25,23 @@ export const sectionKey = (heading) => {
 function extractLesson(bodyLines) {
   const out = [];
   let lesson = null;
-  const re = /^\s*\*?\s*Урок:\s*(?:\[([^\]]+)\]\([^)]*\)|(.+?))\s*\*?\s*$/i;
+  // строка урока «*Урок: …*» с ОДНОЙ или НЕСКОЛЬКИМИ ссылками через запятую. Из каждого
+  // «[текст](url)» оставляем только текст, любые голые URL убираем — ссылки (в т.ч. на
+  // video.meetgu.ru) в конспект попадать не должны.
+  const head = /^\s*\*?\s*Урок:\s*(.*?)\s*\*?\s*$/i;
   for (const ln of bodyLines) {
-    const m = ln.match(re);
-    if (m) { lesson = (m[1] || m[2] || '').trim() || null; continue; }
+    const m = ln.match(head);
+    if (m) {
+      const v = m[1]
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')  // [текст](url) → текст
+        .replace(/https?:\/\/\S+/g, '')           // голые ссылки → убрать
+        .replace(/\s*,\s*/g, ', ')                // нормализуем запятые
+        .replace(/\s{2,}/g, ' ')
+        .replace(/[\s,]+$/, '')
+        .trim();
+      lesson = v || null;
+      continue;
+    }
     out.push(ln);
   }
   while (out.length && out[0].trim() === '') out.shift();

@@ -61,3 +61,9 @@ Deploy is automated via **GitHub Actions on every push to `main`** — there is 
 - `deploy-app.yml` ("Deploy App") → `/home/arseny/www-app/` → **app.meetgu.ru**
 
 The cache-buster version is set by CI to `${{ github.run_number }}`, **not by hand and not by WeWeb**. The "Bump cache-buster version" step rewrites `window.wwg_cacheVersion` in `src/_front/router.js`, `const version` in `public/serviceworker.js`, and `"cacheVersion"` in `public/data/*.json` on each build — don't edit those version values manually, CI overwrites them.
+
+## Конспект курса (cheatsheet) — загрузка из .md
+
+Таблица `public.cheatsheet` (RLS on, доступ только через SECURITY DEFINER RPC `get_cheatsheet`/`upsert_cheatsheet`; миграция `supabase/migrations/pending_cheatsheet.sql`). Фронт — секция «Конспект курса» в `MyCoursePage.vue` (4 вкладки: Алгоритмы/Частые вопросы/Как применять/Словарь; пустые скрыты; marked + ленивый DOMPurify, тег `a` запрещён). Заливка — edge-функция `cheatsheet-import` (ключ `x-import-key` = env `CHEATSHEET_IMPORT_KEY`), CLI `scripts/cheatsheet-load.mjs` (общий парсер `scripts/lib/cheatsheet-parse.mjs`; ключ берётся из `~/.cheatsheet-import-key`, НИКОГДА не печатать).
+
+**Правило работы:** когда владелец присылает .md-файл и `course_id` — запусти `node scripts/cheatsheet-load.mjs <файл.md> <course_id>` в режиме **draft** (по умолчанию) и пришли короткий отчёт: курс, владелец, счётчики блоков по разделам, список автозамен «лектор»→«автор курса», ссылка на страницу курса. **Публиковать (`--publish` → status=reviewed) ТОЛЬКО по явной фразе владельца «опубликуй <курс>».** `--replace` (полная замена разделов вместо merge) — тоже только по явному указанию.

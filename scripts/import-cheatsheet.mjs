@@ -12,19 +12,7 @@
 // --apply НЕ ходит в БД сам: печатает готовый `select upsert_cheatsheet(...)` — запускаешь в Studio.
 
 import { readFileSync } from 'node:fs';
-
-const SECTION_MAP = [
-  { key: 'algorithms', names: ['алгоритмы'] },
-  { key: 'faq',        names: ['частые вопросы', 'частые вопрос', 'faq', 'вопросы'] },
-  { key: 'apply',      names: ['как применять', 'применение'] },
-  { key: 'glossary',   names: ['словарь', 'глоссарий', 'ключевые понятия'] },
-];
-const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-const sectionKey = (heading) => {
-  const h = norm(heading);
-  for (const s of SECTION_MAP) if (s.names.includes(h)) return s.key;
-  return null;
-};
+import { parse } from './lib/cheatsheet-parse.mjs';
 
 function parseArgs(argv) {
   const a = { file: null, course: null, status: 'draft', apply: false, replace: false };
@@ -39,68 +27,6 @@ function parseArgs(argv) {
   return a;
 }
 
-// Вырезать строку урока из блока. Возвращает {body, lesson}. Поддерживает:
-//   *Урок: [Название](url)*   |   Урок: [Название](url)   |   *Урок: Название*
-function extractLesson(bodyLines) {
-  const out = [];
-  let lesson = null;
-  const re = /^\s*\*?\s*Урок:\s*(?:\[([^\]]+)\]\([^)]*\)|(.+?))\s*\*?\s*$/i;
-  for (const ln of bodyLines) {
-    const m = ln.match(re);
-    if (m) { lesson = (m[1] || m[2] || '').trim() || null; continue; } // строку урока убираем из body
-    out.push(ln);
-  }
-  // обрезать хвостовые/ведущие пустые строки
-  while (out.length && out[0].trim() === '') out.shift();
-  while (out.length && out[out.length - 1].trim() === '') out.pop();
-  return { body: out.join('\n'), lesson };
-}
-
-function parse(md) {
-  const errors = [], warnings = [];
-  const lines = md.replace(/\r\n/g, '\n').split('\n');
-  const sections = { algorithms: [], faq: [], apply: [], glossary: [] };
-
-  const present = new Set();              // ключи разделов, реально присутствующих в файле (## заголовок)
-  let curSecKey = null, curSecHeading = null;
-  let curBlock = null; // {title, bodyLines}
-  const flushBlock = () => {
-    if (!curBlock) return;
-    if (!curSecKey) { errors.push(`Блок «${curBlock.title}» вне известного раздела`); curBlock = null; return; }
-    const { body, lesson } = extractLesson(curBlock.bodyLines);
-    if (!body.trim()) warnings.push(`Пустое тело блока «${curBlock.title}» (${curSecHeading})`);
-    sections[curSecKey].push({ title: curBlock.title.trim(), body, lesson });
-    curBlock = null;
-  };
-
-  for (const ln of lines) {
-    const h2 = ln.match(/^##\s+(?!#)(.+?)\s*$/);
-    const h3 = ln.match(/^###\s+(.+?)\s*$/);
-    if (h2) {
-      flushBlock();
-      const key = sectionKey(h2[1]);
-      if (!key) { errors.push(`Неизвестный раздел «${h2[1].trim()}» — ожидаются: Алгоритмы / Частые вопросы / Как применять`); curSecKey = null; }
-      else { curSecKey = key; present.add(key); }
-      curSecHeading = h2[1].trim();
-    } else if (h3) {
-      flushBlock();
-      if (!curSecKey) errors.push(`Блок «${h3[1].trim()}» идёт до первого известного раздела (##)`);
-      curBlock = { title: h3[1].trim(), bodyLines: [] };
-    } else {
-      if (curBlock) curBlock.bodyLines.push(ln);
-      else if (ln.trim() && curSecKey) warnings.push(`Текст вне блока (###) в разделе «${curSecHeading}»: ${ln.trim().slice(0, 40)}…`);
-    }
-  }
-  flushBlock();
-
-  // структурные проверки
-  for (const b of [...sections.algorithms, ...sections.faq, ...sections.apply, ...sections.glossary])
-    if (!b.title) errors.push('Блок без заголовка (###)');
-  const total = sections.algorithms.length + sections.faq.length + sections.apply.length + sections.glossary.length;
-  if (total === 0) errors.push('Не найдено ни одного блока');
-
-  return { sections, errors, warnings, present: [...present] };
-}
 
 // ---- main ----
 const args = parseArgs(process.argv);

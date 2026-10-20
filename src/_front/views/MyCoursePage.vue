@@ -225,6 +225,7 @@ const CHEAT_TABS = [
     { key: 'algorithms', label: 'Алгоритмы' },
     { key: 'faq', label: 'Частые вопросы' },
     { key: 'apply', label: 'Как применять' },
+    { key: 'glossary', label: 'Словарь' },
 ];
 // показываем только непустые табы («Алгоритмы» скрывается, если пусто — и остальные тоже)
 const cheatTabs = computed(() => {
@@ -344,7 +345,7 @@ async function loadCheatsheet(courseId) {
         const { data, error } = await sb.rpc('get_cheatsheet', { p_course_id: courseId });
         if (error || !data || !data.sections) return;                 // null → секцию не показываем
         const sec = data.sections;
-        const keys = ['algorithms', 'faq', 'apply'];
+        const keys = ['algorithms', 'faq', 'apply', 'glossary'];
         if (!keys.some((k) => (sec[k] || []).length)) return;         // всё пусто → не показываем
         const [markedMod, purifyMod] = await Promise.all([import('marked'), import('dompurify')]);
         const marked = markedMod.marked || markedMod.default;
@@ -359,7 +360,7 @@ async function loadCheatsheet(courseId) {
             lesson: b.lesson || '',
             html: purify.sanitize(marked.parse(b.body || ''), SAN),
         }));
-        const rendered = { algorithms: render(sec.algorithms), faq: render(sec.faq), apply: render(sec.apply) };
+        const rendered = { algorithms: render(sec.algorithms), faq: render(sec.faq), apply: render(sec.apply), glossary: render(sec.glossary) };
         cheatsheet.value = { status: data.status, rendered };
         activeCheatTab.value = keys.find((k) => rendered[k].length) || null;
     } catch (e) {

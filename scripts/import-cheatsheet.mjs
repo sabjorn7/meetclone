@@ -17,6 +17,7 @@ const SECTION_MAP = [
   { key: 'algorithms', names: ['алгоритмы'] },
   { key: 'faq',        names: ['частые вопросы', 'частые вопрос', 'faq', 'вопросы'] },
   { key: 'apply',      names: ['как применять', 'применение'] },
+  { key: 'glossary',   names: ['словарь', 'глоссарий', 'ключевые понятия'] },
 ];
 const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
 const sectionKey = (heading) => {
@@ -57,7 +58,7 @@ function extractLesson(bodyLines) {
 function parse(md) {
   const errors = [], warnings = [];
   const lines = md.replace(/\r\n/g, '\n').split('\n');
-  const sections = { algorithms: [], faq: [], apply: [] };
+  const sections = { algorithms: [], faq: [], apply: [], glossary: [] };
 
   let curSecKey = null, curSecHeading = null;
   let curBlock = null; // {title, bodyLines}
@@ -91,9 +92,9 @@ function parse(md) {
   flushBlock();
 
   // структурные проверки
-  for (const b of [...sections.algorithms, ...sections.faq, ...sections.apply])
+  for (const b of [...sections.algorithms, ...sections.faq, ...sections.apply, ...sections.glossary])
     if (!b.title) errors.push('Блок без заголовка (###)');
-  const total = sections.algorithms.length + sections.faq.length + sections.apply.length;
+  const total = sections.algorithms.length + sections.faq.length + sections.apply.length + sections.glossary.length;
   if (total === 0) errors.push('Не найдено ни одного блока');
 
   return { sections, errors, warnings };
@@ -112,8 +113,8 @@ const cnt = (k) => sections[k].length;
 console.log('=== РАЗБОР cheatsheet ===');
 console.log(`файл: ${args.file}`);
 console.log(`курс: ${args.course}  статус: ${args.status}`);
-console.log(`разделы: Алгоритмы=${cnt('algorithms')}  Частые вопросы=${cnt('faq')}  Как применять=${cnt('apply')}`);
-for (const key of ['algorithms', 'faq', 'apply'])
+console.log(`разделы: Алгоритмы=${cnt('algorithms')}  Частые вопросы=${cnt('faq')}  Как применять=${cnt('apply')}  Словарь=${cnt('glossary')}`);
+for (const key of ['algorithms', 'faq', 'apply', 'glossary'])
   for (const b of sections[key])
     console.log(`  [${key}] «${b.title}»  body=${b.body.length} симв.  урок=${b.lesson ? '«' + b.lesson + '» (ссылка вырезана)' : '—'}`);
 

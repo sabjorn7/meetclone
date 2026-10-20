@@ -93,6 +93,30 @@
                     </a>
                 </div>
 
+                <!-- Конспект курса (cheatsheet) — секция рендерится ТОЛЬКО если RPC вернул данные
+                     (null → ни заголовка, ни пустых табов). Табы без содержимого скрыты. -->
+                <section v-if="cheatsheet" class="pd-cheat">
+                    <div class="pd-cheat__head">
+                        <h2 class="pd-cheat__title">Конспект курса</h2>
+                        <span v-if="cheatsheet.status === 'draft'" class="pd-cheat__draft">Черновик: виден только вам</span>
+                    </div>
+                    <div class="pd-cheat__tabs" role="tablist">
+                        <button
+                            v-for="t in cheatTabs" :key="t.key" type="button" role="tab"
+                            class="pd-cheat__tab" :class="{ 'is-on': activeCheatTab === t.key }"
+                            :aria-selected="activeCheatTab === t.key" @click="activeCheatTab = t.key"
+                        >{{ t.label }}</button>
+                    </div>
+                    <div class="pd-cheat__list">
+                        <article v-for="(b, i) in activeCheatBlocks" :key="i" class="pd-cheat__block">
+                            <h3 class="pd-cheat__bt">{{ b.title }}</h3>
+                            <!-- body санитайзится (marked → DOMPurify, тег a запрещён, ALLOWED_ATTR пуст) до присвоения -->
+                            <div class="pd-cheat__md" v-html="b.html"></div>
+                            <p v-if="b.lesson" class="pd-cheat__lesson">Урок: {{ b.lesson }}</p>
+                        </article>
+                    </div>
+                </section>
+
                 <!-- reviews: write a rating + optional comment, then existing reviews -->
                 <section class="pd-reviews" data-reveal>
                     <h2 class="pd-reviews__title">{{ myRating ? 'Ваш отзыв о курсе' : 'Оставьте отзыв о курсе' }}</h2>
@@ -191,6 +215,23 @@ const videoStarted = ref(false);
 const videoLoaded = ref(false);   // iframe fired @load — until then show a spinner (slow/stalled PeerTube embed on mobile)
 const videoReload = ref(0);       // bumping this re-mounts the iframe (the «Обновить» retry)
 const posterUrl = ref('');
+
+// ── Конспект курса (cheatsheet) ─────────────────────────────────────────────
+// cheatsheet = null (нет данных/нет доступа → секция не рендерится) ИЛИ
+// { status, rendered: { algorithms:[{title,html,lesson}], faq:[...], apply:[...] } }.
+const cheatsheet = ref(null);
+const activeCheatTab = ref(null);
+const CHEAT_TABS = [
+    { key: 'algorithms', label: 'Алгоритмы' },
+    { key: 'faq', label: 'Частые вопросы' },
+    { key: 'apply', label: 'Как применять' },
+];
+// показываем только непустые табы («Алгоритмы» скрывается, если пусто — и остальные тоже)
+const cheatTabs = computed(() => {
+    const r = cheatsheet.value?.rendered;
+    return r ? CHEAT_TABS.filter((t) => (r[t.key] || []).length > 0) : [];
+});
+const activeCheatBlocks = computed(() => cheatsheet.value?.rendered?.[activeCheatTab.value] || []);
 
 // review form
 const formRating = ref(0);
@@ -295,6 +336,37 @@ async function submitReview() {
 // day-granularity compare (mirrors the WeWeb gate's formatDate(...,"DD.MM.YY") equality test)
 function sameDay(a, b) { const x = new Date(a), y = new Date(b); return x.toDateString() === y.toDateString(); }
 
+// Fetch + sanitize конспекта. Чтение строго через SECURITY DEFINER RPC get_cheatsheet:
+// автор/админ видят любой статус (в т.ч. draft), купившие/бесплатные — только 'reviewed'; иначе null.
+// marked + DOMPurify подключаются ЛЕНИВО (только когда конспект есть). Тег a запрещён, ALLOWED_ATTR пуст.
+async function loadCheatsheet(courseId) {
+    try {
+        const { data, error } = await sb.rpc('get_cheatsheet', { p_course_id: courseId });
+        if (error || !data || !data.sections) return;                 // null → секцию не показываем
+        const sec = data.sections;
+        const keys = ['algorithms', 'faq', 'apply'];
+        if (!keys.some((k) => (sec[k] || []).length)) return;         // всё пусто → не показываем
+        const [markedMod, purifyMod] = await Promise.all([import('marked'), import('dompurify')]);
+        const marked = markedMod.marked || markedMod.default;
+        const purify = purifyMod.default || purifyMod;
+        const SAN = {
+            ALLOWED_TAGS: ['p', 'br', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'code', 'blockquote', 'h4', 'h5'],
+            ALLOWED_ATTR: [],
+            FORBID_TAGS: ['a', 'img', 'script', 'style', 'iframe'],
+        };
+        const render = (blocks) => (blocks || []).map((b) => ({
+            title: b.title || '',
+            lesson: b.lesson || '',
+            html: purify.sanitize(marked.parse(b.body || ''), SAN),
+        }));
+        const rendered = { algorithms: render(sec.algorithms), faq: render(sec.faq), apply: render(sec.apply) };
+        cheatsheet.value = { status: data.status, rendered };
+        activeCheatTab.value = keys.find((k) => rendered[k].length) || null;
+    } catch (e) {
+        /* конспект не критичен для страницы — молча не показываем */
+    }
+}
+
 async function load() {
     sb = getSupabase();
     myId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null;
@@ -356,6 +428,9 @@ async function load() {
     loading.value = false;
     await nextTick();
     ready.value = true;
+
+    // Конспект — фоном, не блокирует отрисовку страницы (и marked/DOMPurify грузятся лениво).
+    loadCheatsheet(course.value.id);
 }
 
 // Stall watchdog: if the embed iframe hasn't fired @load within VIDEO_STALL_MS after the user hit
@@ -637,5 +712,44 @@ function ensureFonts() {
 @media (max-width: 860px) {
     .pd-player { grid-template-columns: 1fr; }
     .pd-lessons { order: 2; }
+}
+
+/* ── Конспект курса (cheatsheet) ───────────────────────────────────────────── */
+.pd-cheat { margin-top: 40px; padding-top: 30px; border-top: 1px solid var(--line); }
+.pd-cheat__head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 16px; }
+.pd-cheat__title { margin: 0; font-weight: 800; font-size: 1.3rem; letter-spacing: -0.02em; }
+.pd-cheat__draft {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px;
+    background: #fff4e5; color: #9a5b00; border: 1px solid #f3d6a8; font-size: 12px; font-weight: 700;
+}
+/* табы: один ряд, при нехватке ширины — горизонтальный скролл (375px), без переноса */
+.pd-cheat__tabs {
+    display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; padding-bottom: 2px; margin-bottom: 18px;
+}
+.pd-cheat__tabs::-webkit-scrollbar { display: none; }
+.pd-cheat__tab {
+    flex: 0 0 auto; white-space: nowrap; border: 1px solid var(--line); background: #fff;
+    color: var(--ink-2); font: inherit; font-weight: 600; font-size: 0.95rem;
+    padding: 9px 16px; border-radius: 999px; cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.pd-cheat__tab.is-on { background: #091747; color: #fff; border-color: #091747; }
+.pd-cheat__list { display: flex; flex-direction: column; gap: 18px; }
+.pd-cheat__block { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+.pd-cheat__bt { margin: 0 0 10px; font-weight: 700; font-size: 1.08rem; letter-spacing: -0.01em; color: var(--ink); }
+.pd-cheat__md { color: var(--ink-2); font-size: 1rem; line-height: 1.6; }
+.pd-cheat__md :where(p) { margin: 0 0 10px; }
+.pd-cheat__md :where(ul, ol) { margin: 0 0 10px; padding-left: 22px; }
+.pd-cheat__md :where(li) { margin: 4px 0; }
+.pd-cheat__md :where(code) { background: var(--bg-tint); padding: 1px 5px; border-radius: 5px; font-size: 0.92em; }
+.pd-cheat__md :where(blockquote) { margin: 0 0 10px; padding-left: 12px; border-left: 3px solid var(--line); color: var(--ink-2); }
+.pd-cheat__md > :last-child { margin-bottom: 0; }
+.pd-cheat__lesson { margin: 12px 0 0; font-size: 0.82rem; color: #98a0ad; font-style: italic; }
+@media (max-width: 420px) {
+    .pd-cheat__block { padding: 15px 15px; border-radius: 12px; }
+    .pd-cheat__tab { padding: 8px 13px; font-size: 0.9rem; }
+}
+@media (hover: hover) and (pointer: fine) {
+    .pd-cheat__tab:not(.is-on):hover { border-color: #5495f3; color: #1f5fc9; }
 }
 </style>

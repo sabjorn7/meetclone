@@ -27,10 +27,11 @@ const sectionKey = (heading) => {
 };
 
 function parseArgs(argv) {
-  const a = { file: null, course: null, status: 'draft', apply: false };
+  const a = { file: null, course: null, status: 'draft', apply: false, replace: false };
   for (let i = 2; i < argv.length; i++) {
     const t = argv[i];
     if (t === '--apply') a.apply = true;
+    else if (t === '--replace') a.replace = true;
     else if (t === '--course') a.course = argv[++i];
     else if (t === '--status') a.status = argv[++i];
     else if (!t.startsWith('--') && !a.file) a.file = t;
@@ -60,6 +61,7 @@ function parse(md) {
   const lines = md.replace(/\r\n/g, '\n').split('\n');
   const sections = { algorithms: [], faq: [], apply: [], glossary: [] };
 
+  const present = new Set();              // ключи разделов, реально присутствующих в файле (## заголовок)
   let curSecKey = null, curSecHeading = null;
   let curBlock = null; // {title, bodyLines}
   const flushBlock = () => {
@@ -78,7 +80,7 @@ function parse(md) {
       flushBlock();
       const key = sectionKey(h2[1]);
       if (!key) { errors.push(`Неизвестный раздел «${h2[1].trim()}» — ожидаются: Алгоритмы / Частые вопросы / Как применять`); curSecKey = null; }
-      else curSecKey = key;
+      else { curSecKey = key; present.add(key); }
       curSecHeading = h2[1].trim();
     } else if (h3) {
       flushBlock();
@@ -97,7 +99,7 @@ function parse(md) {
   const total = sections.algorithms.length + sections.faq.length + sections.apply.length + sections.glossary.length;
   if (total === 0) errors.push('Не найдено ни одного блока');
 
-  return { sections, errors, warnings };
+  return { sections, errors, warnings, present: [...present] };
 }
 
 // ---- main ----
@@ -107,7 +109,7 @@ if (!/^[0-9a-f-]{36}$/i.test(args.course || '')) { console.error('--course <uuid
 if (!['draft', 'reviewed'].includes(args.status)) { console.error('--status draft|reviewed'); process.exit(2); }
 
 const md = readFileSync(args.file, 'utf8');
-const { sections, errors, warnings } = parse(md);
+const { sections, errors, warnings, present } = parse(md);
 
 const cnt = (k) => sections[k].length;
 console.log('=== РАЗБОР cheatsheet ===');
@@ -130,18 +132,37 @@ const json = JSON.stringify(sections);
 console.log(JSON.stringify(sections, null, 2));
 
 if (args.apply) {
-  const esc = json.replace(/'/g, "''");
-  console.log('\n=== SQL ДЛЯ STUDIO — ПРЯМОЙ upsert (запускаешь ТЫ как postgres; status=' + args.status + ') ===');
-  console.log('-- Сид пилота делается прямым upsert: в Studio роль postgres обходит RLS,');
-  console.log('-- а RPC upsert_cheatsheet требует auth.uid()=owner/admin (в Studio uid=null → forbidden).');
-  console.log(`insert into public.cheatsheet (course_id, sections, status, version, updated_at, updated_by)`);
-  console.log(`values ('${args.course}', '${esc}'::jsonb, '${args.status}', 1, now(), null)`);
-  console.log(`on conflict (course_id) do update`);
-  console.log(`  set sections = excluded.sections, status = excluded.status,`);
-  console.log(`      version = public.cheatsheet.version + 1, updated_at = now();`);
-  console.log('\n-- Откат этого сида:  delete from public.cheatsheet where course_id = \'' + args.course + '\';');
-  console.log('\n-- (Для записи С ФРОНТА авторизованным автором/админом — RPC:');
-  console.log(`--   select public.upsert_cheatsheet('${args.course}', '<sections>'::jsonb, '${args.status}');  )`);
+  console.log('\n=== SQL ДЛЯ STUDIO (запускаешь ТЫ как postgres — прямой upsert обходит RLS) ===');
+  if (args.replace) {
+    // ПОЛНАЯ ЗАМЕНА всего sections (все 4 ключа, включая пустые) — только по явному --replace.
+    const esc = json.replace(/'/g, "''");
+    console.log('-- режим --replace: ПЕРЕЗАПИСЬ всего sections + status.');
+    console.log(`insert into public.cheatsheet (course_id, sections, status, version, updated_at, updated_by)`);
+    console.log(`values ('${args.course}', '${esc}'::jsonb, '${args.status}', 1, now(), null)`);
+    console.log(`on conflict (course_id) do update`);
+    console.log(`  set sections = excluded.sections, status = excluded.status,`);
+    console.log(`      version = public.cheatsheet.version + 1, updated_at = now();`);
+    console.log('\n-- Откат (режим replace): восстанови sections из бэкапа, снятого ДО запуска:');
+    console.log(`--   select sections, status from public.cheatsheet where course_id='${args.course}';  (сохрани до apply)`);
+  } else {
+    // MERGE по умолчанию: обновляем ТОЛЬКО разделы, присутствующие в файле; остальные ключи
+    // (и статус) в существующей записи НЕ трогаем. Через top-level jsonb-слияние `||`.
+    const subset = {};
+    for (const k of present) subset[k] = sections[k];
+    const esc = JSON.stringify(subset).replace(/'/g, "''");
+    console.log(`-- режим MERGE (по умолчанию): обновляются ТОЛЬКО разделы из файла: [${present.join(', ') || '—'}].`);
+    console.log('-- Остальные разделы и status в записи сохраняются (не трогаем reviewed).');
+    console.log(`insert into public.cheatsheet (course_id, sections, status, version, updated_at, updated_by)`);
+    console.log(`values ('${args.course}', '${esc}'::jsonb, '${args.status}', 1, now(), null)`);
+    console.log(`on conflict (course_id) do update`);
+    console.log(`  set sections = coalesce(public.cheatsheet.sections, '{}'::jsonb) || '${esc}'::jsonb,`);
+    console.log(`      version = public.cheatsheet.version + 1, updated_at = now();  -- status НЕ меняется`);
+    console.log('\n-- Откат для НОВЫХ ключей (которых не было раньше), напр. glossary:');
+    for (const k of present) console.log(`--   update public.cheatsheet set sections = sections - '${k}', version=version+1, updated_at=now() where course_id='${args.course}';`);
+    console.log('-- Для ПЕРЕЗАПИСАННЫХ существующих ключей — восстанови из бэкапа (сними ДО apply):');
+    console.log(`--   select sections from public.cheatsheet where course_id='${args.course}';`);
+  }
+  console.log('\n-- (Запись С ФРОНТА авторизованным автором/админом идёт через RPC upsert_cheatsheet; этот SQL — для Studio.)');
 } else {
   console.log('\n(DRY-RUN: ничего не записано и не выведено SQL. Для SQL-блока добавь --apply.)');
 }

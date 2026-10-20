@@ -69,12 +69,9 @@
             <section v-if="learnItems.length" class="pd-section pd-section--tint">
                 <div class="pd-wrap">
                     <h2 class="pd-h2" data-reveal>Чему вы научитесь</h2>
-                    <ul class="pd-learn">
-                        <li v-for="(t, i) in learnItems" :key="i" class="pd-learn__item" data-reveal :style="{ '--i': Math.min(i, 6) }">
-                            <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>
-                            <span>{{ t }}</span>
-                        </li>
-                    </ul>
+                    <div class="pd-learn-text" data-reveal>
+                        <p v-for="(t, i) in learnItems" :key="i">{{ t }}</p>
+                    </div>
                 </div>
             </section>
 
@@ -551,6 +548,9 @@ button.pd-btn { font-family: inherit; }
 .pd-learn { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 32px; }
 .pd-learn__item { display: flex; align-items: flex-start; gap: 12px; font-size: 1.06rem; }
 .pd-learn__item .pd-ic { flex: none; width: 24px; height: 24px; stroke-width: 2.6; color: #21a366; margin-top: 2px; }
+/* «Чему вы научитесь» обычным текстом (без галочек) */
+.pd-learn-text { display: flex; flex-direction: column; gap: 12px; max-width: 72ch; }
+.pd-learn-text p { margin: 0; font-size: 1.06rem; line-height: 1.6; color: var(--ink-2); }
 
 /* ── Lessons (program) ──────────────────────────────────────────────────── */
 .pd-head { margin-bottom: 26px; }

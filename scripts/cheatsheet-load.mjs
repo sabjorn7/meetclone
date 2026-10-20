@@ -47,9 +47,17 @@ const mode = replace ? 'replace' : 'merge';
 // (функция сохранит существующий статус записи; для новой записи → draft).
 const status = publish ? 'reviewed' : (draft ? 'draft' : null);
 
-// MERGE: шлём ТОЛЬКО разделы, присутствующие в файле (present) — пустые массивы отсутствующих
-// разделов НЕ отправляем, чтобы merge их не затёр. REPLACE: отправляем sections целиком.
-const payloadSections = replace ? sections : Object.fromEntries(present.map((k) => [k, sections[k]]));
+// MERGE: шлём ТОЛЬКО разделы, присутствующие в файле (present) И непустые. Присутствующий-но-пустой
+// раздел (заголовок ## есть, но блоков 0) НЕ отправляем — иначе пустой массив затёр бы существующий
+// раздел в БД; о каждом таком предупреждаем. REPLACE: отправляем sections целиком, включая пустые
+// (это осознанная полная замена/очистка).
+const LABELS = { algorithms: 'Алгоритмы', faq: 'Частые вопросы', apply: 'Как применять', glossary: 'Словарь' };
+const emptyPresent = replace ? [] : present.filter((k) => (sections[k] || []).length === 0);
+const payloadSections = replace
+  ? sections
+  : Object.fromEntries(present.filter((k) => (sections[k] || []).length > 0).map((k) => [k, sections[k]]));
+emptyPresent.forEach((k) => console.log(`⚠️ раздел «${LABELS[k] || k}» пуст, пропущен; для очистки используй --replace`));
+if (!replace && Object.keys(payloadSections).length === 0) die('в merge нет непустых разделов для отправки (все присутствующие разделы пусты); для очистки используй --replace');
 
 // валидация перед отправкой (того, что реально уйдёт)
 const vErr = validateSections(payloadSections);

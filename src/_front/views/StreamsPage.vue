@@ -25,8 +25,12 @@
 
                 <!-- Player / gate -->
                 <div class="sp-player-wrap">
+                    <!-- Access still resolving (session restoring): neutral placeholder, no "buy" flash -->
+                    <div v-if="!hasAccess && !accessResolved" class="sp-player sp-player-msg">
+                        <div><div class="sp-muted">Загрузка…</div></div>
+                    </div>
                     <!-- Paid & no access: buy, or access-period-ended -->
-                    <div v-if="!hasAccess" class="sp-player sp-player-msg">
+                    <div v-else-if="!hasAccess" class="sp-player sp-player-msg">
                         <div v-if="canBuy">
                             <div class="sp-msg-title">Платный эфир — {{ priceLabel(detail) }}</div>
                             <div class="sp-muted">Доступ к эфиру и записи на {{ detail.access_months }} мес. с даты эфира.</div>
@@ -141,6 +145,11 @@
                         </button>
                     </div>
                     <div v-else class="sp-muted sp-chat-login">Войдите, чтобы писать в чат.</div>
+                </section>
+                <!-- Access still resolving: neutral chat skeleton (don't flash "no access") -->
+                <section v-else-if="!accessResolved" class="sp-chat" aria-busy="true">
+                    <h3 class="sp-chat-title">Чат эфира</h3>
+                    <div class="sp-chat-feed"><div class="sp-muted">Загрузка чата…</div></div>
                 </section>
             </template>
         </template>
@@ -423,7 +432,6 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router';
 import { createLive, getLiveCredentials, getVideoInfo, embedUrl, assetUrl, VIDEO_STATE } from '@/_front/streams/peertubeLive.js';
 import {
-    getCurrentUser,
     canStream,
     createStream,
     createBackingCourse,
@@ -444,6 +452,9 @@ import {
 // Multi-host (co-host) live: orchestrator client + roster reads. Solo path is untouched.
 import { startLive, stopLive, inviteCohost, removeCohost, LiveApiError } from '@/_front/streams/liveApi.js';
 import { listCohosts, getMyCohostRole } from '@/_front/streams/cohosts.js';
+// Fast auth: resolve the uid from the stored session/cookie synchronously (no stall-prone
+// auth.getSession()), and wait out the session-restore race without flashing "no access".
+import { readStoredSession, authCookieUser, waitForUid } from '@/_front/chrome/headerAccount.js';
 import { logClientEvent } from '@/_front/chrome/errorLogger.js';
 
 const route = useRoute();
@@ -497,6 +508,9 @@ const detail = ref(null);
 const detailInfo = ref(null);
 const detailLoading = ref(false);
 const bought = ref(false);
+const boughtResolved = ref(false); // true once the paid-access (hasBoughtStream) check has completed
+const myId = ref(null);            // fast uid from the stored session/cookie (no getSession stall)
+const meResolved = ref(false);     // true once auth is determined (session restored or confirmed guest)
 const buying = ref(false);
 const streamPromo = ref('');
 let pollTimer = null;
@@ -525,6 +539,37 @@ function supa() {
     const inst = window.wwLib?.wwPlugins?.supabase?.instance;
     if (!inst) throw new Error('Supabase недоступен на этой странице.');
     return inst;
+}
+
+// Resolve the logged-in user WITHOUT the stall-prone auth.getSession(): read the uid from the stored
+// session / cookie synchronously, and poll briefly while the auth plugin restores it (guest → null).
+// Then fetch the user row for name/photo. Memoized so the list + detail share one resolution and the
+// chat feed never waits on it. Sets meResolved when done so the UI can skip "no access" flashes.
+let mePromise = null;
+function ensureMe() {
+    if (mePromise) return mePromise;
+    mePromise = (async () => {
+        let uid = null;
+        try {
+            uid = readStoredSession()?.user?.id || authCookieUser()?.id || null;
+            if (!uid) uid = await waitForUid(2500, 150); // wait out the session-restore race
+        } catch (_) { uid = null; }
+        // Resolve access as soon as we know the uid — the users row (name/photo) is NOT required for
+        // it, so don't make the gate wait on an extra request. meResolved is set here unconditionally
+        // (even if the uid lookup threw) so a paid stream can never get stuck on «Загрузка…».
+        myId.value = uid || null;
+        meResolved.value = true;
+        if (uid) {
+            try {
+                const { data } = await supa().from('users').select('*').eq('id', uid).limit(1);
+                me.value = data?.[0] || null;
+            } catch (_) { me.value = null; /* access still works via myId */ }
+        } else {
+            me.value = null;
+        }
+        return me.value;
+    })();
+    return mePromise;
 }
 
 // ---------- labels ----------
@@ -584,10 +629,10 @@ async function load() {
     loading.value = true;
     error.value = '';
     try {
-        me.value = await getCurrentUser(supa());
+        await ensureMe();
         listItems.value = await listAllStreams(supa());
         loadThumbs();
-        if (isStreamer.value) myStreams.value = await listMyStreams(supa(), me.value.id);
+        if (isStreamer.value && me.value) myStreams.value = await listMyStreams(supa(), me.value.id);
     } catch (e) {
         error.value = e.message || String(e);
     } finally {
@@ -608,7 +653,10 @@ function loadThumbs() {
 }
 
 // ---------- detail ----------
-const isAuthor = computed(() => !!me.value && !!detail.value && me.value.id === detail.value.author);
+const isAuthor = computed(() => {
+    const uid = me.value?.id || myId.value;
+    return !!uid && !!detail.value && uid === detail.value.author;
+});
 const isPaid = computed(() => !!detail.value && Number(detail.value.price) > 0 && !!detail.value.backing_course_id);
 // Access window measured from the air date (accessExpiry); open if no expiry or not yet passed.
 const accessWindowOpen = computed(() => {
@@ -617,6 +665,13 @@ const accessWindowOpen = computed(() => {
 });
 const hasAccess = computed(() => !!detail.value && (!isPaid.value || isAuthor.value || (bought.value && accessWindowOpen.value)));
 const canBuy = computed(() => isPaid.value && !isAuthor.value && !bought.value && accessWindowOpen.value);
+// Have we finished determining access for this stream? Until then the player/chat show a neutral
+// placeholder instead of flashing "buy"/"no access" while the session is still being restored.
+const accessResolved = computed(() => {
+    if (!detail.value || !meResolved.value) return false;
+    if (!isPaid.value || isAuthor.value) return true;
+    return boughtResolved.value; // a buyer's access depends on the async purchase check
+});
 
 // Hybrid state: PeerTube video.state is authoritative for "waiting"; the author's cached
 // streams.status carries the live/ended intent.
@@ -659,41 +714,54 @@ async function loadDetail(id) {
     detail.value = null;
     detailInfo.value = null;
     bought.value = false;
+    boughtResolved.value = false;
     myCohostRole.value = null;
     cohosts.value = [];
     error.value = '';
     stopPoll();
     stopChatPoll();
     try {
-        if (!me.value) me.value = await getCurrentUser(supa());
         detail.value = await getStreamById(supa(), id);
-        if (detail.value?.peertube_video_id) {
+        if (!detail.value) return; // "Эфир не найден" is rendered by the empty-detail branch
+
+        // 1) Chat feed FIRST — independent of auth + video metadata, so messages arrive in ~40ms.
+        //    Visibility is still gated by hasAccess in the template; here we only populate the data.
+        chatLoading.value = true;
+        loadChat(id, { scroll: true }).finally(() => { chatLoading.value = false; });
+        startChatPoll(id);
+
+        // 2) Auth (fast uid, no getSession stall) → access + the paid-purchase check, in the
+        //    background. Resolving it off the critical path is what keeps the feed instant.
+        ensureMe().then(async () => {
+            try {
+                if (detail.value && Number(detail.value.price) > 0 && detail.value.backing_course_id && myId.value) {
+                    bought.value = await hasBoughtStream(supa(), detail.value, myId.value);
+                }
+            } catch (_) { /* access stays false */ }
+            boughtResolved.value = true;
+        }).catch(() => { boughtResolved.value = true; }); // never leave access stuck on «Загрузка…»
+
+        // 3) PeerTube metadata — independent of auth; drives the player state + viewer polling.
+        if (detail.value.peertube_video_id) {
             detailInfo.value = await getVideoInfo(detail.value.peertube_video_id);
         }
-        // Has the current user already purchased this paid stream?
-        if (detail.value && Number(detail.value.price) > 0 && detail.value.backing_course_id && me.value) {
-            bought.value = await hasBoughtStream(supa(), detail.value, me.value.id);
-        }
+
         // Multi-host: owner loads the roster; a non-author loads their own membership (join CTA).
-        if (detail.value?.mode === 'multi') {
+        if (detail.value.mode === 'multi') {
+            await ensureMe();
             if (isAuthor.value) {
                 cohosts.value = await listCohosts(supa(), detail.value.id).catch(() => []);
-            } else if (me.value) {
-                myCohostRole.value = await getMyCohostRole(supa(), detail.value.id, me.value.id).catch(() => null);
+            } else if (myId.value) {
+                myCohostRole.value = await getMyCohostRole(supa(), detail.value.id, myId.value).catch(() => null);
             }
         }
+
         // Poll while waiting for the live to start (state 4 → 1) OR for a just-ended live's replay
         // to finish transcoding (ended but not yet playable).
-        if (shouldPoll() && detail.value?.peertube_video_id) startPoll();
-        // Viewer chat — same access gate as the stream; poll for new messages while open.
-        if (hasAccess.value) {
-            chatLoading.value = true;
-            await loadChat(id, { scroll: true });
-            chatLoading.value = false;
-            startChatPoll(id);
-        }
+        if (shouldPoll() && detail.value.peertube_video_id) startPoll();
     } catch (e) {
         error.value = e.message || String(e);
+        boughtResolved.value = true;
     } finally {
         detailLoading.value = false;
     }
@@ -907,6 +975,14 @@ watch(replayProcessing, processing => {
     if (processing && !pollTimer && detail.value?.peertube_video_id) startPoll();
 });
 
+// Privacy guard: the feed is loaded optimistically (before access is known) so it appears instantly
+// for entitled viewers. If access then resolves to "no access", drop the loaded messages from memory
+// and stop polling — a no-access viewer must not retain paid-stream chat client-side (it's never
+// rendered either way, but we don't keep or keep fetching it once we know they lack access).
+watch([hasAccess, accessResolved], ([access, resolved]) => {
+    if (resolved && !access) stopChatPoll();
+});
+
 // ---------- create / author actions ----------
 function cancelForm() {
     showForm.value = false;
@@ -1100,9 +1176,10 @@ async function removeStream(s) {
     }
 }
 
-onMounted(async () => {
-    await load();
+onMounted(() => {
+    // Open the detail + chat immediately; don't block them behind the stream-list load.
     if (activeStreamId.value) loadDetail(activeStreamId.value);
+    load();
 });
 onBeforeUnmount(() => {
     stopPoll();

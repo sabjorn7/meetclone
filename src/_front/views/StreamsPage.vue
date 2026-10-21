@@ -914,7 +914,13 @@ function scrollFeed() {
 async function loadChat(id, { scroll = false } = {}) {
     try {
         const prevLen = messages.value.length;
-        messages.value = await listStreamMessages(supa(), id);
+        const rows = await listStreamMessages(supa(), id);
+        // Guard against in-flight races: while this request was out, access may have resolved to
+        // "no access" (the privacy watch cleared the feed) or the viewer may have switched streams.
+        // In either case don't write the (stale/denied) messages back into the UI.
+        if (detail.value?.id !== id) return;
+        if (accessResolved.value && !hasAccess.value) return;
+        messages.value = rows;
         if (scroll || messages.value.length !== prevLen) scrollFeed();
     } catch (_) {
         // keep the current messages on a transient refresh failure

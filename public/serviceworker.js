@@ -13,7 +13,10 @@ const CACHE = 'mg-shell';
 self.addEventListener('install', (event) => {
     self.skipWaiting();
     event.waitUntil(
-        caches.open(CACHE).then((c) => c.addAll(['/', '/index.html']).catch(() => {})).catch(() => {}),
+        caches.open(CACHE).then(async (c) => {
+            await c.addAll(['/', '/index.html']).catch(() => {});
+            await c.add('/offline.html').catch(() => {}); // separate: its failure must not drop the shell cache
+        }).catch(() => {}),
     );
 });
 
@@ -63,7 +66,8 @@ self.addEventListener('fetch', (event) => {
             } catch (e) {
                 const cached = (await caches.match(req).catch(() => null))
                     || (await caches.match('/index.html').catch(() => null))
-                    || (await caches.match('/').catch(() => null));
+                    || (await caches.match('/').catch(() => null))
+                    || (await caches.match('/offline.html').catch(() => null)); // first-visit-offline
                 return cached || Response.error();
             }
         })());

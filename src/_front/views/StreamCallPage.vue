@@ -71,6 +71,41 @@
                 </ul>
             </div>
 
+            <!-- Live chat panel (speaker/co-host view of the viewer chat) -->
+            <div v-if="chatOpen" class="lkc-chat">
+                <div class="lkc-chat__head">
+                    <strong>Чат эфира</strong>
+                    <button class="lkc-x" @click="chatOpen = false">✕</button>
+                </div>
+                <div ref="chatFeedEl" class="lkc-chat__feed">
+                    <div v-if="chatLoading && !chatMessages.length" class="lkc-chat__muted">Загрузка чата…</div>
+                    <div v-else-if="!chatMessages.length" class="lkc-chat__muted">Сообщений пока нет.</div>
+                    <div v-for="m in chatMessages" :key="m.id" class="lkc-chat__row" :class="{ mine: m.owner === myUid }">
+                        <img v-if="m.authorUser && m.authorUser.Photo" :src="m.authorUser.Photo" class="lkc-chat__ava" alt="" />
+                        <div v-else class="lkc-chat__ava lkc-chat__ava--empty">{{ ((m.authorUser && m.authorUser.Name) || '?').slice(0, 1) }}</div>
+                        <div class="lkc-chat__bubble">
+                            <div class="lkc-chat__meta">
+                                <span class="lkc-chat__name">{{ (m.authorUser && m.authorUser.Name) || 'Пользователь' }}</span>
+                                <span class="lkc-chat__time">{{ msgTime(m.created_at) }}</span>
+                            </div>
+                            <div class="lkc-chat__text">{{ m.text }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="lkc-chat__composer">
+                    <textarea
+                        v-model="chatText"
+                        class="lkc-chat__input"
+                        rows="1"
+                        placeholder="Написать в чат…"
+                        @keydown.enter.exact.prevent="sendStreamChat"
+                    ></textarea>
+                    <button class="lkc-btn" :disabled="!chatText.trim() || chatSending" @click="sendStreamChat">
+                        {{ chatSending ? '…' : 'Отпр.' }}
+                    </button>
+                </div>
+            </div>
+
             <!-- Presenter-only slide navigation -->
             <div v-if="presenting" class="lkc-presbar">
                 <button class="lkc-navbtn" :disabled="pageNum <= 1" @click="gotoPage(-1)">←</button>
@@ -136,6 +171,13 @@
                     </option>
                 </select>
 
+                <button class="lkc-ctrl lkc-ctrl--chat" :class="{ on: chatOpen }" title="Чат эфира" @click="toggleChat">
+                    <svg class="lkc-ic" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                    <span v-if="chatUnread > 0" class="lkc-ctrl__badge">{{ chatUnread > 9 ? '9+' : chatUnread }}</span>
+                </button>
+
                 <button v-if="isOwner" class="lkc-ctrl" title="Со-ведущие" @click="toggleRoster">
                     <svg class="lkc-ic" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -176,6 +218,8 @@ import { DisconnectReason, Room, RoomEvent, Track } from 'livekit-client';
 
 import { getLiveToken, inviteCohost, removeCohost, LiveApiError } from '@/_front/streams/liveApi.js';
 import { listCohosts } from '@/_front/streams/cohosts.js';
+import { listStreamMessages, sendStreamMessage } from '@/_front/streams/streamsApi.js';
+import { readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import StreamTile from './StreamTile.vue';
 
 const supa = () => window.wwLib?.wwPlugins?.supabase?.instance;
@@ -203,6 +247,30 @@ const micOn = ref(true);
 const camOn = ref(true);
 const screenSharing = ref(false); // is THIS device sharing its screen
 const userWantsCamera = ref(true); // intent — survives the background camera suspend
+
+// Only phones/tablets suspend the camera when the tab is hidden (the OS suspends capture anyway and
+// it saves battery/data). On a desktop presenter, hiding/alt-tabbing the tab must NOT stop the
+// camera — doing so froze the broadcast whenever the host switched windows.
+const isCoarsePointer = typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(pointer: coarse)').matches;
+
+// Screen Wake Lock: keep the machine awake while broadcasting so the screen never sleeps mid-stream
+// (sleep suspends capture). Best-effort; auto-released by the browser when the tab hides → re-acquired
+// on return to visible. Not a cure for background-tab throttling, only for screen sleep.
+let wakeLock = null;
+async function acquireWakeLock() {
+    try {
+        if (typeof navigator !== 'undefined' && 'wakeLock' in navigator && navigator.wakeLock) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener?.('release', () => { wakeLock = null; });
+        }
+    } catch { /* best-effort: denied / unsupported */ }
+}
+function releaseWakeLock() {
+    try { wakeLock?.release?.(); } catch { /* noop */ }
+    wakeLock = null;
+}
 const role = ref('cohost');
 
 // Screen share is desktop-only (getDisplayMedia is absent on mobile browsers).
@@ -226,6 +294,18 @@ let presRenderCanvas = null; // OFF-DOM scratch: the PDF page is rendered here, 
 // egress/HLS pipeline can't absorb (that was the white screen on slide change). 16:9, crisp at 1080p.
 const PRES_W = 1920;
 const PRES_H = 1080;
+
+// Live chat — the speaker/co-host view of the same viewer chat (table `stream_chat`). Polled, not
+// realtime, mirroring StreamsPage.vue. uid resolved from the stored session/cookie (no getSession stall).
+const myUid = readStoredSession()?.user?.id || authCookieUser()?.id || null;
+const chatOpen = ref(false);
+const chatMessages = ref([]);
+const chatText = ref('');
+const chatSending = ref(false);
+const chatLoading = ref(false);
+const chatUnread = ref(0);
+const chatFeedEl = ref(null);
+let chatTimer = null;
 
 const devices = ref({ cams: [], mics: [] });
 const selectedCam = ref('');
@@ -324,13 +404,58 @@ async function loadDevices() {
     }
 }
 
+/* ── live chat (speaker view) ─────────────────────────────────────────────── */
+function msgTime(iso) {
+    return iso ? new Date(iso).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
+}
+function scrollChat() {
+    requestAnimationFrame(() => { const el = chatFeedEl.value; if (el) el.scrollTop = el.scrollHeight; });
+}
+async function loadStreamChat({ scroll = false } = {}) {
+    if (!streamId) return;
+    try {
+        const prev = chatMessages.value.length;
+        const rows = await listStreamMessages(supa(), streamId);
+        const grew = rows.length - prev;
+        chatMessages.value = rows;
+        if (grew > 0 && !chatOpen.value) chatUnread.value += grew; // badge only while the panel is closed
+        if (scroll || grew !== 0) scrollChat();
+    } catch { /* keep current messages on a transient refresh failure */ }
+}
+async function sendStreamChat() {
+    const text = chatText.value.trim();
+    if (!text || chatSending.value || !myUid) return;
+    chatSending.value = true;
+    try {
+        await sendStreamMessage(supa(), { stream: streamId, owner: myUid, text });
+        chatText.value = '';
+        await loadStreamChat({ scroll: true });
+    } catch { /* transient — user can retry */ }
+    finally { chatSending.value = false; }
+}
+function toggleChat() {
+    chatOpen.value = !chatOpen.value;
+    if (chatOpen.value) { chatUnread.value = 0; scrollChat(); }
+}
+function startChatPoll() {
+    stopChatPoll();
+    chatLoading.value = true;
+    loadStreamChat({ scroll: true }).finally(() => { chatLoading.value = false; });
+    chatTimer = setInterval(() => loadStreamChat(), 7000);
+}
+function stopChatPoll() {
+    if (chatTimer) { clearInterval(chatTimer); chatTimer = null; }
+}
+
 function onVisibility() {
     const r = room.value;
     if (!r) return;
     if (document.visibilityState === 'visible') {
         if (userWantsCamera.value) r.localParticipant.setCameraEnabled(true).catch(() => {});
-    } else {
-        // Hidden: drop the camera (mirror the mobile compromise), keep the mic → audio continues.
+        acquireWakeLock(); // the browser releases the wake lock on hide → re-take it on return
+    } else if (isCoarsePointer) {
+        // Phone/tablet hidden: the OS suspends capture anyway → drop the camera, keep the mic (audio
+        // continues). On desktop we deliberately do NOTHING here so an alt-tabbed host keeps streaming.
         r.localParticipant.setCameraEnabled(false).catch(() => {});
     }
 }
@@ -386,6 +511,8 @@ async function connect() {
         syncParticipants();
         loadDevices();
         scheduleTokenRefresh(grant.expires_at);
+        acquireWakeLock();
+        startChatPoll();
     } catch (e) {
         // Membership revoked (removed) / stream gone → terminal, no point retrying.
         if (e instanceof LiveApiError && (e.code === 'not_a_cohost' || e.code === 'stream_not_found')) {
@@ -692,6 +819,8 @@ function teardownRoom() {
         clearTimeout(refreshTimer);
         refreshTimer = null;
     }
+    releaseWakeLock();
+    stopChatPoll();
 }
 
 onMounted(() => {
@@ -926,6 +1055,137 @@ onBeforeRouteLeave(() => {
 .lkc-btn--ghost {
     background: transparent;
     border: 1px solid rgba(255, 255, 255, 0.4);
+}
+/* chat toggle button + unread badge */
+.lkc-ctrl--chat {
+    position: relative;
+}
+.lkc-ctrl__badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: #dc2626;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* chat panel — same side-drawer footprint as the roster */
+.lkc-chat {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 96px;
+    width: min(360px, 90vw);
+    background: #12172a;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.4);
+    z-index: 5;
+}
+.lkc-chat__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.lkc-chat__feed {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.lkc-chat__muted {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+    margin: auto 0;
+    text-align: center;
+}
+.lkc-chat__row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+.lkc-chat__row.mine {
+    flex-direction: row-reverse;
+}
+.lkc-chat__ava {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex: none;
+}
+.lkc-chat__ava--empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #2a3458;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.lkc-chat__bubble {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 6px 10px;
+    max-width: 78%;
+}
+.lkc-chat__row.mine .lkc-chat__bubble {
+    background: #2563eb;
+}
+.lkc-chat__meta {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    margin-bottom: 2px;
+}
+.lkc-chat__name {
+    font-size: 12px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.85);
+}
+.lkc-chat__time {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+}
+.lkc-chat__text {
+    font-size: 14px;
+    line-height: 1.35;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+.lkc-chat__composer {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.lkc-chat__input {
+    flex: 1;
+    min-width: 0;
+    resize: none;
+    border-radius: 10px;
+    border: none;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font: inherit;
+    max-height: 120px;
+}
+.lkc-chat__input::placeholder {
+    color: rgba(255, 255, 255, 0.45);
 }
 .lkc-roster {
     position: fixed;

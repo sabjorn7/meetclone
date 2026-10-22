@@ -23,7 +23,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { Track } from 'livekit-client';
 
 const props = defineProps({ entry: { type: Object, required: true } });
@@ -57,6 +57,12 @@ watch(() => [props.entry.active, props.entry.participant, props.entry.source], s
     immediate: true,
     flush: 'post',
 });
+
+// Attach once the <video> actually exists. The `immediate` watch above can run before the element
+// is mounted (for a tile that is born already `active` — e.g. the local camera right after connect,
+// or when the camera tile is re-mounted into the spotlight layout on screen-share). In that case the
+// watched values never change again, so the watch wouldn't re-fire — this guarantees the attach.
+onMounted(sync);
 
 onBeforeUnmount(() => {
     if (attached && videoEl.value) attached.detach(videoEl.value);

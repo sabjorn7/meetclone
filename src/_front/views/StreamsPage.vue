@@ -23,8 +23,8 @@
                     <button class="sp-btn sp-btn-secondary sp-share-btn" @click="shareStream">🔗 {{ shareMsg || 'Поделиться' }}</button>
                 </div>
 
-                <!-- Push-подписка — СКРЫТА за ?push=1 (этап внедрения). Публичный показ снимается отдельным коммитом. -->
-                <div v-if="route.query.push === '1'" class="sp-detail-sub">
+                <!-- Push-подписка — видна при ?push=1 ИЛИ у владельца (в PWA нет адресной строки). -->
+                <div v-if="pushUiVisible" class="sp-detail-sub">
                     <button class="sp-btn sp-btn-secondary" :disabled="pushBusy || pushStatus === 'subscribed'" @click="enablePush">
                         {{ pushStatus === 'subscribed' ? '🔔 Уведомления включены' : (pushBusy ? '…' : '🔔 Включить уведомления') }}
                     </button>
@@ -534,10 +534,13 @@ const inviting = ref(false);
 const confirmRemoveId = ref(null); // inline "точно?" confirm per cohost row
 const removingId = ref(null);
 
-// push-подписка (UI только при ?push=1)
+// push-подписка. UI виден при ?push=1 ИЛИ у владельца (в установленном PWA адресной строки нет,
+// ?push=1 дописать негде). Остальным кнопка не видна.
+const PUSH_OWNER_ID = 'caa712f8-f5e8-484d-b46d-c56205f52ed1';
 const pushBusy = ref(false);
 const pushStatus = ref('off');   // 'off' | 'subscribed' | 'denied' | 'unsupported'
 const pushMsg = ref('');
+const pushUiVisible = computed(() => route.query.push === '1' || (me.value?.id || myId.value) === PUSH_OWNER_ID);
 
 // viewer-chat state
 const messages = ref([]);
@@ -1223,8 +1226,11 @@ onMounted(() => {
     // Open the detail + chat immediately; don't block them behind the stream-list load.
     if (activeStreamId.value) loadDetail(activeStreamId.value);
     load();
-    if (route.query.push === '1') pushState().then((s) => { pushStatus.value = s; }).catch(() => {});
 });
+// Статус подписки для кнопки — как только UI становится видимым (?push=1 или владелец доехал).
+watch(pushUiVisible, (v) => {
+    if (v) pushState().then((s) => { pushStatus.value = s; }).catch(() => {});
+}, { immediate: true });
 onBeforeUnmount(() => {
     stopPoll();
     stopChatPoll();

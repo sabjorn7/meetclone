@@ -218,7 +218,6 @@ import { DisconnectReason, Room, RoomEvent, Track } from 'livekit-client';
 
 import { getLiveToken, inviteCohost, removeCohost, LiveApiError } from '@/_front/streams/liveApi.js';
 import { listCohosts } from '@/_front/streams/cohosts.js';
-import { listStreamMessages, sendStreamMessage } from '@/_front/streams/streamsApi.js';
 import { readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import StreamTile from './StreamTile.vue';
 
@@ -405,6 +404,30 @@ async function loadDevices() {
 }
 
 /* ── live chat (speaker view) ─────────────────────────────────────────────── */
+// Chat data access is INLINED here on purpose: importing streamsApi.js would pull peertubeLive +
+// Cyrillic role constants into this lazy route, creating a shared Rolldown chunk that panics on a
+// Cyrillic byte boundary. These are the same `stream_chat` queries, minus that dependency.
+async function fetchChatAuthors(rows) {
+    const ids = [...new Set(rows.map((r) => r.owner).filter(Boolean))];
+    let byId = {};
+    if (ids.length) {
+        const { data } = await supa().from('users').select('id,Name,Photo').in('id', ids);
+        byId = Object.fromEntries((data || []).map((u) => [u.id, u]));
+    }
+    return rows.map((r) => ({ ...r, authorUser: byId[r.owner] || null }));
+}
+async function fetchChatMessages(id) {
+    const { data, error } = await supa()
+        .from('stream_chat').select('*').eq('stream', id).neq('deleted', true)
+        .order('created_at', { ascending: true }).limit(200);
+    if (error) throw new Error(error.message);
+    return fetchChatAuthors(data || []);
+}
+async function postChatMessage(id, owner, text) {
+    const { error } = await supa().from('stream_chat').insert({ stream: id, owner, text, img: [] });
+    if (error) throw new Error(error.message);
+}
+
 function msgTime(iso) {
     return iso ? new Date(iso).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
 }
@@ -415,7 +438,7 @@ async function loadStreamChat({ scroll = false } = {}) {
     if (!streamId) return;
     try {
         const prev = chatMessages.value.length;
-        const rows = await listStreamMessages(supa(), streamId);
+        const rows = await fetchChatMessages(streamId);
         const grew = rows.length - prev;
         chatMessages.value = rows;
         if (grew > 0 && !chatOpen.value) chatUnread.value += grew; // badge only while the panel is closed
@@ -427,7 +450,7 @@ async function sendStreamChat() {
     if (!text || chatSending.value || !myUid) return;
     chatSending.value = true;
     try {
-        await sendStreamMessage(supa(), { stream: streamId, owner: myUid, text });
+        await postChatMessage(streamId, myUid, text);
         chatText.value = '';
         await loadStreamChat({ scroll: true });
     } catch { /* transient — user can retry */ }

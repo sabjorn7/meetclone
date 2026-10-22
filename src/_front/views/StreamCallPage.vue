@@ -220,6 +220,12 @@ let pdfDoc = null; // pdf.js document (non-reactive)
 let presStream = null; // canvas.captureStream()
 let presMst = null; // its MediaStreamTrack (what we publish/unpublish)
 let presKeepAlive = null; // re-pushes the current static frame so late subscribers/egress get it
+let presRenderCanvas = null; // OFF-DOM scratch: the PDF page is rendered here, then blitted whole
+// Fixed capture resolution. The capture canvas is sized ONCE to this and never resized afterwards —
+// resizing a live captureStream source changes the published track resolution mid-stream, which the
+// egress/HLS pipeline can't absorb (that was the white screen on slide change). 16:9, crisp at 1080p.
+const PRES_W = 1920;
+const PRES_H = 1080;
 
 const devices = ref({ cams: [], mics: [] });
 const selectedCam = ref('');
@@ -551,14 +557,28 @@ async function renderPage(n) {
     if (!pdfDoc || !presCanvas.value) return;
     const page = await pdfDoc.getPage(n);
     const base = page.getViewport({ scale: 1 });
-    const vp = page.getViewport({ scale: 1600 / base.width }); // ~1600px wide, crisp at 720p+
+    // Render the slide to an OFF-DOM scratch canvas first (fit inside PRES_W×PRES_H, keep aspect).
+    // The visible capture canvas is never shown in the white-cleared / half-painted intermediate
+    // state — so viewers never catch the blank frame the old code exposed during the async render.
+    const scale = Math.min(PRES_W / base.width, PRES_H / base.height);
+    const vp = page.getViewport({ scale });
+    if (!presRenderCanvas) presRenderCanvas = document.createElement('canvas');
+    const rc = presRenderCanvas;
+    rc.width = Math.round(vp.width);
+    rc.height = Math.round(vp.height);
+    const rctx = rc.getContext('2d');
+    rctx.fillStyle = '#fff';
+    rctx.fillRect(0, 0, rc.width, rc.height);
+    await page.render({ canvasContext: rctx, viewport: vp }).promise;
+    // Blit onto the FIXED-size capture canvas in one synchronous paint, letterbox-centered on black.
+    // Dimensions set once and never changed → the published track keeps a constant resolution → no
+    // mid-stream renegotiation (the real cause of the white screen on slide change).
     const c = presCanvas.value;
-    c.width = Math.round(vp.width);
-    c.height = Math.round(vp.height);
+    if (c.width !== PRES_W || c.height !== PRES_H) { c.width = PRES_W; c.height = PRES_H; }
     const ctx = c.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, c.width, c.height);
-    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, PRES_W, PRES_H);
+    ctx.drawImage(rc, Math.round((PRES_W - rc.width) / 2), Math.round((PRES_H - rc.height) / 2), rc.width, rc.height);
 }
 
 async function gotoPage(delta) {
@@ -592,6 +612,7 @@ async function stopPresentation() {
     presStream = null;
     presMst = null;
     pdfDoc = null;
+    presRenderCanvas = null;
     presenting.value = false;
     pageCount.value = 0;
     pageNum.value = 1;

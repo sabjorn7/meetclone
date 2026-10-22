@@ -20,6 +20,7 @@ import { initArticlesStyle } from '@/_front/articlesStyle.js';
 import { initStreamsNavLink } from '@/_front/helpers/streamsNavLink.js';
 import { initErrorLogger, logException } from '@/_front/chrome/errorLogger.js';
 import { initSbImageProxy } from '@/_front/chrome/sbImageProxy.js';
+import { refreshPushSubscription } from '@/_front/chrome/pushClient.js';
 
 let store;
 let pinia;
@@ -161,5 +162,16 @@ wwLib.getFrontWindow().addEventListener('beforeinstallprompt', e => {
     wwLib.installPwaPrompt = e;
 });
 /* wwFront:end */
+
+// Push: поддержание уже существующей подписки (last_seen) + реакция на pushsubscriptionchange от SW.
+// Новых разрешений НЕ просим (кнопка подписки скрыта за ?push=1); здесь только refresh подписанных.
+try {
+    refreshPushSubscription();
+    if ('serviceWorker' in navigator && navigator.serviceWorker) {
+        navigator.serviceWorker.addEventListener('message', (e) => {
+            if (e?.data?.type === 'pushsubscriptionchange') refreshPushSubscription();
+        });
+    }
+} catch (e) { /* best-effort */ }
 
 export default app;

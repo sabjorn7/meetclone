@@ -75,3 +75,54 @@ self.addEventListener('fetch', (event) => {
     }
     // everything else → native (no respondWith)
 });
+
+// ---- Web Push (не меняет стратегию кэша выше) --------------------------------
+// showNotification вызывается ВСЕГДА, даже при пустом/битом payload (иначе iOS отзывает подписку).
+self.addEventListener('push', (event) => {
+    let d = {};
+    try { d = event.data ? event.data.json() : {}; } catch (e) { d = {}; }
+    const title = (d && d.title) || 'МитГуру';
+    const body = (d && d.body) || 'Новое уведомление';
+    const url = (d && d.data && d.data.url) || '/streams';
+    const tag = d && d.event === 'stream_start' ? `stream-${url}` : undefined;
+    event.waitUntil(
+        self.registration.showNotification(title, {
+            body,
+            icon: '/images/apple-touch-180.png',
+            badge: '/images/apple-touch-180.png',
+            data: { url },
+            tag,
+        }).catch(() => {}),
+    );
+});
+
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const url = (event.notification.data && event.notification.data.url) || '/streams';
+    event.waitUntil((async () => {
+        try {
+            const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+            for (const c of all) {
+                if ('focus' in c) { try { await c.navigate(url); } catch (e) { /* ignore */ } return c.focus(); }
+            }
+            return self.clients.openWindow(url);
+        } catch (e) { return self.clients.openWindow('/streams'); }
+    })());
+});
+
+// Браузер обновил подписку — пере-подписаться (ключ из старой подписки) и дёрнуть клиентов,
+// чтобы они переслали push_subscribe (сервер-сайд обновит endpoint/ключи).
+self.addEventListener('pushsubscriptionchange', (event) => {
+    event.waitUntil((async () => {
+        try {
+            let sub = event.newSubscription || null;
+            const old = event.oldSubscription || (await self.registration.pushManager.getSubscription());
+            const appKey = old && old.options && old.options.applicationServerKey;
+            if (!sub && appKey) {
+                sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey }).catch(() => null);
+            }
+            const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+            for (const c of all) c.postMessage({ type: 'pushsubscriptionchange' });
+        } catch (e) { /* ignore */ }
+    })());
+});

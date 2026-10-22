@@ -172,6 +172,23 @@ function clearStoredSession() {
 // The synchronous clears below are the guarantee; the network signOut is fired best-effort and NOT
 // awaited because it acquires the Web Locks auth lock and can hang.
 export async function signOutUser(sb) {
+    // Push: отписать текущий endpoint ПОКА сессия ещё активна (push_unsubscribe берёт user_id из
+    // auth.uid()) — на общих устройствах подписка не должна остаться на прежнем пользователе. Best-effort.
+    // rpc берёт auth-lock и может зависнуть — выход из аккаунта НЕ должен ждать (гонка с таймаутом 1500мс).
+    try {
+        await Promise.race([
+            (async () => {
+                if (!('serviceWorker' in navigator)) return;
+                const r = await navigator.serviceWorker.getRegistration();
+                const sub = r && (await r.pushManager.getSubscription());
+                if (sub) {
+                    try { await sb?.rpc('push_unsubscribe', { p_endpoint: sub.endpoint }); } catch (e) { /* ignore */ }
+                    try { await sub.unsubscribe(); } catch (e) { /* ignore */ }
+                }
+            })(),
+            new Promise((resolve) => setTimeout(resolve, 1500)),
+        ]);
+    } catch (e) { /* best-effort */ }
     // Read the access token BEFORE clearing — needed for server-side revocation below.
     const token = readStoredSession()?.access_token || null;
     // Clear local state FIRST and synchronously — network-independent (pure cookie/localStorage ops,

@@ -9,17 +9,17 @@
   "background_color": "#091747",
   "theme_color": "#091747",
   "icons": [
-    { "src": "images/48-favicon.png?_wwcv=271", "type": "image/png", "sizes": "48x48", "purpose": "any" },
-    { "src": "images/72-favicon.png?_wwcv=271", "type": "image/png", "sizes": "72x72", "purpose": "any" },
-    { "src": "images/96-favicon.png?_wwcv=271", "type": "image/png", "sizes": "96x96", "purpose": "any" },
-    { "src": "images/128-favicon.png?_wwcv=271", "type": "image/png", "sizes": "128x128", "purpose": "any" },
-    { "src": "images/144-favicon.png?_wwcv=271", "type": "image/png", "sizes": "144x144", "purpose": "any" },
-    { "src": "images/152-favicon.png?_wwcv=271", "type": "image/png", "sizes": "152x152", "purpose": "any" },
-    { "src": "images/192-favicon.png?_wwcv=271", "type": "image/png", "sizes": "192x192", "purpose": "any" },
-    { "src": "images/256-favicon.png?_wwcv=271", "type": "image/png", "sizes": "256x256", "purpose": "any" },
-    { "src": "images/384-favicon.png?_wwcv=271", "type": "image/png", "sizes": "384x384", "purpose": "any" },
-    { "src": "images/512-favicon.png?_wwcv=271", "type": "image/png", "sizes": "512x512", "purpose": "any" },
-    { "src": "images/maskable-192.png", "type": "image/png", "sizes": "192x192", "purpose": "maskable" },
-    { "src": "images/maskable-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+    { "src": "images/48-favicon.png?v=mg1", "type": "image/png", "sizes": "48x48", "purpose": "any" },
+    { "src": "images/72-favicon.png?v=mg1", "type": "image/png", "sizes": "72x72", "purpose": "any" },
+    { "src": "images/96-favicon.png?v=mg1", "type": "image/png", "sizes": "96x96", "purpose": "any" },
+    { "src": "images/128-favicon.png?v=mg1", "type": "image/png", "sizes": "128x128", "purpose": "any" },
+    { "src": "images/144-favicon.png?v=mg1", "type": "image/png", "sizes": "144x144", "purpose": "any" },
+    { "src": "images/152-favicon.png?v=mg1", "type": "image/png", "sizes": "152x152", "purpose": "any" },
+    { "src": "images/192-favicon.png?v=mg1", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+    { "src": "images/256-favicon.png?v=mg1", "type": "image/png", "sizes": "256x256", "purpose": "any" },
+    { "src": "images/384-favicon.png?v=mg1", "type": "image/png", "sizes": "384x384", "purpose": "any" },
+    { "src": "images/512-favicon.png?v=mg1", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    { "src": "images/maskable-192.png?v=mg1", "type": "image/png", "sizes": "192x192", "purpose": "maskable" },
+    { "src": "images/maskable-512.png?v=mg1", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
   ]
 }

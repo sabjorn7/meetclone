@@ -84,7 +84,9 @@ self.addEventListener('push', (event) => {
     const title = (d && d.title) || 'МитГуру';
     const body = (d && d.body) || 'Новое уведомление';
     const url = (d && d.data && d.data.url) || '/streams';
-    const tag = d && d.event === 'stream_start' ? `stream-${url}` : undefined;
+    let tag;
+    if (d && d.event === 'stream_start') tag = `stream-${url}`;
+    else if (d && d.event === 'direct_message' && d.data && d.data.chatId) tag = `chat-${d.data.chatId}`;
     event.waitUntil(
         self.registration.showNotification(title, {
             body,

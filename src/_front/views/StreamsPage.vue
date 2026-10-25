@@ -29,6 +29,8 @@
                         {{ pushStatus === 'subscribed' ? '🔔 Уведомления включены' : (pushBusy ? '…' : '🔔 Включить уведомления') }}
                     </button>
                     <span v-if="pushMsg" class="sp-detail-when">{{ pushMsg }}</span>
+                    <!-- Диагностика push на этом устройстве (без endpoint/ключей) — для отладки недоставки. -->
+                    <span v-if="pushDiag" class="sp-detail-when sp-push-diag">{{ pushDiag }}</span>
                 </div>
 
                 <!-- Player / gate -->
@@ -540,6 +542,7 @@ const PUSH_OWNER_ID = 'caa712f8-f5e8-484d-b46d-c56205f52ed1';
 const pushBusy = ref(false);
 const pushStatus = ref('off');   // 'off' | 'subscribed' | 'denied' | 'unsupported'
 const pushMsg = ref('');
+const pushDiag = ref('');        // одна строка диагностики push на этом устройстве (без endpoint/ключей)
 const pushUiVisible = computed(() => route.query.push === '1' || (me.value?.id || myId.value) === PUSH_OWNER_ID);
 
 // viewer-chat state
@@ -917,6 +920,27 @@ function stopPoll() {
 }
 
 // ---------- push subscription (UI только при ?push=1) ----------
+// Диагностика push на ТЕКУЩЕМ устройстве одной строкой (без endpoint/ключей) — для отладки
+// «сервер отправил, Apple принял, а уведомление не показалось». Видна под кнопкой при pushUiVisible.
+async function collectPushDiag() {
+    try {
+        const perm = (typeof Notification !== 'undefined') ? Notification.permission : 'n/a';
+        let swActive = 'no', swUrl = '—', sub = 'no';
+        if ('serviceWorker' in navigator) {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) {
+                swActive = reg.active ? 'yes' : 'no';
+                if (reg.active && reg.active.scriptURL) {
+                    try { const u = new URL(reg.active.scriptURL); swUrl = u.pathname + u.search; } catch (_) { swUrl = '?'; }
+                }
+                const s = await reg.pushManager.getSubscription();
+                sub = s ? 'yes' : 'no';
+            }
+        }
+        pushDiag.value = `perm=${perm} · sw.active=${swActive} · sw=${swUrl} · sub=${sub}`;
+    } catch (_) { pushDiag.value = 'diag: ошибка чтения'; }
+}
+
 async function enablePush() {
     if (pushBusy.value) return;
     pushBusy.value = true; pushMsg.value = '';
@@ -935,7 +959,7 @@ async function enablePush() {
         pushMsg.value = m[r.reason] || 'Не удалось включить уведомления.';
         if (r.reason === 'denied') pushStatus.value = 'denied';
     } catch (_) { pushMsg.value = 'Ошибка. Попробуйте ещё раз.'; }
-    finally { pushBusy.value = false; }
+    finally { pushBusy.value = false; collectPushDiag(); }
 }
 
 // ---------- viewer chat ----------
@@ -1229,7 +1253,7 @@ onMounted(() => {
 });
 // Статус подписки для кнопки — как только UI становится видимым (?push=1 или владелец доехал).
 watch(pushUiVisible, (v) => {
-    if (v) pushState().then((s) => { pushStatus.value = s; }).catch(() => {});
+    if (v) { pushState().then((s) => { pushStatus.value = s; }).catch(() => {}); collectPushDiag(); }
 }, { immediate: true });
 onBeforeUnmount(() => {
     stopPoll();
@@ -1742,6 +1766,15 @@ textarea.pd-input { resize: vertical; }
     font-size: 14px;
     color: #374151;
     font-weight: 600;
+}
+.sp-push-diag {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #6b7280;
+    word-break: break-all;
 }
 .sp-share-btn {
     padding: 7px 14px;

@@ -10,7 +10,7 @@
 
         <div class="mf-balance-card">
             <span class="mf-balance-label">Доступно для вывода</span>
-            <span class="mf-balance-val">{{ fmtMoney(financeState.balance) }} руб.</span>
+            <span class="mf-balance-val">{{ financeState.loaded ? fmtMoney(financeState.balance) + ' руб.' : '—' }}</span>
         </div>
 
         <div class="mf-tabs" role="tablist">
@@ -20,7 +20,8 @@
         </div>
 
         <div class="mf-panel">
-            <div v-if="!financeState.loaded" class="mf-loading">Загрузка…</div>
+            <div v-if="loadError" class="mf-loading mf-error">Не удалось загрузить. Обновите страницу.</div>
+            <div v-else-if="!financeState.loaded" class="mf-loading">Загрузка…</div>
             <template v-else>
                 <OrdersList v-if="tab === 'orders'" />
                 <SalesList v-else-if="tab === 'sales'" />
@@ -36,14 +37,16 @@ import { readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount
 import { SalesList, OrdersList, WithdrawalTab, financeState, loadMyProfilePrivate, fmtMoney } from '@/_front/financeComponents.js';
 
 const tab = ref('orders');
+const loadError = ref(false);
 
 onMounted(async () => {
-    // Гость → /login (как в прочих override-страницах).
+    // Редирект на /login ТОЛЬКО если нет сессии.
     const uid = readStoredSession()?.user?.id || authCookieUser()?.id || null;
     if (!uid) { window.location.href = '/login'; return; }
     // Баланс/uid/почта/роль — из SECURITY DEFINER RPC (не из WeWeb-коллекции).
+    // Сессия есть, но RPC не ответил (сеть/ошибка) → сообщение, НЕ редиректим на логин.
     const prof = await loadMyProfilePrivate();
-    if (!prof) { window.location.href = '/login'; return; } // RPC вернул not_authenticated
+    if (!prof) { loadError.value = true; }
 });
 </script>
 
@@ -60,6 +63,7 @@ onMounted(async () => {
 .mf-tab--on { color: #5495F3; border-bottom-color: #5495F3; }
 .mf-panel { width: 100%; }
 .mf-loading { text-align: center; color: #8A94A6; padding: 32px; }
+.mf-error { color: #E6052E; }
 
 /* ---- Списки продаж/заказов (mfs-*, из myFinanseSales) ---- */
 .mfs { display: flex; flex-direction: column; gap: 5px; width: 100%; box-sizing: border-box; }

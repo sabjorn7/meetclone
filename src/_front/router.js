@@ -358,7 +358,7 @@ const PAGE_OVERRIDES = [
     //   2) убрать '/my_finanse' из CHROME_EXCLUDE в App.vue (иначе страница без шапки/футера).
     // Откат = вернуть оба изменения. (После включения старый initMyFinanseSales становится инертным —
     // его гейт роута page-8df505c3… больше не совпадает.)
-    // { path: '/my_finanse', name: 'my_finanse', component: MyFinancePage, wwPath: 'my_finanse' },
+    { path: '/my_finanse', name: 'my_finanse', component: MyFinancePage, wwPath: 'my_finanse' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {

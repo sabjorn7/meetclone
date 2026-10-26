@@ -26,8 +26,8 @@ import { isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
 // once that page is verified live with the fixed header. The hand-written pages (streams/faq/legal)
 // are content-only now and rely on this chrome, so they are intentionally NOT excluded.
 const CHROME_EXCLUDE = [
-    // account / product ( /profile, /profile_page and /my_courses are redesigned — they get the new chrome)
-    '/my_finanse', '/feedback',
+    // account / product ( /profile, /profile_page, /my_courses and /my_finanse are redesigned — they get the new chrome)
+    '/feedback',
     // creator management: courses_manage AND articles_manage are now hand-written pages — they get the new chrome.
     // admin — /superadmin is now the hand-written panel (gets our chrome); the WeWeb legacy fallback
     // lives at /superadmin-legacy and keeps its own WeWeb header.

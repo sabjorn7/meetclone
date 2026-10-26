@@ -25,6 +25,7 @@ import RegistrationPage from './views/RegistrationPage.vue';
 import WelcomePage from './views/WelcomePage.vue';
 const DashboardPage = () => import('./views/DashboardPage.vue');
 const SuperadminPage = () => import('./views/SuperadminPage.vue');
+const MyFinancePage = () => import('./views/MyFinancePage.vue');
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
@@ -351,6 +352,13 @@ const PAGE_OVERRIDES = [
     // Post-registration welcome (RegistrationPage → /welcome). Hand-written pd-* page keeping the four
     // WeWeb «Minime» illustrations as value-prop cards. /welcome-demo is the rollback.
     { path: '/welcome', name: 'welcome', component: WelcomePage, wwPath: 'welcome' },
+    // === Полная замена /my_finanse (вариант 1, MyFinancePage) ===
+    // Проверка — на /my-finanse-demo (ниже, всегда активно, с общим chrome). Чтобы ВКЛЮЧИТЬ подмену:
+    //   1) раскомментировать строку ниже (WeWeb-страница my_finanse будет пропущена в цикле);
+    //   2) убрать '/my_finanse' из CHROME_EXCLUDE в App.vue (иначе страница без шапки/футера).
+    // Откат = вернуть оба изменения. (После включения старый initMyFinanseSales становится инертным —
+    // его гейт роута page-8df505c3… больше не совпадает.)
+    // { path: '/my_finanse', name: 'my_finanse', component: MyFinancePage, wwPath: 'my_finanse' },
 ];
 const OVERRIDE_WW_PATHS = new Set(PAGE_OVERRIDES.map((o) => o.wwPath).filter(Boolean));
 for (const o of PAGE_OVERRIDES) {
@@ -431,6 +439,14 @@ routes.push({
     path: '/course-demo',
     name: 'course-demo',
     component: CoursePage,
+});
+
+// Standalone демо полной замены /my_finanse (тот же MyFinancePage, что и в закомментированном override выше).
+// Для проверки до включения подмены; физический dist/my-finanse-demo/index.html — через vite.config.js.
+routes.push({
+    path: '/my-finanse-demo',
+    name: 'my-finanse-demo',
+    component: MyFinancePage,
 });
 
 const page404 = window.wwg_designInfo.pages.find(page => page.paths.default === '404');

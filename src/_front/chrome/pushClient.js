@@ -66,6 +66,20 @@ export async function refreshPushSubscription() {
     } catch (_) { /* best-effort */ }
 }
 
+// Отписаться на этом устройстве: push_unsubscribe (сервер, по endpoint) + sub.unsubscribe() (браузер).
+// user_id на сервере берётся из auth.uid() (SECURITY DEFINER). Возвращает { ok }.
+export async function unsubscribeFromPush() {
+    try {
+        const r = await reg();
+        const sub = r && (await r.pushManager.getSubscription());
+        if (sub) {
+            try { await getSupabase().rpc('push_unsubscribe', { p_endpoint: sub.endpoint }); } catch (_) { /* ignore */ }
+            try { await sub.unsubscribe(); } catch (_) { /* ignore */ }
+        }
+        return { ok: true };
+    } catch (_) { return { ok: false }; }
+}
+
 // Текущее состояние для UI кнопки.
 export async function pushState() {
     if (!isPushSupported()) return 'unsupported';

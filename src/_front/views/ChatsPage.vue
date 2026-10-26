@@ -24,6 +24,8 @@
             <div class="pd-wrap">
                 <h1 class="pd-hero__title" data-reveal>Чаты</h1>
                 <p class="pd-hero__sub" data-reveal>Личные сообщения и группы с преподавателями и участниками сообщества.</p>
+                <!-- Push-подписка — всем залогиненным; iPhone вне standalone получает подсказку «на Домой». -->
+                <div class="pd-push" data-reveal><PushToggle /></div>
             </div>
         </header>
 
@@ -311,6 +313,7 @@ import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/
 import { listBlockedUserIds, blockUser, unblockUser, reportContent } from '@/_front/moderation/moderationApi.js';
 import { uploadChatFile, validateFile, formatBytes, ACCEPT_ATTR, pickAudioFormat, audioRecordingSupported } from '@/_front/helpers/chatAttachments.js';
 import VoiceMessagePlayer from '@/_front/components/VoiceMessagePlayer.vue';
+import PushToggle from '@/_front/components/PushToggle.vue';
 import { encodeBlobToMp3 } from '@/_front/helpers/mp3Encode.js';
 
 const CHAT_COLS = 'id, user_1, user_2, users, read, sort_date, is_group, title, creator';
@@ -928,6 +931,7 @@ function ensureFonts() {
 .pd-hero { padding: 48px 0 24px; }
 .pd-hero__title { margin: 0; font-weight: 800; font-size: clamp(2rem, 4.6vw, 3rem); line-height: 1.04; letter-spacing: -0.03em; }
 .pd-hero__sub { margin: 14px 0 0; color: var(--ink-2); font-size: 1.08rem; }
+.pd-push { margin-top: 16px; }
 
 /* ── Chat shell ─────────────────────────────────────────────────────────── */
 .pd-chat { display: grid; grid-template-columns: 340px 1fr; gap: 20px; height: 640px; }

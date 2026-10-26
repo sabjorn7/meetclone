@@ -23,15 +23,8 @@
                     <button class="sp-btn sp-btn-secondary sp-share-btn" @click="shareStream">🔗 {{ shareMsg || 'Поделиться' }}</button>
                 </div>
 
-                <!-- Push-подписка — видна при ?push=1 ИЛИ у владельца (в PWA нет адресной строки). -->
-                <div v-if="pushUiVisible" class="sp-detail-sub">
-                    <button class="sp-btn sp-btn-secondary" :disabled="pushBusy || pushStatus === 'subscribed'" @click="enablePush">
-                        {{ pushStatus === 'subscribed' ? '🔔 Уведомления включены' : (pushBusy ? '…' : '🔔 Включить уведомления') }}
-                    </button>
-                    <span v-if="pushMsg" class="sp-detail-when">{{ pushMsg }}</span>
-                    <!-- Диагностика push на этом устройстве (без endpoint/ключей) — для отладки недоставки. -->
-                    <span v-if="pushDiag" class="sp-detail-when sp-push-diag">{{ pushDiag }}</span>
-                </div>
+                <!-- Push-подписка — всем залогиненным; iPhone вне standalone получает подсказку «на Домой». -->
+                <div class="sp-detail-sub"><PushToggle /></div>
 
                 <!-- Player / gate -->
                 <div class="sp-player-wrap">
@@ -465,8 +458,7 @@ import { listCohosts, getMyCohostRole } from '@/_front/streams/cohosts.js';
 // Fast auth: resolve the uid from the stored session/cookie synchronously (no stall-prone
 // auth.getSession()), and wait out the session-restore race without flashing "no access".
 import { readStoredSession, authCookieUser, waitForUid } from '@/_front/chrome/headerAccount.js';
-// Push-подписка (кнопка скрыта за ?push=1 — этап внедрения).
-import { subscribeToPush, pushState } from '@/_front/chrome/pushClient.js';
+import PushToggle from '@/_front/components/PushToggle.vue';
 import { logClientEvent } from '@/_front/chrome/errorLogger.js';
 
 const route = useRoute();
@@ -535,15 +527,6 @@ const inviteEmail = ref('');
 const inviting = ref(false);
 const confirmRemoveId = ref(null); // inline "точно?" confirm per cohost row
 const removingId = ref(null);
-
-// push-подписка. UI виден при ?push=1 ИЛИ у владельца (в установленном PWA адресной строки нет,
-// ?push=1 дописать негде). Остальным кнопка не видна.
-const PUSH_OWNER_ID = 'caa712f8-f5e8-484d-b46d-c56205f52ed1';
-const pushBusy = ref(false);
-const pushStatus = ref('off');   // 'off' | 'subscribed' | 'denied' | 'unsupported'
-const pushMsg = ref('');
-const pushDiag = ref('');        // одна строка диагностики push на этом устройстве (без endpoint/ключей)
-const pushUiVisible = computed(() => route.query.push === '1' || (me.value?.id || myId.value) === PUSH_OWNER_ID);
 
 // viewer-chat state
 const messages = ref([]);
@@ -919,49 +902,6 @@ function stopPoll() {
     }
 }
 
-// ---------- push subscription (UI только при ?push=1) ----------
-// Диагностика push на ТЕКУЩЕМ устройстве одной строкой (без endpoint/ключей) — для отладки
-// «сервер отправил, Apple принял, а уведомление не показалось». Видна под кнопкой при pushUiVisible.
-async function collectPushDiag() {
-    try {
-        const perm = (typeof Notification !== 'undefined') ? Notification.permission : 'n/a';
-        let swActive = 'no', swUrl = '—', sub = 'no';
-        if ('serviceWorker' in navigator) {
-            const reg = await navigator.serviceWorker.getRegistration();
-            if (reg) {
-                swActive = reg.active ? 'yes' : 'no';
-                if (reg.active && reg.active.scriptURL) {
-                    try { const u = new URL(reg.active.scriptURL); swUrl = u.pathname + u.search; } catch (_) { swUrl = '?'; }
-                }
-                const s = await reg.pushManager.getSubscription();
-                sub = s ? 'yes' : 'no';
-            }
-        }
-        pushDiag.value = `perm=${perm} · sw.active=${swActive} · sw=${swUrl} · sub=${sub}`;
-    } catch (_) { pushDiag.value = 'diag: ошибка чтения'; }
-}
-
-async function enablePush() {
-    if (pushBusy.value) return;
-    pushBusy.value = true; pushMsg.value = '';
-    try {
-        const r = await subscribeToPush();
-        if (r.ok) { pushStatus.value = 'subscribed'; pushMsg.value = 'Готово — уведомления включены.'; return; }
-        const m = {
-            unsupported: 'Уведомления недоступны в этом браузере (на iPhone — установите приложение на экран «Домой»).',
-            no_vapid: 'Push ещё не настроен на сервере.',
-            denied: 'Уведомления заблокированы в настройках браузера.',
-            dismissed: 'Разрешение не выдано.',
-            no_sw: 'Service worker не готов — обновите страницу.',
-            subscribe_failed: 'Не удалось подписаться.',
-            save_failed: 'Не удалось сохранить подписку.',
-        };
-        pushMsg.value = m[r.reason] || 'Не удалось включить уведомления.';
-        if (r.reason === 'denied') pushStatus.value = 'denied';
-    } catch (_) { pushMsg.value = 'Ошибка. Попробуйте ещё раз.'; }
-    finally { pushBusy.value = false; collectPushDiag(); }
-}
-
 // ---------- viewer chat ----------
 function msgTime(iso) {
     return iso ? new Date(iso).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
@@ -1251,10 +1191,6 @@ onMounted(() => {
     if (activeStreamId.value) loadDetail(activeStreamId.value);
     load();
 });
-// Статус подписки для кнопки — как только UI становится видимым (?push=1 или владелец доехал).
-watch(pushUiVisible, (v) => {
-    if (v) { pushState().then((s) => { pushStatus.value = s; }).catch(() => {}); collectPushDiag(); }
-}, { immediate: true });
 onBeforeUnmount(() => {
     stopPoll();
     stopChatPoll();
@@ -1766,15 +1702,6 @@ textarea.pd-input { resize: vertical; }
     font-size: 14px;
     color: #374151;
     font-weight: 600;
-}
-.sp-push-diag {
-    display: block;
-    margin-top: 4px;
-    font-size: 12px;
-    font-weight: 500;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    color: #6b7280;
-    word-break: break-all;
 }
 .sp-share-btn {
     padding: 7px 14px;

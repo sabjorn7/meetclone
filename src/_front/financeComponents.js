@@ -278,18 +278,93 @@ export const WithdrawalTab = {
             finally { requesting.value = false; }
         }
 
+        // --- Подтяжка по ИНН/БИК (DaData/ФНС через edge-функцию requisites-lookup). Только удобство:
+        //     всё остаётся редактируемым, серверные проверки save_my_requisites не ослабляются. ---
+        const innBusy = ref(false), bikBusy = ref(false);
+        const innMsg = ref(''), bikMsg = ref(''), npdHint = ref(''), typeWarn = ref('');
+
+        function reasonMsg(reason) {
+            if (reason === 'rate_limited') return 'Слишком часто. Попробуйте через минуту.';
+            if (reason === 'not_found') return 'По этому номеру ничего не найдено.';
+            return 'Не удалось подтянуть, заполните вручную.'; // unavailable / bad_query / прочее
+        }
+        async function invokeLookup(kind, query) {
+            const c = supa(); if (!c) return { ok: false, reason: 'unavailable' };
+            try {
+                const { data, error } = await c.functions.invoke('requisites-lookup', { body: { kind, query } });
+                if (error || !data) return { ok: false, reason: 'unavailable' };
+                return data;
+            } catch (_) { return { ok: false, reason: 'unavailable' }; }
+        }
+        // Заполнить набор полей: пустые — сразу; если НЕпустое поле изменится — один общий confirm.
+        function applyFields(pairs) {
+            const changesNonEmpty = pairs.some(([k, v]) => v && f[k] && f[k] !== v);
+            let overwrite = true;
+            if (changesNonEmpty) overwrite = window.confirm('Перезаписать уже заполненные поля данными из справочника?');
+            for (const [k, v] of pairs) { if (v && (!f[k] || overwrite)) f[k] = v; }
+        }
+        async function lookupInn() {
+            if (innBusy.value) return;
+            innMsg.value = ''; typeWarn.value = ''; npdHint.value = '';
+            const q = String(f.inn).replace(/\D/g, '');
+            if (!(q.length === 10 || q.length === 12)) { innMsg.value = 'ИНН: 10 цифр (организация) или 12 (ИП/физлицо).'; return; }
+            innBusy.value = true;
+            try {
+                if (f.recipient_type === 'self_employed') {
+                    const r = await invokeLookup('npd', q);
+                    npdHint.value = r.ok
+                        ? (r.data.npd === 'yes' ? 'Статус самозанятого: подтверждён'
+                            : r.data.npd === 'no' ? 'Статус самозанятого: не найден'
+                                : 'Статус самозанятого: проверить не удалось')
+                        : 'Статус самозанятого: проверить не удалось';
+                    return;
+                }
+                const r = await invokeLookup('party', q);
+                if (!r.ok) { innMsg.value = reasonMsg(r.reason); return; }
+                const d = r.data || {};
+                applyFields([['name', d.name], ['kpp', d.kpp], ['ogrn', d.ogrn]]);
+                if (d.status && d.status !== 'действует') innMsg.value = `Внимание: по справочнику — «${d.status}».`;
+                if (d.type === 'INDIVIDUAL' && f.recipient_type === 'ooo') typeWarn.value = 'По ИНН это ИП/физлицо, а выбран тип «ООО» — проверьте тип получателя.';
+                if (d.type === 'LEGAL' && f.recipient_type === 'ip') typeWarn.value = 'По ИНН это организация, а выбран тип «ИП» — проверьте тип получателя.';
+            } finally { innBusy.value = false; }
+        }
+        async function lookupBik() {
+            if (bikBusy.value) return;
+            bikMsg.value = '';
+            const q = String(f.bik).replace(/\D/g, '');
+            if (q.length !== 9) { bikMsg.value = 'БИК: 9 цифр.'; return; }
+            bikBusy.value = true;
+            try {
+                const r = await invokeLookup('bank', q);
+                if (!r.ok) { bikMsg.value = reasonMsg(r.reason); return; }
+                const d = r.data || {};
+                applyFields([['bank_name', d.bank_name], ['corr_account', d.corr_account]]);
+            } finally { bikBusy.value = false; }
+        }
+
         onMounted(async () => {
             await Promise.all([loadRequisites(), loadHistory()]);
             loading.value = false;
         });
 
         return { loading, f, typeChanged, needKpp, needOgrn, ogrnLabel, nameLabel, saving, reqErr, reqOk,
-            amount, requesting, wdErr, wdOk, history, balance, saveRequisites, doWithdraw };
+            amount, requesting, wdErr, wdOk, history, balance, saveRequisites, doWithdraw,
+            innBusy, bikBusy, innMsg, bikMsg, npdHint, typeWarn, lookupInn, lookupBik };
     },
     render() {
         const field = (label, _model, key, attrs = {}) => h('label', { class: 'mfw-field' }, [
             h('span', { class: 'mfw-label' }, label),
             h('input', { class: 'mfw-input', value: this.f[key], onInput: (e) => { this.f[key] = e.target.value; }, ...attrs }),
+        ]);
+        // Поле с кнопкой подтяжки (ИНН/БИК) + строка сообщения + доп. узлы (предупреждение о типе / НПД).
+        const fieldBtn = (label, key, btnLabel, onClick, busy, msg, attrs = {}, extra = []) => h('div', { class: 'mfw-field' }, [
+            h('span', { class: 'mfw-label' }, label),
+            h('div', { class: 'mfw-wrow' }, [
+                h('input', { class: 'mfw-input mfw-grow', value: this.f[key], onInput: (e) => { this.f[key] = e.target.value; }, ...attrs }),
+                h('button', { class: 'mfw-btn', type: 'button', disabled: busy, onClick }, busy ? '…' : btnLabel),
+            ]),
+            msg ? h('div', { class: 'mfw-hint' }, msg) : null,
+            ...extra,
         ]);
         if (this.loading) return h('div', { class: 'mfw' }, h('div', { class: 'mfw-empty' }, 'Загрузка…'));
 
@@ -301,11 +376,16 @@ export const WithdrawalTab = {
             ]),
             this.typeChanged ? h('div', { class: 'mfw-note' }, 'Смена типа получателя будет отмечена для администратора.') : null,
             field(this.nameLabel, this.f, 'name'),
-            field(this.f.recipient_type === 'ooo' ? 'ИНН (10 цифр)' : 'ИНН (12 цифр)', this.f, 'inn', { inputmode: 'numeric' }),
+            fieldBtn(this.f.recipient_type === 'ooo' ? 'ИНН (10 цифр)' : 'ИНН (12 цифр)', 'inn',
+                this.f.recipient_type === 'self_employed' ? 'Проверить статус' : 'Подтянуть по ИНН',
+                this.lookupInn, this.innBusy, this.innMsg, { inputmode: 'numeric' }, [
+                    this.typeWarn ? h('div', { class: 'mfw-note' }, this.typeWarn) : null,
+                    this.npdHint ? h('div', { class: 'mfw-hint' }, this.npdHint) : null,
+                ]),
             this.needKpp ? field('КПП (9 цифр)', this.f, 'kpp', { inputmode: 'numeric' }) : null,
             this.needOgrn ? field(`${this.ogrnLabel} (${this.f.recipient_type === 'ip' ? '15' : '13'} цифр)`, this.f, 'ogrn', { inputmode: 'numeric' }) : null,
             field('Банк', this.f, 'bank_name'),
-            field('БИК (9 цифр)', this.f, 'bik', { inputmode: 'numeric' }),
+            fieldBtn('БИК (9 цифр)', 'bik', 'Подтянуть по БИК', this.lookupBik, this.bikBusy, this.bikMsg, { inputmode: 'numeric' }),
             field('Расчётный счёт (20 цифр)', this.f, 'account', { inputmode: 'numeric' }),
             field('Корр. счёт (20 цифр, необязательно)', this.f, 'corr_account', { inputmode: 'numeric' }),
             h('div', { class: 'mfw-actions' }, [

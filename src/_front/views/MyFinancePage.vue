@@ -106,6 +106,8 @@ onMounted(async () => {
 .mfw-balance { font-size: 17px; font-weight: 600; color: #1B1F27; }
 .mfw-wrow { display: flex; gap: 10px; flex-wrap: wrap; }
 .mfw-amount { max-width: 200px; }
+.mfw-grow { flex: 1 1 auto; min-width: 0; }
+.mfw-hint { font-size: 13px; color: #8A94A6; }
 .mfw-btn { height: 42px; padding: 0 18px; border-radius: 8px; border: 1px solid #5495F3; background: #fff; color: #5495F3; font-size: 14px; font-weight: 600; cursor: pointer; }
 .mfw-btn:disabled { opacity: .6; cursor: default; }
 .mfw-btn-primary { background: #5495F3; color: #fff; }

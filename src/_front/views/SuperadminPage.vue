@@ -157,15 +157,18 @@
                             <span><b>{{ r.authorName }}</b> · <b>{{ fmtRub(r.amount) }}</b></span>
                             <span class="rcard__meta">{{ fmtDate(r.created_at) }}</span>
                         </div>
+                        <div v-if="r.req_changed_recently" class="pcard__warn">⚠️ Реквизиты недавно изменены ({{ fmtDate(r.req_updated_at) }}) — проверьте внимательнее</div>
                         <div class="pcard__bank">
-                            <span class="pcard__label">Банк: {{ r.name_bank || '—' }}</span>
+                            <span class="pcard__label">Банк: {{ reqf(r, 'bank_name') }}<template v-if="rtypeLabel(r)"> · {{ rtypeLabel(r) }}</template></span>
                             <button v-if="!r.revealed" type="button" class="pcard__reveal" @click="r.revealed = true">Показать реквизиты</button>
                             <div v-else class="pcard__reqs">
-                                <div>ИНН: {{ r.inn || '—' }}</div>
-                                <div>КПП: {{ r.kpp || '—' }}</div>
-                                <div>БИК: {{ r.bik || '—' }}</div>
-                                <div>Р/С: {{ r.pc || '—' }}</div>
-                                <div>К/С: {{ r.kc || '—' }}</div>
+                                <div v-if="reqf(r, 'name') !== '—'">ФИО/наим.: {{ reqf(r, 'name') }}</div>
+                                <div>ИНН: {{ reqf(r, 'inn') }}</div>
+                                <div v-if="reqf(r, 'kpp') !== '—'">КПП: {{ reqf(r, 'kpp') }}</div>
+                                <div v-if="reqf(r, 'ogrn') !== '—'">ОГРН(ИП): {{ reqf(r, 'ogrn') }}</div>
+                                <div>БИК: {{ reqf(r, 'bik') }}</div>
+                                <div>Р/С: {{ reqf(r, 'account') }}</div>
+                                <div>К/С: {{ reqf(r, 'corr_account') }}</div>
                                 <button type="button" class="pcard__reveal" @click="r.revealed = false">Скрыть</button>
                             </div>
                         </div>
@@ -411,6 +414,9 @@ let toastTimer = null;
 function toast(m) { toastMsg.value = m; if (toastTimer) clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = ''; }, 3000); }
 function fmtDate(iso) { if (!iso) return ''; const d = new Date(iso); const p = (n) => String(n).padStart(2, '0'); return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`; }
 const fmtRub = (n) => `${Math.round(Number(n) || 0).toLocaleString('ru-RU')} ₽`;
+// Реквизиты из снимка заявки (admin_list_withdrawals.requisites jsonb).
+function reqf(r, k) { const v = r && r.requisites ? r.requisites[k] : null; return (v === null || v === undefined || v === '') ? '—' : v; }
+function rtypeLabel(r) { const t = r && (r.recipient_type || (r.requisites && r.requisites.recipient_type)); return t === 'self_employed' ? 'Самозанятый' : t === 'ip' ? 'ИП' : t === 'ooo' ? 'ООО' : ''; }
 
 async function loadAuthors() {
     authors.loading = true;
@@ -430,13 +436,14 @@ function askCommission(a) { modal.open = true; modal.entity = 'commission'; moda
 async function loadPayoutQueue() {
     pqueue.loading = true;
     try {
-        const { data } = await sb.from('sales').select('id,"user",amount,created_at,name_bank,inn,kpp,bik,pc,kc')
-            .eq('status', 'Запрошено').order('created_at', { ascending: true });
-        const rows = data || [];
-        const ids = [...new Set(rows.map((r) => r.user).filter(Boolean))];
-        const users = {};
-        if (ids.length) { const { data: us } = await sb.from('users').select('id,"Name"').in('id', ids); for (const u of (us || [])) users[u.id] = u.Name; }
-        pqueue.rows = rows.map((r) => ({ ...r, authorName: users[r.user] || (r.user ? 'Автор' : '— (нет user)'), revealed: false }));
+        // Реквизиты/заявки — только через admin-gated RPC (таблица withdrawal_requests закрыта RLS).
+        const { data, error } = await sb.rpc('admin_list_withdrawals', { p_status: 'Запрошено' });
+        if (error) throw error;
+        pqueue.rows = (data || []).map((r) => ({
+            ...r,
+            authorName: r.author_name || (r.user_id ? 'Автор' : '— (нет user)'),
+            revealed: false,
+        }));
         counts.payouts = pqueue.rows.length;
     } catch (e) { console.warn('loadPayoutQueue failed', e); }
     pqueue.loading = false;
@@ -655,8 +662,8 @@ async function confirmAction() {
         let res, done;
         if (modal.entity === 'payout') {
             res = modal.mode === 'approve'
-                ? await sb.rpc('admin_approve_withdrawal', { p_sale: id, p_comment: comment || null })
-                : await sb.rpc('admin_reject_withdrawal', { p_sale: id, p_comment: comment || null });
+                ? await sb.rpc('admin_approve_withdrawal_v2', { p_id: id, p_comment: comment || null })
+                : await sb.rpc('admin_reject_withdrawal_v2', { p_id: id, p_comment: comment || null });
         } else if (modal.entity === 'commission') {
             res = await sb.rpc('admin_set_commission', { p_user: id, p_value: modal.value, p_reason: comment });
         } else if (modal.entity === 'report') {
@@ -808,6 +815,7 @@ onMounted(async () => {
 /* S5 Выплаты — payout cards */
 .pcard { border: 1px solid #eceef2; border-radius: 14px; padding: 16px; }
 .pcard__head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; font-size: 15px; }
+.pcard__warn { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; font-size: 13px; font-weight: 600; }
 .pcard__bank { background: #f7f9fc; border: 1px solid #eef1f5; border-radius: 10px; padding: 12px; margin-bottom: 12px; font-size: 14px; }
 .pcard__label { color: #5b6472; }
 .pcard__reveal { margin-left: 12px; appearance: none; border: none; background: none; color: #5495f3; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; }

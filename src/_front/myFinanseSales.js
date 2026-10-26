@@ -9,6 +9,7 @@
 // The original heavy lists are CSS-hidden and the sales collection is limited to 1 row
 // (page JSON) so WeWeb stops rendering them. Responsive: tables on desktop, cards on mobile.
 import { createApp, h, ref, onMounted } from 'vue';
+import { WithdrawalTab, WD_ANCHOR_UID, WD_ROOT_ID, WD_CSS, hideNativeWithdrawalForm } from '@/_front/myFinanseWithdrawal.js';
 
 const MY_FINANSE_PAGE_ID = '8df505c3-6c02-4a63-9666-e17c4d845756';
 const PROFILE_PAGE_ID = '6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d';
@@ -256,7 +257,7 @@ function injectStyleOnce() {
     if (document.getElementById(STYLE_ID)) return;
     const s = document.createElement('style');
     s.id = STYLE_ID;
-    s.textContent = CSS;
+    s.textContent = CSS + WD_CSS;
     document.head.appendChild(s);
 }
 
@@ -274,8 +275,10 @@ function unmountAll() {
     clearWaiters();
     unmountApp(SALES_ROOT_ID);
     unmountApp(ORDERS_ROOT_ID);
+    unmountApp(WD_ROOT_ID);
     document.getElementById(SALES_ROOT_ID)?.remove();
     document.getElementById(ORDERS_ROOT_ID)?.remove();
+    document.getElementById(WD_ROOT_ID)?.remove();
 }
 function mountOne(anchorUid, rootId, Comp) {
     if (document.getElementById(rootId)) return; // already mounted and present
@@ -296,6 +299,8 @@ function tryMount() {
     if (!wwLib.wwPlugins?.[AUTH_PLUGIN_ID]?.isAuthenticated) return;
     mountOne(SALES_ANCHOR_UID, SALES_ROOT_ID, SalesList);
     mountOne(ORDERS_ANCHOR_UID, ORDERS_ROOT_ID, OrdersList);
+    mountOne(WD_ANCHOR_UID, WD_ROOT_ID, WithdrawalTab);
+    hideNativeWithdrawalForm();
 }
 function waitAndMount() {
     injectStyleOnce();

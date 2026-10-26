@@ -9,7 +9,7 @@
 // The original heavy lists are CSS-hidden and the sales collection is limited to 1 row
 // (page JSON) so WeWeb stops rendering them. Responsive: tables on desktop, cards on mobile.
 import { createApp, h, ref, onMounted } from 'vue';
-import { WithdrawalTab, WD_ANCHOR_UID, WD_ROOT_ID, WD_CSS, hideNativeWithdrawalForm } from '@/_front/myFinanseWithdrawal.js';
+import { WithdrawalTab, WD_ANCHOR_UID, WD_ROOT_ID, WD_CSS, hideNativeWithdrawalForm, setWithdrawalMounted } from '@/_front/myFinanseWithdrawal.js';
 
 const MY_FINANSE_PAGE_ID = '8df505c3-6c02-4a63-9666-e17c4d845756';
 const PROFILE_PAGE_ID = '6ff5d3f0-8211-4a41-9774-a6e6a9d8e55d';
@@ -279,12 +279,13 @@ function unmountAll() {
     document.getElementById(SALES_ROOT_ID)?.remove();
     document.getElementById(ORDERS_ROOT_ID)?.remove();
     document.getElementById(WD_ROOT_ID)?.remove();
+    document.documentElement.removeAttribute('data-mfw-wd-ok'); // ушли со страницы — снимаем гейт скрытия
 }
 function mountOne(anchorUid, rootId, Comp) {
-    if (document.getElementById(rootId)) return; // already mounted and present
+    if (document.getElementById(rootId)) return 'present'; // already mounted and present
     unmountApp(rootId); // the tab was re-created — drop the stale (detached) app first
     const anchor = document.querySelector(`[class*="ww-element-${anchorUid}"]`);
-    if (!anchor?.parentNode) return;
+    if (!anchor?.parentNode) return 'no-anchor';
     const el = document.createElement('div');
     el.id = rootId;
     el.style.width = '100%';
@@ -292,6 +293,7 @@ function mountOne(anchorUid, rootId, Comp) {
     const app = createApp(Comp);
     app.mount(el);
     appByRoot[rootId] = app;
+    return 'mounted';
 }
 // WeWeb re-creates a tab's DOM each time you switch to it, destroying our mounted root.
 // Keep observing and re-mount whenever an anchor reappears without our component.
@@ -299,7 +301,8 @@ function tryMount() {
     if (!wwLib.wwPlugins?.[AUTH_PLUGIN_ID]?.isAuthenticated) return;
     mountOne(SALES_ANCHOR_UID, SALES_ROOT_ID, SalesList);
     mountOne(ORDERS_ANCHOR_UID, ORDERS_ROOT_ID, OrdersList);
-    mountOne(WD_ANCHOR_UID, WD_ROOT_ID, WithdrawalTab);
+    const wdStatus = mountOne(WD_ANCHOR_UID, WD_ROOT_ID, WithdrawalTab);
+    setWithdrawalMounted(wdStatus);   // ставит/снимает html[data-mfw-wd-ok] + пошаговый лог
     hideNativeWithdrawalForm();
 }
 function waitAndMount() {

@@ -56,11 +56,36 @@ function lcaOf(elements) {
     return anc[0] || null;
 }
 
+// Диагностический логгер (change-gated, чтобы observer не спамил консоль одинаковыми строками).
+let _mfwLast = '';
+function mlog(msg) {
+    if (msg === _mfwLast) return;
+    _mfwLast = msg;
+    try { console.log('[mfw] ' + msg); } catch (_) { /* noop */ }
+}
+
+// Включает/выключает скрытие нативной формы в зависимости от того, смонтирован ли наш root.
+// status: 'mounted' | 'present' | 'no-anchor' (возврат mountOne из myFinanseSales.js).
+export function setWithdrawalMounted(status) {
+    if (status === 'no-anchor') {
+        document.documentElement.removeAttribute('data-mfw-wd-ok'); // root нет → нативную форму НЕ прячем (не «пусто»)
+        mlog('WD: якорь 6e036746 НЕ найден — вкладка вывода не в DOM; нативная форма оставлена видимой');
+        return;
+    }
+    document.documentElement.setAttribute('data-mfw-wd-ok', '1');   // root есть → CSS прячет 7 UID
+    if (status === 'mounted') mlog('WD: якорь найден, root СМОНТИРОВАН');
+}
+
 export function hideNativeWithdrawalForm() {
     try {
+        // Пока наш компонент не смонтирован — ничего не прячем (иначе на вкладке будет пусто).
+        if (!document.getElementById(WD_ROOT_ID)) { mlog('WD: root ещё не смонтирован — нативную форму не трогаем'); return; }
         const sel = WD_FIELD_UIDS.map((u) => `[class*="ww-element-${u}"]`).join(',');
         const els = Array.from(document.querySelectorAll(sel)).filter((e) => !e.closest(`#${WD_ROOT_ID}`));
-        if (els.length < WD_FIELD_UIDS.length) return;           // не все поля отрисованы — CSS пока держит 7
+        if (els.length < WD_FIELD_UIDS.length) {                 // не все поля отрисованы — CSS держит найденные
+            mlog(`WD native fields: ${els.length}/${WD_FIELD_UIDS.length} — ждём отрисовку остальных`);
+            return;
+        }
         const lca = lcaOf(els);
         if (lca && lca.getAttribute && lca.getAttribute('data-mfw-hidden')) return; // уже спрятан — тихо выходим
 
@@ -83,11 +108,11 @@ export function hideNativeWithdrawalForm() {
         if (ok) {
             lca.style.display = 'none';
             lca.setAttribute('data-mfw-hidden', '1');
-            console.log(`[mfw] native withdrawal form hidden: lca (nodes=${nodes})`);
+            mlog(`WD native hidden: lca (nodes=${nodes}, fields=${els.length}/${WD_FIELD_UIDS.length})`);
         } else {
-            console.log('[mfw] native withdrawal form: fallback (CSS 7 UID), lca unsafe/absent');
+            mlog(`WD native: fallback CSS 7 UID (fields=${els.length}/${WD_FIELD_UIDS.length}, lca unsafe/absent)`);
         }
-    } catch (_) { console.log('[mfw] native withdrawal form: fallback (CSS 7 UID), error'); }
+    } catch (_) { mlog('WD native: fallback CSS 7 UID (ошибка в hideNativeWithdrawalForm)'); }
 }
 
 const TYPES = [
@@ -266,13 +291,14 @@ export const WD_CSS = `
      Комментарий(user_comment)=1ea7576f · кнопка отправки(WD_BUTTON)=21e9a5a1.
    TODO (подтвердить в WeWeb-редакторе — ровно 2 из кандидатов 7a8e6bc4 / 8f662061 / d3e5284d / ebaf5ae9):
      поля «Сумма» и «Банк/Наименование» — добавить их UID в селектор ниже, иначе они останутся видимы. */
-[class*="ww-element-b69110dc-f6fa-4bec-8b80-da2aa7434b0a"],
-[class*="ww-element-933d5e88-9381-481c-b452-4596ae8d47fb"],
-[class*="ww-element-df2974d1-1dfc-4b7d-9f0c-045942ab992e"],
-[class*="ww-element-4514faa7-72f8-4ce3-a92d-f203c4acb530"],
-[class*="ww-element-0ccb0198-584c-47ba-8d50-510789d53e64"],
-[class*="ww-element-1ea7576f-7ed9-4061-aaac-4ca7a2edd7e2"],
-button[class*="ww-element-21e9a5a1-07ff-43bf-bb3b-957f122b6b8a"]{display:none !important;}
+/* Скрываем ТОЛЬКО когда наш root смонтирован (html[data-mfw-wd-ok]); иначе нативная форма видима — не «пусто». */
+:root[data-mfw-wd-ok] [class*="ww-element-b69110dc-f6fa-4bec-8b80-da2aa7434b0a"],
+:root[data-mfw-wd-ok] [class*="ww-element-933d5e88-9381-481c-b452-4596ae8d47fb"],
+:root[data-mfw-wd-ok] [class*="ww-element-df2974d1-1dfc-4b7d-9f0c-045942ab992e"],
+:root[data-mfw-wd-ok] [class*="ww-element-4514faa7-72f8-4ce3-a92d-f203c4acb530"],
+:root[data-mfw-wd-ok] [class*="ww-element-0ccb0198-584c-47ba-8d50-510789d53e64"],
+:root[data-mfw-wd-ok] [class*="ww-element-1ea7576f-7ed9-4061-aaac-4ca7a2edd7e2"],
+:root[data-mfw-wd-ok] button[class*="ww-element-21e9a5a1-07ff-43bf-bb3b-957f122b6b8a"]{display:none !important;}
 #${WD_ROOT_ID}{width:100%;}
 .mfw{display:flex;flex-direction:column;gap:16px;width:100%;box-sizing:border-box;}
 .mfw *{box-sizing:border-box;}

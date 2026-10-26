@@ -136,7 +136,10 @@
                                 <td><span class="role-chip">{{ a.role }}</span></td>
                                 <td class="ta-r strong">{{ a.authorCommission ?? 100 }}%</td>
                                 <td class="ta-r muted">{{ fmtRub(a.Ammount) }}</td>
-                                <td class="ta-r acts"><button type="button" class="btn btn-ghost" @click="askCommission(a)">Изменить</button></td>
+                                <td class="ta-r acts">
+                                    <button type="button" class="btn btn-ghost" @click="askCommission(a)">Комиссия</button>
+                                    <button type="button" class="btn btn-ghost" @click="askBalance(a)">Баланс</button>
+                                </td>
                             </tr>
                         </tbody>
                     </table>
@@ -311,8 +314,8 @@
                     <p v-if="modalItemLabel" class="sa-modal__course">«{{ modalItemLabel }}»</p>
                     <p v-if="modalCfg.warn" class="sa-modal__warn">{{ modalCfg.warn }}</p>
                     <template v-if="modalCfg.needsValue">
-                        <label class="sa-modal__field">Новая комиссия, %
-                            <input type="number" v-model.number="modal.value" min="0" max="100" step="1" class="sa-modal__num" />
+                        <label class="sa-modal__field">{{ modalCfg.valueLabel || 'Новая комиссия, %' }}
+                            <input type="number" v-model.number="modal.value" :min="modalCfg.numMin" :max="modalCfg.numMax" :step="modalCfg.numStep ?? 1" class="sa-modal__num" />
                         </label>
                     </template>
                     <template v-if="modalCfg.needsComment || modalCfg.optionalComment">
@@ -323,7 +326,7 @@
                     <div class="sa-modal__acts">
                         <button type="button" class="btn btn-ghost" :disabled="modal.busy" @click="closeModal">Отмена</button>
                         <button type="button" class="btn" :class="modalCfg.btn"
-                                :disabled="modal.busy || (modalCfg.needsComment && !modal.comment.trim()) || (modalCfg.needsValue && !isValidCommission)" @click="confirmAction">
+                                :disabled="modal.busy || (modalCfg.needsComment && !modal.comment.trim()) || (modalCfg.needsValue && !isValidValue)" @click="confirmAction">
                             {{ modal.busy ? 'Сохранение…' : modalCfg.confirm }}
                         </button>
                     </div>
@@ -396,7 +399,8 @@ const modalCfg = computed(() => {
     if (e === 'payout' && m === 'reject') return { title: 'Отклонить заявку на вывод?', warn: `Сумма ${fmtRub(modal.item?.amount)} вернётся на баланс автора.`, confirm: 'Отклонить и вернуть', btn: 'btn-danger', needsComment: false, needsValue: false, optionalComment: true, commentHint: 'Комментарий (необязательно) — сохранится в аудит-лог.', commentPlaceholder: 'Причина отклонения' };
     if (e === 'report' && m === 'delete') return { title: 'Удалить сообщение?', warn: '⚠️ Сообщение будет удалено безвозвратно для всех участников чата.', confirm: 'Удалить', btn: 'btn-danger', needsComment: false, needsValue: false };
     if (e === 'report' && m === 'dismiss') return { title: 'Отклонить жалобу?', warn: '', confirm: 'Отклонить', btn: 'btn-primary', needsComment: false, needsValue: false };
-    if (e === 'commission') return { title: 'Изменить комиссию автора?', warn: 'Влияет только на будущие продажи — прошлые начисления не меняются.', confirm: 'Сохранить', btn: 'btn-ok', needsComment: true, needsValue: true, commentHint: 'Причина изменения — сохранится в аудит-логе.', commentPlaceholder: 'Например: договорённость о новой ставке' };
+    if (e === 'balance') return { title: 'Коррекция баланса', warn: '⚠️ Ручная правка баланса. Плюс — начислить, минус — списать. Операция попадёт в аудит-лог.', confirm: 'Применить', btn: 'btn-ok', needsComment: true, needsValue: true, numMin: undefined, numMax: undefined, numStep: 1, valueLabel: 'Сумма (+ начислить / − списать), ₽', commentHint: 'Причина — сохранится в аудит-логе.', commentPlaceholder: 'Например: ручная корректировка / возврат' };
+    if (e === 'commission') return { title: 'Изменить комиссию автора?', warn: 'Влияет только на будущие продажи — прошлые начисления не меняются.', confirm: 'Сохранить', btn: 'btn-ok', needsComment: true, needsValue: true, numMin: 0, numMax: 100, numStep: 1, valueLabel: 'Новая комиссия, %', commentHint: 'Причина изменения — сохранится в аудит-логе.', commentPlaceholder: 'Например: договорённость о новой ставке' };
     if (m === 'approve') return { title: `Опубликовать ${e === 'article' ? 'статью' : 'курс'}?`, warn: e === 'article' ? '⚠️ Статья станет видна всем пользователям платформы.' : '⚠️ Курс станет виден всем пользователям платформы.', confirm: 'Опубликовать', btn: 'btn-ok', needsComment: false, needsValue: false };
     return { title: 'Вернуть на доработку?', warn: '', confirm: 'Вернуть', btn: 'btn-warn', needsComment: true, needsValue: false, commentHint: 'Автор увидит этот комментарий в своём кабинете.', commentPlaceholder: 'Что нужно исправить' };
 });
@@ -404,11 +408,16 @@ const modalItemLabel = computed(() => {
     if (!modal.item) return '';
     if (modal.entity === 'report') return modal.item.targetUserName ? `сообщение пользователя ${modal.item.targetUserName}` : 'сообщение';
     if (modal.entity === 'payout') return `${modal.item.authorName || '—'} · ${fmtRub(modal.item.amount)}`;
-    if (modal.entity === 'commission') return modal.item.Name || '—';
+    if (modal.entity === 'commission' || modal.entity === 'balance') return modal.item.Name || '—';
     if (modal.entity === 'promo') return modal.item.code || '';
     return modal.item.Title || '';
 });
-const isValidCommission = computed(() => { const v = modal.value; return typeof v === 'number' && !Number.isNaN(v) && v >= 0 && v <= 100; });
+const isValidValue = computed(() => {
+    const v = modal.value;
+    if (typeof v !== 'number' || Number.isNaN(v)) return false;
+    if (modal.entity === 'balance') return v !== 0;      // дельта баланса: любое ненулевое число (±)
+    return v >= 0 && v <= 100;                            // комиссия: 0..100
+});
 const toastMsg = ref('');
 let toastTimer = null;
 function toast(m) { toastMsg.value = m; if (toastTimer) clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = ''; }, 3000); }
@@ -432,6 +441,7 @@ const authorsFiltered = computed(() => {
     return q ? authors.rows.filter((a) => (a.Name || '').toLowerCase().includes(q)) : authors.rows;
 });
 function askCommission(a) { modal.open = true; modal.entity = 'commission'; modal.mode = 'set'; modal.item = a; modal.value = (a.authorCommission ?? 100); modal.comment = ''; modal.error = ''; }
+function askBalance(a) { modal.open = true; modal.entity = 'balance'; modal.mode = 'adjust'; modal.item = a; modal.value = null; modal.comment = ''; modal.error = ''; }
 
 async function loadPayoutQueue() {
     pqueue.loading = true;
@@ -655,7 +665,7 @@ async function confirmAction() {
     if (modal.busy || !modal.item) return;
     const cfg = modalCfg.value;
     if (cfg.needsComment && !modal.comment.trim()) { modal.error = 'Укажите ' + (modal.entity === 'commission' ? 'причину' : 'комментарий') + '.'; return; }
-    if (cfg.needsValue && !isValidCommission.value) { modal.error = 'Комиссия должна быть от 0 до 100.'; return; }
+    if (cfg.needsValue && !isValidValue.value) { modal.error = modal.entity === 'balance' ? 'Укажите ненулевую сумму.' : 'Комиссия должна быть от 0 до 100.'; return; }
     modal.busy = true; modal.error = '';
     try {
         const id = modal.item.id; const comment = modal.comment.trim();
@@ -666,6 +676,8 @@ async function confirmAction() {
                 : await sb.rpc('admin_reject_withdrawal_v2', { p_id: id, p_comment: comment || null });
         } else if (modal.entity === 'commission') {
             res = await sb.rpc('admin_set_commission', { p_user: id, p_value: modal.value, p_reason: comment });
+        } else if (modal.entity === 'balance') {
+            res = await sb.rpc('admin_adjust_balance', { p_user: id, p_delta: modal.value, p_reason: comment });
         } else if (modal.entity === 'report') {
             res = modal.mode === 'dismiss'
                 ? await sb.rpc('admin_dismiss_report', { p_report: id })
@@ -688,6 +700,9 @@ async function confirmAction() {
         } else if (modal.entity === 'commission') {
             const row = authors.rows.find((r) => r.id === id); if (row) row.authorCommission = modal.value;
             done = 'Комиссия обновлена';
+        } else if (modal.entity === 'balance') {
+            const row = authors.rows.find((r) => r.id === id); if (row && res.data != null) row.Ammount = res.data;
+            done = 'Баланс скорректирован';
         } else if (modal.entity === 'report') {
             rqueue.rows = rqueue.rows.filter((r) => r.id !== id); counts.reports = rqueue.rows.length;
             done = modal.mode === 'dismiss' ? 'Жалоба отклонена' : 'Сообщение удалено, жалоба закрыта';

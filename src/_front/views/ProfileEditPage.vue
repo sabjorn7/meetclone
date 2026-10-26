@@ -266,12 +266,20 @@ async function save() {
         }
         const role = roleSel.value === 'Специалист' ? 'Ученик' : roleSel.value;
         const patch = {
-            Name: f.Name.trim(), role, Description: f.Description, username: username || null, city: f.city.trim() || null,
+            Name: f.Name.trim(), Description: f.Description, username: username || null, city: f.city.trim() || null,
             vk_url: f.vk_url, youtube_url: f.youtube_url, whatsapp_url: f.whatsapp_url, telegram_url: f.telegram_url,
             website_url: f.website_url, booking_url: f.booking_url,
         };
         const { error } = await sb.from('users').update(patch).eq('id', uid.value);
         if (error) throw error;
+        // Роль — через SECURITY DEFINER RPC (прямая клиентская запись users.role закрыта в 6a).
+        // Меняем только если текущая роль — одна из назначаемых пользователем (admin/прочее не трогаем).
+        const SELF_ROLES = ['Ученик', 'Спикер', 'Учебное заведение'];
+        if (SELF_ROLES.includes(user.role) && role !== user.role) {
+            const { error: rErr } = await sb.rpc('set_my_role', { p_role: role });
+            if (rErr) throw rErr;
+            user.role = role;
+        }
         Object.assign(user, patch);
         saved.value = true; setTimeout(() => { saved.value = false; }, 2500);
     } catch (e) { err.value = 'Не удалось сохранить. Попробуйте ещё раз.'; } finally { saving.value = false; }

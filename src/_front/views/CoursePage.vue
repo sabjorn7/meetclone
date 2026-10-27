@@ -233,7 +233,12 @@ const asArray = (v) => (Array.isArray(v) ? v : []);
 const nLessons = computed(() => lessons.value.length || course.value?.Less_Id?.length || 0);
 const nMaterials = computed(() => lessons.value.filter((l) => (l.File || '').trim()).length);
 const nStudents = computed(() => students.value);
-const reviews = computed(() => asArray(course.value?.comment).filter((c) => (c?.comment || '').trim()));
+// Отзывы — только отображение: сортируем по date, сначала новые; записи без даты (→ epoch) уходят в конец.
+// Данные в БД не меняем; звёзды (по user_id), средняя и количество оценок не затрагиваются.
+const reviews = computed(() => asArray(course.value?.comment)
+    .filter((c) => (c?.comment || '').trim())
+    .slice()
+    .sort((a, b) => new Date(b?.date || 0) - new Date(a?.date || 0)));
 const nReviews = computed(() => reviews.value.length);
 const ratings = computed(() => asArray(course.value?.rating));
 const nRatings = computed(() => ratings.value.length);

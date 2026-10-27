@@ -160,6 +160,7 @@
                             <span><b>{{ r.authorName }}</b> · <b>{{ fmtRub(r.amount) }}</b></span>
                             <span class="rcard__meta">{{ fmtDate(r.created_at) }}</span>
                         </div>
+                        <div class="pcard__contract">Договор № {{ r.author_num_dog || '—' }}<template v-if="r.author_registered_at"> · с {{ fmtDate(r.author_registered_at) }}</template></div>
                         <div v-if="r.req_changed_recently" class="pcard__warn">⚠️ Реквизиты недавно изменены ({{ fmtDate(r.req_updated_at) }}) — проверьте внимательнее</div>
                         <div class="pcard__bank">
                             <span class="pcard__label">Банк: {{ reqf(r, 'bank_name') }}<template v-if="rtypeLabel(r)"> · {{ rtypeLabel(r) }}</template></span>
@@ -830,6 +831,7 @@ onMounted(async () => {
 /* S5 Выплаты — payout cards */
 .pcard { border: 1px solid #eceef2; border-radius: 14px; padding: 16px; }
 .pcard__head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; font-size: 15px; }
+.pcard__contract { font-size: 13px; color: #5b6472; margin: -4px 0 10px; }
 .pcard__warn { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; font-size: 13px; font-weight: 600; }
 .pcard__bank { background: #f7f9fc; border: 1px solid #eef1f5; border-radius: 10px; padding: 12px; margin-bottom: 12px; font-size: 14px; }
 .pcard__label { color: #5b6472; }

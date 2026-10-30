@@ -174,7 +174,10 @@
                 <!-- Create (speakers / institutions) -->
                 <section v-if="isStreamer" class="sp-card">
                     <div class="sp-card-head">
-                        <h2>Начать трансляцию</h2>
+                        <div>
+                            <h2>Начать трансляцию</h2>
+                            <a href="/faq/guides#stream" class="sp-howto">Как это сделать?</a>
+                        </div>
                         <button v-if="!showForm" class="sp-btn sp-btn-primary" @click="showForm = true">Начать трансляцию</button>
                     </div>
                     <form v-if="showForm" class="sp-form" @submit.prevent="createBroadcast">
@@ -1246,6 +1249,15 @@ onBeforeUnmount(() => {
     gap: 12px;
     margin-bottom: 12px;
 }
+.sp-howto {
+    display: inline-block;
+    margin-top: 4px;
+    color: #5495f3;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-decoration: none;
+}
+.sp-howto:hover { text-decoration: underline; }
 .sp-card h2 {
     font-size: 18px;
     font-weight: 600;

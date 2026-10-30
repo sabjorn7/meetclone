@@ -7,6 +7,7 @@
 <template>
     <div class="mf-page">
         <h1 class="mf-title">Финансы</h1>
+        <a href="/faq/guides#money" class="mf-howto">Как это сделать?</a>
 
         <div class="mf-balance-card">
             <span class="mf-balance-label">Доступно для вывода</span>
@@ -53,7 +54,9 @@ onMounted(async () => {
 <style>
 .mf-page { max-width: 920px; margin: 0 auto; padding: 24px 16px 64px; width: 100%; box-sizing: border-box; }
 .mf-page * { box-sizing: border-box; }
-.mf-title { font-size: 28px; font-weight: 700; color: #1B1F27; margin: 8px 0 20px; }
+.mf-title { font-size: 28px; font-weight: 700; color: #1B1F27; margin: 8px 0 4px; }
+.mf-howto { display: inline-block; margin: 0 0 16px; color: #5495F3; font-weight: 600; font-size: 14px; text-decoration: none; }
+.mf-howto:hover { text-decoration: underline; }
 .mf-balance-card { display: flex; flex-direction: column; gap: 4px; background: #F4F5F7; border-radius: 14px; padding: 16px 20px; margin-bottom: 20px; }
 .mf-balance-label { font-size: 14px; color: #8A94A6; }
 .mf-balance-val { font-size: 26px; font-weight: 700; color: #1B1F27; }

@@ -25,6 +25,7 @@
                         <div>
                             <h1 class="pd-head__title">Управление курсами</h1>
                             <p class="pd-head__descr">Ваши курсы, статусы модерации и материалы. Нажмите на курс, чтобы отредактировать.</p>
+                            <a href="/faq/guides#course" class="pd-head__howto">Как это сделать?</a>
                         </div>
                         <div class="pd-head__btns">
                             <button type="button" class="pd-btn pd-btn--ghost" :class="{ 'is-on': discountMode }" @click="discountMode ? exitDiscountMode() : enterDiscountMode()">
@@ -1481,6 +1482,8 @@ function ensureFonts() {
 .pd-head__row { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
 .pd-head__title { margin: 0; font-weight: 800; font-size: clamp(1.6rem, 3.2vw, 2.2rem); line-height: 1.1; letter-spacing: -0.025em; }
 .pd-head__descr { margin: 8px 0 0; color: var(--ink-2); font-size: 1rem; max-width: 60ch; }
+.pd-head__howto { display: inline-block; margin: 8px 0 0; color: var(--blue); font-weight: 600; font-size: 0.9rem; text-decoration: none; }
+.pd-head__howto:hover { text-decoration: underline; }
 
 .pd-btn { display: inline-flex; align-items: center; gap: 8px; border: none; border-radius: var(--r-pill); background: var(--blue); color: #fff; font-family: inherit; font-weight: 700; font-size: 0.95rem; padding: 11px 22px; cursor: pointer; text-decoration: none; transition: background 0.15s var(--ease-out), transform 0.15s var(--ease-out); white-space: nowrap; }
 .pd-btn .pd-ic { width: 18px; height: 18px; }

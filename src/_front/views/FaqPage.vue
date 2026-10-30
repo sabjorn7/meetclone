@@ -3,6 +3,19 @@
   AppHeader/AppFooter are rendered globally by App.vue. Same visual language as the legal pages
   (views/legal/LegalPage.vue). Bilingual RU/EN with a switch; content is a plain data object,
   accordion via native <details> (accessible, no deps).
+
+  FAQ CMS (2026-10-30, PENDING — see relay outbox faq-04-cms-plan.md): on mount, probes
+  public.faq (RLS-gated, published=true). Once ANY row has ever been seen for ANY audience/lang
+  (via the probe or any later per-combo load) — `everSawRows` flips true FOR THE REST OF THE
+  SESSION and stays true: tabs + search render from then on and never disappear again, even if a
+  later combo/network hiccup returns 0 rows or errors (that renders the "Скоро здесь появятся
+  ответы" / "Ничего не найдено" messages below, NOT a revert to the old static CONTENT — owner
+  decision 2026-10-30, point 1). The old hardcoded CONTENT (no tabs, no search) is shown ONLY
+  while `everSawRows` has never been true — i.e. the table is confirmed completely empty or
+  unreachable. One accepted trade-off: on a cold load where the DEFAULT combo (students/ru) has
+  zero rows but some OTHER combo has content, there's a brief instant where the old CONTENT
+  paints before the unfiltered probe resolves and swaps to tabs — not worth a dedicated top-level
+  loading gate for an internal FAQ page.
 -->
 <template>
     <div class="fq">
@@ -16,7 +29,19 @@
             </div>
             <p class="fq-lead">{{ t.lead }}</p>
 
-            <section v-for="(sec, si) in t.sections" :key="si" class="fq-section">
+            <div v-if="everSawRows" class="fq-controls">
+                <div class="fq-audience" role="group" aria-label="Аудитория">
+                    <button :class="{ active: audience === 'students' }" @click="audience = 'students'">Ученикам</button>
+                    <button :class="{ active: audience === 'experts' }" @click="audience = 'experts'">Экспертам</button>
+                </div>
+                <input v-model="search" type="search" class="fq-search" placeholder="Поиск по вопросам" />
+            </div>
+
+            <p v-if="dbLoadingCombo" class="fq-empty">Загрузка…</p>
+            <p v-else-if="audienceEmpty" class="fq-empty">Скоро здесь появятся ответы.</p>
+            <p v-else-if="searchEmpty" class="fq-empty">Ничего не найдено. Попробуйте другой запрос.</p>
+
+            <section v-for="(sec, si) in sections" :key="si" class="fq-section">
                 <h2 class="fq-section-title">{{ sec.title }}</h2>
                 <details v-for="(item, ii) in sec.items" :key="ii" class="fq-item">
                     <summary class="fq-q">
@@ -26,6 +51,8 @@
                     <div class="fq-a" v-html="item.a"></div>
                 </details>
             </section>
+
+            <a href="/faq/guides" class="fq-guides-link">Подробные инструкции по разделам →</a>
 
             <section class="fq-support">
                 <h2 class="fq-section-title">{{ t.support.title }}</h2>
@@ -47,7 +74,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
 
 // Prefer the browser language on first load; default to Russian.
 const lang = ref(typeof navigator !== 'undefined' && /^en/i.test(navigator.language || '') ? 'en' : 'ru');
@@ -326,6 +353,151 @@ const CONTENT = {
 };
 
 const t = computed(() => CONTENT[lang.value]);
+
+// ---------------------------------------------------------------------------
+// FAQ CMS read path (public.faq) — see 2026-10-30_pending_faq_table.sql /
+// faq-04-cms-plan.md in relay outbox. PENDING: migration not applied yet, table may not exist.
+// ---------------------------------------------------------------------------
+
+// Category display order per lang + audience (faq-02-edit-and-structure.md §3, "О платформе"
+// added as the lead-in category per the 82-row live dataset). Categories from the DB that
+// aren't in this list sort after it, alphabetically — keeps new categories from silently
+// vanishing if someone adds one via Studio before this list is updated.
+const CATEGORY_ORDER = {
+    ru: {
+        students: ['О платформе', 'Оплата и доступ', 'Курсы и обучение', 'Возврат денег', 'Эфиры', 'Клубы (подписки)', 'Бонусы и промокоды', 'Профиль и пароль'],
+        experts: ['Создание курса', 'Цены и скидки', 'Выплаты и комиссия', 'Эфиры', 'Клуб', 'Мероприятия'],
+    },
+    en: {
+        students: ['About', 'Payment and access', 'Courses and learning', 'Refunds', 'Live streams', 'Clubs (subscriptions)', 'Promo codes', 'Profile and password'],
+        experts: ['Creating a course', 'Prices and discounts', 'Payouts and commission', 'Live streams', 'Club', 'Events'],
+    },
+};
+
+function supa() {
+    const inst = window.wwLib?.wwPlugins?.supabase?.instance;
+    if (!inst) throw new Error('Supabase недоступен на этой странице.');
+    return inst;
+}
+
+// DOMPurify loaded lazily (only once DB rows actually exist) and kept as a module-level
+// singleton so the noopener/noreferrer hook below is registered exactly once.
+let purify = null;
+async function sanitizeAnswer(html) {
+    if (!purify) {
+        const mod = await import('dompurify');
+        purify = mod.default || mod;
+        // Force rel="noopener noreferrer" on every link regardless of what the admin typed in
+        // Supabase Studio — this content is admin-authored, not attacker-controlled, but a
+        // forgotten rel on a target="_blank" link is a real (if minor) tab-nabbing footgun.
+        purify.addHook('afterSanitizeAttributes', (node) => {
+            if (node.tagName === 'A') node.setAttribute('rel', 'noopener noreferrer');
+        });
+    }
+    return purify.sanitize(html, {
+        ALLOWED_TAGS: ['a', 'strong', 'em', 'b', 'i', 'br', 'p', 'ul', 'ol', 'li'],
+        ALLOWED_ATTR: ['href', 'target', 'rel'],
+    });
+}
+
+const audience = ref('students');
+const search = ref('');
+
+// Sticky "the table is alive" flag (owner decision 2026-10-30, point 1): once true, NEVER goes
+// back to false for the rest of this page visit — tabs/search stay visible even if a later
+// combo or a transient error returns nothing. Only a page reload re-evaluates it.
+const everSawRows = ref(false);
+function markRowsSeen() { everSawRows.value = true; }
+
+// Unfiltered existence probe (any published row, any audience/lang) — fired once on mount so
+// tabs can appear even if the DEFAULT combo (students/ru) happens to have zero rows while some
+// other combo has content. Independent of loadFaq(); failure here just means we learn nothing
+// from it (loadFaq's own success can still flip everSawRows).
+async function probeAnyRows() {
+    try {
+        const { data } = await supa().from('faq').select('id').limit(1);
+        if (data && data.length) markRowsSeen();
+    } catch (e) { /* stay as-is — not the only source of truth */ }
+}
+
+// Rows for the CURRENT audience+lang. null = loading (or not yet attempted); [] = loaded,
+// genuinely zero rows for this combo; array = content.
+const dbSections = ref(null);
+
+let loadSeq = 0; // guards against an older in-flight request overwriting a newer one's result
+async function loadFaq() {
+    const mySeq = ++loadSeq;
+    dbSections.value = null; // mark "loading" for this combo
+    try {
+        const { data, error } = await supa()
+            .from('faq')
+            .select('category, question, answer, sort')
+            .eq('audience', audience.value)
+            .eq('lang', lang.value)
+            .order('sort', { ascending: true });
+        if (mySeq !== loadSeq) return; // a newer call already landed — drop this stale one
+        if (error || !data || !data.length) {
+            // Empty/error for THIS combo. If we already know the table has content elsewhere
+            // (everSawRows), this is "nothing published yet for this audience/lang" — show the
+            // "coming soon" message, never the old CONTENT (see template-side note on why).
+            dbSections.value = [];
+            return;
+        }
+        markRowsSeen();
+        const byCategory = new Map();
+        for (const row of data) {
+            if (!byCategory.has(row.category)) byCategory.set(row.category, []);
+            byCategory.get(row.category).push(row);
+        }
+        const order = CATEGORY_ORDER[lang.value]?.[audience.value] || [];
+        const titles = [...byCategory.keys()].sort((a, b) => {
+            const ia = order.indexOf(a);
+            const ib = order.indexOf(b);
+            if (ia === -1 && ib === -1) return a.localeCompare(b, 'ru');
+            if (ia === -1) return 1;
+            if (ib === -1) return -1;
+            return ia - ib;
+        });
+        const sectionsOut = [];
+        for (const title of titles) {
+            const items = [];
+            for (const row of byCategory.get(title)) {
+                items.push({ q: row.question, a: await sanitizeAnswer(row.answer) });
+            }
+            sectionsOut.push({ title, items });
+        }
+        if (mySeq === loadSeq) dbSections.value = sectionsOut;
+    } catch (e) {
+        // Any failure (network, RLS, "relation public.faq does not exist" after a rollback) —
+        // treat as empty-for-this-combo. Does NOT clear everSawRows once it's true.
+        if (mySeq === loadSeq) dbSections.value = [];
+    }
+}
+
+onMounted(() => {
+    probeAnyRows();
+    loadFaq();
+});
+watch([audience, lang], loadFaq);
+
+// What actually renders: DB sections for the current audience/lang once the table is known to be
+// alive, else the untouched hardcoded CONTENT. Search filters client-side over the already-
+// loaded rows — dataset is small, no extra round-trip.
+const sections = computed(() => {
+    if (!everSawRows.value) return t.value.sections;
+    const base = dbSections.value || [];
+    const needle = search.value.trim().toLowerCase();
+    if (!needle) return base;
+    return base
+        .map((sec) => ({ ...sec, items: sec.items.filter((i) => `${i.q} ${i.a}`.toLowerCase().includes(needle)) }))
+        .filter((sec) => sec.items.length);
+});
+
+// Three mutually exclusive states once tabs are showing: still loading the current combo,
+// genuinely zero rows for it (pre-search), or the search itself filtered everything out.
+const dbLoadingCombo = computed(() => everSawRows.value && dbSections.value === null);
+const audienceEmpty = computed(() => everSawRows.value && dbSections.value !== null && dbSections.value.length === 0);
+const searchEmpty = computed(() => everSawRows.value && !!dbSections.value?.length && sections.value.length === 0);
 </script>
 
 <style scoped>
@@ -385,6 +557,66 @@ const t = computed(() => CONTENT[lang.value]);
     margin: 0 0 24px;
     font-size: 15px;
 }
+.fq-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 0 0 24px;
+}
+.fq-audience {
+    display: inline-flex;
+    border: 1px solid #d6dbe3;
+    border-radius: 999px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.fq-audience button {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 7px 16px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    color: #5b6472;
+    cursor: pointer;
+}
+.fq-audience button.active {
+    background: #2e6fd6;
+    color: #fff;
+}
+.fq-search {
+    flex: 1 1 220px;
+    max-width: 320px;
+    padding: 8px 14px;
+    border: 1px solid #d6dbe3;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 14px;
+    color: #1f2733;
+}
+.fq-search:focus { outline: none; border-color: #2e6fd6; }
+.fq-empty {
+    background: #fff;
+    border: 1px solid #e9edf2;
+    border-radius: 12px;
+    padding: 24px 20px;
+    margin: 0 0 24px;
+    text-align: center;
+    color: #5b6472;
+    font-size: 15px;
+}
+.fq-guides-link {
+    display: inline-block;
+    margin: 0 0 28px;
+    color: #2e6fd6;
+    font-weight: 600;
+    font-size: 14px;
+    text-decoration: none;
+}
+.fq-guides-link:hover { text-decoration: underline; }
 .fq-section { margin-bottom: 28px; }
 .fq-section-title {
     font-size: 18px;

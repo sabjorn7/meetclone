@@ -20,6 +20,7 @@ import ProfileEditPage from './views/ProfileEditPage.vue';
 import MyCoursePage from './views/MyCoursePage.vue';
 const CoursesManagePage = () => import('./views/CoursesManagePage.vue');
 const ArticlesManagePage = () => import('./views/ArticlesManagePage.vue');
+const FaqGuidesPage = () => import('./views/FaqGuidesPage.vue');
 import NotFoundPage from './views/NotFoundPage.vue';
 import RegistrationPage from './views/RegistrationPage.vue';
 import WelcomePage from './views/WelcomePage.vue';
@@ -290,6 +291,9 @@ const PAGE_OVERRIDES = [
     { path: '/rekvizity', name: 'legal-rekvizity', component: RekvizityPage },
     { path: '/documents', name: 'legal-documents', component: DocumentsPage },
     { path: '/faq', name: 'faq', component: FaqPage, wwPath: 'faq' },
+    // Guides (2026-10-30, PENDING): brand-new path, no WeWeb page at /faq/guides, no wwPath to
+    // skip. Static guide content (RU only for now), anchors #course/#stream/#event/#club/#money.
+    { path: '/faq/guides', name: 'faq-guides', component: FaqGuidesPage },
     // Public profile: promo-styled ProfilePage replaces the WeWeb /profile_page (reads ?user=<uuid>).
     { path: '/profile_page', name: 'profile-page', component: ProfilePage, wwPath: 'profile_page' },
     // Course landing: promo-styled CoursePage replaces the WeWeb `course_info` (paths course/{{slug|}}).

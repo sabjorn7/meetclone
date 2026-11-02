@@ -15,7 +15,7 @@
         <header class="pd-hero">
             <div class="pd-wrap">
                 <h1 class="pd-hero__title" data-reveal>Все статьи</h1>
-                <p class="pd-hero__sub" data-reveal>Материалы по прикладной кинезиологии от практикующих специалистов.</p>
+                <p class="pd-hero__sub" data-reveal>Материалы по оздоровлению от практикующих специалистов.</p>
             </div>
         </header>
 

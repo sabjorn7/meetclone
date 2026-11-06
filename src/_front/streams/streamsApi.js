@@ -1,5 +1,6 @@
 // Supabase data helpers for the "Трансляции" (live streams) feature.
-// RLS is off project-wide, so the anon/authenticated client reads & writes directly.
+// Requires pending_stream_visibility.sql for unlisted access; never falls back to broad reads.
+import { STREAM_VIEW_FIELDS, validateVisibility, requireUnlistedSupport } from './visibility.js';
 
 // Roles allowed to create a broadcast (same set as the subscriptions feature).
 export const STREAMER_ROLES = ['Спикер', 'Учебное заведение'];
@@ -27,7 +28,9 @@ export function canStream(user) {
 
 /** Insert a stream metadata row. `peertube_video_id` = the live video uuid. price 0 = free.
  *  `scheduled_at` = planned start (ISO) or null. */
-export async function createStream(supabase, { author, title, description = '', price = 0, peertube_video_id = null, access_months = null, backing_course_id = null, scheduled_at = null, mode = 'solo', chat_enabled = false, recording_course_enabled = false, cover_url = null }) {
+export async function createStream(supabase, { author, title, description = '', price = 0, peertube_video_id = null, access_months = null, backing_course_id = null, scheduled_at = null, mode = 'solo', chat_enabled = false, recording_course_enabled = false, cover_url = null, visibility = 'public' }) {
+    validateVisibility({ visibility, price, backing_course_id, chat_enabled, recording_course_enabled });
+    await requireUnlistedSupport(supabase, visibility);
     // chat_enabled=true → the BEFORE INSERT trigger tg_stream_create_chat auto-creates a group chat
     // (shared `chats` table, same as events) and fills streams.chat. Buyers are then added by
     // tg_stream_bought_add_to_chat when their user_course on the backing course appears.
@@ -38,14 +41,14 @@ export async function createStream(supabase, { author, title, description = '', 
     // it appears in /all_course as «Запись семинара» and in «Мои курсы» of everyone who bought.
     const { data, error } = await supabase
         .from('streams')
-        .insert({ author, title, description, price, peertube_video_id, access_months, backing_course_id, scheduled_at, mode, chat_enabled, recording_course_enabled, cover_url })
-        .select()
+        .insert({ author, title, description, price, peertube_video_id, access_months, backing_course_id, scheduled_at, mode, chat_enabled, recording_course_enabled, cover_url, visibility })
+        .select(STREAM_VIEW_FIELDS)
         .limit(1);
     if (error) throw new Error(`Не удалось сохранить эфир: ${error.message}`);
     return data?.[0];
 }
 
-/** Update editable stream metadata (author only; RLS off). Whitelisted fields — never touches
+/** Update editable stream metadata (author only; enforced by RLS after the visibility migration). Whitelisted fields — never touches
  *  price/backing_course/mode/peertube. `cover_url`/`scheduled_at`/`title`/`description` only. */
 export async function updateStream(supabase, streamId, fields) {
     const patch = {};
@@ -180,7 +183,7 @@ export async function listStreamBuyers(supabase, stream) {
 export async function listMyStreams(supabase, authorId) {
     const { data, error } = await supabase
         .from('streams')
-        .select('*')
+        .select(STREAM_VIEW_FIELDS)
         .eq('author', authorId)
         .order('created_at', { ascending: false });
     if (error) throw new Error(`Не удалось загрузить эфиры: ${error.message}`);
@@ -225,7 +228,7 @@ async function attachAuthors(supabase, rows) {
     const ids = [...new Set(rows.map(r => r.author).filter(Boolean))];
     let byId = {};
     if (ids.length) {
-        const { data: users } = await supabase.from('users').select('*').in('id', ids);
+        const { data: users } = await supabase.from('users').select('id,Name,Photo,role').in('id', ids);
         byId = Object.fromEntries((users || []).map(u => [u.id, u]));
     }
     return rows.map(r => ({ ...r, authorUser: byId[r.author] || null }));
@@ -234,7 +237,7 @@ async function attachAuthors(supabase, rows) {
 /** All streams for the public list, with authors, ordered live → scheduled → ended.
  *  Soft-deleted (hidden) streams are excluded from the public browse list. */
 export async function listAllStreams(supabase) {
-    const { data, error } = await supabase.from('streams').select('*').eq('hidden', false);
+    const { data, error } = await supabase.from('streams').select(STREAM_VIEW_FIELDS).eq('hidden', false).eq('visibility', 'public');
     if (error) throw new Error(`Не удалось загрузить эфиры: ${error.message}`);
     const rows = await attachAuthors(supabase, data || []);
     return rows.sort(
@@ -245,18 +248,30 @@ export async function listAllStreams(supabase) {
 }
 
 /** A single stream (with author) for the detail view. */
-export async function getStreamById(supabase, id) {
-    const { data, error } = await supabase.from('streams').select('*').eq('id', id).limit(1);
+export async function getStreamById(supabase, id, linkKey = null) {
+    const { data, error } = await supabase.from('streams').select(STREAM_VIEW_FIELDS).eq('id', id).limit(1);
     if (error) throw new Error(`Не удалось загрузить эфир: ${error.message}`);
-    if (!data?.length) return null;
+    if (!data?.length) {
+        if (!/^[a-f0-9]{64}$/.test(linkKey || '')) return null;
+        const result = await supabase.rpc('get_stream_by_link', { p_stream_id: id, p_key: linkKey });
+        if (result.error) throw new Error('Не удалось открыть эфир по ссылке.');
+        return result.data?.[0] || null;
+    }
     const [row] = await attachAuthors(supabase, data);
     return row;
 }
 
+
+/** Capability returned only to the authenticated owner; never included in list/detail rows. */
+export async function getStreamLinkKey(supabase, id) {
+    const { data, error } = await supabase.rpc('get_my_stream_link', { p_stream_id: id });
+    if (error || !/^[a-f0-9]{64}$/.test(data || '')) throw new Error('Не удалось получить ссылку скрытого эфира.');
+    return data;
+}
+
 // ============================ VIEWER CHAT (stream_chat) ============================
-// Mirrors club_chat. Access (read + write) is gated in the UI by the same `hasAccess`
-// used for the stream itself (free → everyone; paid → author or buyer). RLS is off, so
-// the gate is client-side, consistent with the rest of the project.
+// Public/paid UI access rules are unchanged. RLS prevents unlisted enumeration;
+// link viewers prove their capability on each bounded read/write RPC. No persistent grants.
 
 /** Attach each message's author (Name/Photo) via one batched users lookup. */
 async function attachMessageAuthors(supabase, rows) {
@@ -270,7 +285,14 @@ async function attachMessageAuthors(supabase, rows) {
 }
 
 /** Messages of a stream's chat (oldest first), with authors attached. */
-export async function listStreamMessages(supabase, streamId, { limit = 200 } = {}) {
+export async function listStreamMessages(supabase, streamId, { limit = 200, linkKey = null } = {}) {
+    if (linkKey) {
+        const { data, error } = await supabase.rpc('get_stream_link_messages', { p_stream_id: streamId, p_key: linkKey, p_limit: limit });
+        if (error) throw new Error('Не удалось загрузить чат по ссылке.');
+        // Link RPC deliberately has no participant UUID/profile. Preserve own-message
+        // and moderation actions through server-derived booleans, not client claims.
+        return (data || []).map(m => ({ ...m, authorUser: { Name: m.is_mine ? 'Вы' : 'Участник' } }));
+    }
     const { data, error } = await supabase
         .from('stream_chat')
         .select('*')
@@ -283,9 +305,14 @@ export async function listStreamMessages(supabase, streamId, { limit = 200 } = {
 }
 
 /** Post a message to a stream's chat. `img` is an optional array of image URLs (UI: phase 2). */
-export async function sendStreamMessage(supabase, { stream, owner, text, img = [] }) {
+export async function sendStreamMessage(supabase, { stream, owner, text, img = [], linkKey = null }) {
     const clean = (text || '').trim();
     if (!clean && !(img && img.length)) throw new Error('Пустое сообщение.');
+    if (linkKey) {
+        const { data, error } = await supabase.rpc('send_stream_link_message', { p_stream_id: stream, p_key: linkKey, p_text: clean, p_img: img });
+        if (error) throw new Error('Не удалось отправить сообщение. Проверьте доступ к эфиру.');
+        return { id: data };
+    }
     const { data, error } = await supabase
         .from('stream_chat')
         .insert({ stream, owner, text: clean, img })
@@ -295,8 +322,13 @@ export async function sendStreamMessage(supabase, { stream, owner, text, img = [
     return data?.[0];
 }
 
-/** Soft-delete a message (author of the message or of the stream — enforced by the UI). */
-export async function deleteStreamMessage(supabase, id) {
+/** Soft-delete: own message or stream owner. Enforced by RLS / capability RPC. */
+export async function deleteStreamMessage(supabase, id, { streamId = null, linkKey = null } = {}) {
+    if (linkKey) {
+        const { error } = await supabase.rpc('delete_stream_link_message', { p_stream_id: streamId, p_key: linkKey, p_message_id: id });
+        if (error) throw new Error('Не удалось удалить сообщение.');
+        return;
+    }
     const { error } = await supabase.from('stream_chat').update({ deleted: true }).eq('id', id);
     if (error) throw new Error(`Не удалось удалить сообщение: ${error.message}`);
 }

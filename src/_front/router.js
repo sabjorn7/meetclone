@@ -97,6 +97,8 @@ const routes = [];
 
 /** @type {RouterScrollBehavior} */
 const scrollBehavior = to => {
+    // Link capabilities are not DOM anchors. Avoid Vue Router warnings containing the key.
+    if (/^\/streams\/?$/.test(to.path) && /^#access-[a-f0-9]{64}$/.test(to.hash)) return { top: 0 };
     if (to.hash) {
         return {
             el: to.hash,

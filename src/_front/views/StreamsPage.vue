@@ -1,6 +1,8 @@
 <template>
     <div class="streams-page">
         <div class="sp-inner">
+        <label v-if="activeStreamId && linkFallback" class="sp-field"><span>Ссылка на эфир — скопируйте вручную</span><input :value="linkFallback" readonly @focus="$event.target.select()" /></label>
+        <p v-if="activeStreamId && notice" class="sp-notice" role="status">{{ notice }}</p>
         <h1 v-if="activeStreamId" class="sp-title">Трансляции</h1>
 
         <!-- ============================ DETAIL VIEW ============================ -->
@@ -20,7 +22,8 @@
                 <div class="sp-detail-author">{{ authorName(detail) }}</div>
                 <div class="sp-detail-sub">
                     <span v-if="displayState === 'scheduled' && detail.scheduled_at" class="sp-detail-when">🕐 Начало: {{ formatDateTime(detail.scheduled_at) }}</span>
-                    <button class="sp-btn sp-btn-secondary sp-share-btn" @click="shareStream">🔗 {{ shareMsg || 'Поделиться' }}</button>
+                    <button v-if="detail.visibility === 'unlisted'" type="button" class="sp-btn sp-btn-secondary" @click="copyStreamLink(detail)">Скопировать ссылку</button>
+                    <button v-else class="sp-btn sp-btn-secondary sp-share-btn" @click="shareStream">🔗 {{ shareMsg || 'Поделиться' }}</button>
                 </div>
 
                 <!-- Push-подписка — всем залогиненным; iPhone вне standalone получает подсказку «на Домой». -->
@@ -121,7 +124,7 @@
                             v-for="m in messages"
                             :key="m.id"
                             class="sp-chat-row"
-                            :class="{ 'sp-chat-mine': me && m.owner === me.id }"
+                            :class="{ 'sp-chat-mine': m.is_mine || (me && m.owner === me.id) }"
                         >
                             <img v-if="m.authorUser?.Photo" :src="m.authorUser.Photo" class="sp-chat-ava" />
                             <div v-else class="sp-chat-ava sp-chat-ava-empty">{{ (m.authorUser?.Name || '?').slice(0, 1) }}</div>
@@ -175,10 +178,10 @@
                 <section v-if="isStreamer" class="sp-card">
                     <div class="sp-card-head">
                         <div>
-                            <h2>Начать трансляцию</h2>
+                            <h2>Запланировать трансляцию</h2>
                             <a href="/faq/guides#stream" class="sp-howto">Как это сделать?</a>
                         </div>
-                        <button v-if="!showForm" class="sp-btn sp-btn-primary" @click="showForm = true">Начать трансляцию</button>
+                        <button v-if="!showForm" class="sp-btn sp-btn-primary" @click="showForm = true">Запланировать трансляцию</button>
                     </div>
                     <form v-if="showForm" class="sp-form" @submit.prevent="createBroadcast">
                         <label class="sp-field">
@@ -231,6 +234,15 @@
                                 <label class="sp-radio"><input type="radio" value="paid" v-model="form.kind" /> Платно</label>
                             </div>
                         </div>
+                        <fieldset class="sp-field sp-visibility">
+                            <legend>Доступность эфира</legend>
+                            <div class="sp-radio-row">
+                                <label class="sp-radio"><input v-model="form.visibility" type="checkbox" name="stream-visibility" true-value="unlisted" false-value="public" :disabled="form.kind === 'paid' || !unlistedEnabled" /> Скрыть эфир</label>
+                            </div>
+                            <p class="sp-note">Эфир не будет отображаться в общем списке. Смотреть его смогут пользователи, получившие ссылку</p>
+                            <p v-if="!unlistedEnabled" class="sp-note">Скрытые эфиры пока недоступны: серверная защита ещё не включена.</p>
+                            <p v-if="form.kind === 'paid' && form.visibility === 'unlisted'" class="sp-note sp-note-err" role="alert">Для платного эфира выберите «Доступен всем» или верните бесплатный режим.</p>
+                        </fieldset>
                         <div v-if="form.kind === 'paid'" class="sp-paid-fields">
                             <label class="sp-field">
                                 <span>Цена, ₽</span>
@@ -294,7 +306,8 @@
                 <!-- Author's own streams -->
                 <section v-if="isStreamer" class="sp-card">
                     <h2>Мои эфиры</h2>
-                    <p v-if="notice" class="sp-notice">{{ notice }}</p>
+                    <p v-if="notice" class="sp-notice" role="status">{{ notice }}</p>
+                    <label v-if="linkFallback" class="sp-field"><span>Ссылка на эфир — скопируйте вручную</span><input :value="linkFallback" readonly @focus="$event.target.select()" /></label>
                     <div v-if="!myStreams.length" class="sp-muted">Пока нет созданных эфиров.</div>
                     <ul v-else class="sp-list">
                         <li v-for="s in myStreams" :key="s.id" class="sp-item">
@@ -302,6 +315,7 @@
                                 <div class="sp-item-title">{{ s.title }}</div>
                                 <div class="sp-item-meta">
                                     <span class="sp-badge" :class="'sp-badge-' + s.status">{{ statusLabel(s.status) }}</span>
+                                    <span v-if="s.visibility === 'unlisted'" class="sp-badge">Скрытый эфир</span>
                                     <span v-if="s.hidden" class="sp-badge sp-badge-hidden">Скрыт</span>
                                     <span>{{ priceLabel(s) }}</span>
                                     <button v-if="Number(s.price) > 0 && s.backing_course_id" type="button" class="sp-buyers-toggle" @click="toggleBuyers(s)">
@@ -318,6 +332,7 @@
                                     <button class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="confirmDeleteId = null">Отмена</button>
                                 </template>
                                 <template v-else>
+                                    <button v-if="s.visibility === 'unlisted'" type="button" class="sp-btn sp-btn-mini" @click="copyStreamLink(s)">Скопировать ссылку</button>
                                     <!-- завершён: запись + редактирование + удаление (без «Я в эфире»/«Данные OBS»/«Завершить») -->
                                     <template v-if="s.status === 'ended'">
                                         <button class="sp-btn sp-btn-mini" @click="openStream(s.id)">Смотреть запись</button>
@@ -436,10 +451,12 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { validateVisibility, isPublicStream, streamLinkKey, streamShareUrl, visibilityCapabilities, requireUnlistedSupport } from '@/_front/streams/visibility.js';
 import { createLive, getLiveCredentials, getVideoInfo, embedUrl, assetUrl, VIDEO_STATE } from '@/_front/streams/peertubeLive.js';
 import {
     canStream,
     createStream,
+    getStreamLinkKey,
     createBackingCourse,
     purchaseStream,
     hasBoughtStream,
@@ -494,8 +511,10 @@ const notice = ref('');
 const error = ref('');
 const creds = ref(null);
 const maskKey = ref(false);
-const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo', chat: false, recording: false, cover_url: '' });
+const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', visibility: 'public', price: null, months: 3, format: 'solo', chat: false, recording: false, cover_url: '' });
 const shareMsg = ref('');
+const linkFallback = ref('');
+const unlistedEnabled = ref(false);
 // cover upload (same bucket/pattern as course/profile covers)
 const COVER_BUCKET = 'profile';
 const COVER_STORAGE_URL = 'https://sb.meetgu.ru/storage/v1/object/public/profile//';
@@ -506,6 +525,8 @@ const canSubmit = computed(() => {
     // PeerTube requires a 3–120 char video title; the live is created from this name.
     const len = (form.value.title || '').trim().length;
     if (len < 3 || len > 120) return false;
+    if (!['public', 'unlisted'].includes(form.value.visibility)) return false;
+    if (form.value.visibility === 'unlisted' && (!unlistedEnabled.value || form.value.kind === 'paid')) return false;
     if (form.value.kind === 'paid') return Number(form.value.price) > 0;
     return true;
 });
@@ -595,7 +616,8 @@ function formatDateTime(iso) {
 }
 async function shareStream() {
     if (!detail.value) return;
-    const url = `${window.location.origin}/streams?stream=${detail.value.id}`;
+    let url;
+    try { url = await shareUrl(detail.value); } catch (e) { error.value = e.message; return; }
     if (navigator.share) {
         try {
             await navigator.share({ title: detail.value.title, url });
@@ -608,9 +630,26 @@ async function shareStream() {
         await navigator.clipboard.writeText(url);
         shareMsg.value = 'Ссылка скопирована';
     } catch (_) {
-        shareMsg.value = url;
+        linkFallback.value = url;
+        shareMsg.value = 'Скопируйте ссылку ниже';
     }
     setTimeout(() => (shareMsg.value = ''), 2500);
+}
+
+async function shareUrl(stream) {
+    const key = stream.visibility === 'unlisted'
+        ? (stream.id === activeStreamId.value && streamLinkKey(route.hash)) || await getStreamLinkKey(supa(), stream.id)
+        : null;
+    return streamShareUrl(window.location.origin, stream, key);
+}
+async function copyStreamLink(stream) {
+    linkFallback.value = '';
+    notice.value = '';
+    try {
+        const url = await shareUrl(stream);
+        try { await navigator.clipboard.writeText(url); notice.value = 'Ссылка скопирована'; }
+        catch (_) { linkFallback.value = url; notice.value = 'Скопируйте ссылку вручную'; }
+    } catch (e) { error.value = e.message; }
 }
 
 // ---------- navigation ----------
@@ -662,7 +701,7 @@ function loadThumbs() {
 // ---------- detail ----------
 const isAuthor = computed(() => {
     const uid = me.value?.id || myId.value;
-    return !!uid && !!detail.value && uid === detail.value.author;
+    return !!detail.value && (detail.value.is_author === true || (!!uid && uid === detail.value.author));
 });
 const isPaid = computed(() => !!detail.value && Number(detail.value.price) > 0 && !!detail.value.backing_course_id);
 // Access window measured from the air date (accessExpiry); open if no expiry or not yet passed.
@@ -728,7 +767,7 @@ async function loadDetail(id) {
     stopPoll();
     stopChatPoll();
     try {
-        detail.value = await getStreamById(supa(), id);
+        detail.value = await getStreamById(supa(), id, streamLinkKey(route.hash));
         if (!detail.value) return; // "Эфир не найден" is rendered by the empty-detail branch
 
         // 1) Chat feed FIRST — independent of auth + video metadata, so messages arrive in ~40ms.
@@ -891,7 +930,7 @@ function startPoll() {
         if (!detail.value?.peertube_video_id) return stopPoll();
         detailInfo.value = await getVideoInfo(detail.value.peertube_video_id);
         // re-fetch the author's cached status too (they may have pressed "я в эфире" / ended it)
-        const fresh = await getStreamById(supa(), detail.value.id);
+        const fresh = await getStreamById(supa(), detail.value.id, streamLinkKey(route.hash));
         if (fresh) detail.value = fresh;
         attempts += 1;
         // Keep polling while waiting / live (viewer count) / replay transcoding; stop otherwise.
@@ -910,7 +949,7 @@ function msgTime(iso) {
     return iso ? new Date(iso).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
 }
 function canDeleteMsg(m) {
-    return !!me.value && (m.owner === me.value.id || (!!detail.value && detail.value.author === me.value.id));
+    return !!me.value && (m.can_delete === true || m.owner === me.value.id || isAuthor.value);
 }
 function scrollFeed() {
     nextTick(() => {
@@ -921,7 +960,7 @@ function scrollFeed() {
 async function loadChat(id, { scroll = false } = {}) {
     try {
         const prevLen = messages.value.length;
-        const rows = await listStreamMessages(supa(), id);
+        const rows = await listStreamMessages(supa(), id, { linkKey: detail.value?.visibility === 'unlisted' ? streamLinkKey(route.hash) : null });
         // Guard against in-flight races: while this request was out, access may have resolved to
         // "no access" (the privacy watch cleared the feed) or the viewer may have switched streams.
         // In either case don't write the (stale/denied) messages back into the UI.
@@ -938,7 +977,7 @@ async function sendChat() {
     if (!text || sending.value || !detail.value || !me.value) return;
     sending.value = true;
     try {
-        await sendStreamMessage(supa(), { stream: detail.value.id, owner: me.value.id, text });
+        await sendStreamMessage(supa(), { stream: detail.value.id, owner: me.value.id, text, linkKey: detail.value.visibility === 'unlisted' ? streamLinkKey(route.hash) : null });
         chatText.value = '';
         await loadChat(detail.value.id, { scroll: true });
     } catch (e) {
@@ -949,7 +988,7 @@ async function sendChat() {
 }
 async function removeMessage(m) {
     try {
-        await deleteStreamMessage(supa(), m.id);
+        await deleteStreamMessage(supa(), m.id, { streamId: detail.value?.id, linkKey: detail.value?.visibility === 'unlisted' ? streamLinkKey(route.hash) : null });
         messages.value = messages.value.filter(x => x.id !== m.id);
     } catch (e) {
         error.value = e.message || String(e);
@@ -970,8 +1009,9 @@ function stopChatPoll() {
 
 // React to ?stream= changes (list ↔ detail without a full reload).
 watch(
-    activeStreamId,
-    id => {
+    () => [activeStreamId.value, route.hash],
+    ([id]) => {
+        linkFallback.value = '';
         if (id) loadDetail(id);
         else {
             detail.value = null;
@@ -999,7 +1039,7 @@ watch([hasAccess, accessResolved], ([access, resolved]) => {
 // ---------- create / author actions ----------
 function cancelForm() {
     showForm.value = false;
-    form.value = { title: '', description: '', scheduledAt: '', kind: 'free', price: null, months: 3, format: 'solo', chat: false, recording: false, cover_url: '' };
+    form.value = { title: '', description: '', scheduledAt: '', kind: 'free', visibility: 'public', price: null, months: 3, format: 'solo', chat: false, recording: false, cover_url: '' };
     error.value = '';
     coverError.value = '';
 }
@@ -1078,6 +1118,8 @@ async function createBroadcast() {
     error.value = '';
     try {
         const paid = form.value.kind === 'paid';
+        validateVisibility({ visibility: form.value.visibility, price: paid ? form.value.price : 0 });
+        await requireUnlistedSupport(supa(), form.value.visibility);
         const multi = form.value.format === 'multi';
         const price = paid ? Number(form.value.price) : 0;
         const months = paid ? Number(form.value.months) : null;
@@ -1093,6 +1135,7 @@ async function createBroadcast() {
             : null;
         const row = await createStream(supa(), {
             author: me.value.id,
+            visibility: form.value.visibility,
             title: form.value.title,
             description: form.value.description,
             price,
@@ -1107,7 +1150,7 @@ async function createBroadcast() {
         });
         const withAuthor = { ...row, authorUser: me.value };
         myStreams.value.unshift(withAuthor);
-        listItems.value.unshift(withAuthor);
+        if (isPublicStream(withAuthor)) listItems.value.unshift(withAuthor);
         if (multi) {
             // No OBS creds for a co-host stream — send the owner to the stream page,
             // where "Начать эфир" + the roster (invite) live.
@@ -1190,6 +1233,7 @@ async function removeStream(s) {
 }
 
 onMounted(() => {
+    visibilityCapabilities(supa()).then(c => { unlistedEnabled.value = c.unlisted_enabled === true; }).catch(() => {});
     // Open the detail + chat immediately; don't block them behind the stream-list load.
     if (activeStreamId.value) loadDetail(activeStreamId.value);
     load();
@@ -1201,6 +1245,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.sp-visibility { border: 0; padding: 0; margin: 0; min-width: 0; }
+.sp-visibility legend { padding: 0; margin-bottom: 8px; }
 .streams-page {
     /* #app already reserves 62px for the fixed AppHeader (rendered globally by App.vue). Fill the
        viewport below it so the global footer is pushed to the bottom on short content. */

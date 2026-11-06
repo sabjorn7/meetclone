@@ -72,7 +72,7 @@
                                 <span class="pd-course__author">{{ author(c).Name }}</span>
                             </span>
                             <span v-else></span>
-                            <span class="pd-course__price" :class="{ 'is-free': c.Free }">{{ c.Free ? 'Бесплатно' : money(c.Price) + ' ₽' }}</span>
+                            <CoursePrice class="pd-course__price" :course="c" />
                         </div>
                     </button>
                 </div>
@@ -133,7 +133,7 @@
                             <a v-if="qvOwns" class="pd-btn" :href="`/my_courses?course=${qv.id}`">Уже в библиотеке</a>
                             <button v-else class="pd-btn" type="button" :disabled="buying" @click="buyFromQuickView">{{ qvBuyLabel }}</button>
                             <a class="pd-btn pd-btn--ghost" :href="courseHref(qv)">Подробнее о курсе</a>
-                            <span class="pd-qv__price" :class="{ 'is-free': qv.Free }">{{ qv.Free ? 'Бесплатно' : money(qv.Price) + ' ₽' }}</span>
+                            <CoursePrice class="pd-qv__price" :course="qv" />
                         </div>
                         <p v-if="buyError" class="pd-buyerr">{{ buyError }}</p>
                     </div>
@@ -145,6 +145,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
+import CoursePrice from '@/_front/components/CoursePrice.vue';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import { loadTimeout } from '@/_front/chrome/errorLogger.js';
 import { sbWithRetry } from '@/_front/chrome/sbFetch.js';
@@ -204,7 +205,6 @@ function initialsOf(name) {
     const p = (name || '').split(/\s+/).filter(Boolean);
     return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || '·';
 }
-function money(n) { return Number(n || 0).toLocaleString('ru-RU'); }
 
 // ── Quick-view popup (teaser + author + buy), matching the old catalog's on-click popup ──
 const qvEmbed = computed(() => (qv.value?.video_id ? embedUrl(qv.value.video_id) : ''));
@@ -450,12 +450,12 @@ function ensureFonts() {
 .pd-course__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pd-course__cat { align-self: flex-start; padding: 5px 12px; border-radius: var(--r-pill); background: var(--blue-tint); color: var(--blue-ink); font-weight: 600; font-size: 12px; }
 .pd-course__t { margin: 0; font-weight: 600; font-size: 1.08rem; line-height: 1.28; letter-spacing: -0.01em; flex: 1; }
-.pd-course__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 2px; }
-.pd-course__auth { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.pd-course__foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 2px; }
+.pd-course__auth { display: inline-flex; align-items: center; flex: 1 1 7rem; gap: 8px; min-width: 0; }
 .pd-course__ava { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex: none; }
 .pd-course__ava--i { display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-weight: 700; font-size: 10px; }
 .pd-course__author { color: var(--ink-3); font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pd-course__price { font-weight: 700; font-size: 1.05rem; color: var(--ink); white-space: nowrap; flex: none; }
+.pd-course__price { --course-price-align: flex-end; margin-left: auto; font-weight: 700; font-size: 1.05rem; color: var(--ink); }
 .pd-course__price.is-free { color: var(--orange-ink); }
 
 /* ── Empty state ────────────────────────────────────────────────────────── */
@@ -546,6 +546,6 @@ button.pd-course { font-family: inherit; text-align: left; width: 100%; cursor: 
     .pd-qv__stats { grid-template-columns: 1fr; }
     .pd-qv__actions { flex-direction: column; align-items: stretch; }
     .pd-qv__actions .pd-btn { width: 100%; }
-    .pd-qv__price { margin: 4px 0 0; text-align: center; }
+    .pd-qv__price { --course-price-align: center; margin: 4px 0 0; text-align: center; }
 }
 </style>

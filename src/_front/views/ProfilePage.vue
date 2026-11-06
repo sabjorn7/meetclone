@@ -100,9 +100,7 @@
                         >
                             <span class="pd-course__cat">{{ c.Category || 'Курс' }}</span>
                             <h3 class="pd-course__t">{{ c.Title }}</h3>
-                            <span class="pd-course__price" :class="{ 'is-free': c.Free }">
-                                {{ c.Free ? 'Бесплатно' : money(c.Price) + ' ₽' }}
-                            </span>
+                            <CoursePrice class="pd-course__price" :course="c" />
                         </a>
                     </div>
                     <div v-if="courses.length > COURSE_LIMIT && !showAllCourses" class="pd-more">
@@ -181,6 +179,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
+import CoursePrice from '@/_front/components/CoursePrice.vue';
 import { getSupabase, authCookieUser } from '@/_front/chrome/headerAccount.js';
 
 const route = useRoute();
@@ -245,7 +244,6 @@ function courseWord(n) {
     if (b === 1) return 'курс';
     return 'курсов';
 }
-function money(n) { return Number(n || 0).toLocaleString('ru-RU'); }
 // Human-readable slug URLs (the site convention: slug || id fallback, same as my_courses/Home).
 // A course/article without a slug falls back to its id; the target pages resolve either form.
 function courseHref(c) { return `/course/${c.slug || c.id}`; }
@@ -299,7 +297,7 @@ async function fetchCourses(sb, ids, publishedOnly) {
     const chunks = [];
     for (let i = 0; i < list.length; i += 40) chunks.push(list.slice(i, i + 40));
     const results = await Promise.all(chunks.map((ch) => {
-        let q = sb.from('course').select('id, "Title", "Price", "Free", "Category", slug, created_at').in('id', ch);
+        let q = sb.from('course').select('id, "Title", "Price", "Free", old_price, "Category", slug, created_at').in('id', ch);
         if (publishedOnly) q = q.eq('ModStatus', 'Опубликовано');
         return q;
     }));

@@ -45,7 +45,7 @@
                         <div class="pd-buycard" data-reveal>
                             <div class="pd-buycard__price">
                                 <span class="pd-buycard__now">{{ priceText }}</span>
-                                <span v-if="course.old_price" class="pd-buycard__old">{{ money(course.old_price) }} ₽</span>
+                                <span v-if="discount" class="pd-buycard__old">{{ money(discount.oldPrice) }} ₽</span>
                             </div>
                             <template v-if="owns">
                                 <button v-if="canRenew" class="pd-btn pd-btn--lg pd-btn--block" type="button" :disabled="buying" @click="onRenew">{{ renewLabel }}</button>
@@ -155,7 +155,7 @@
                             <div class="pd-price__amount">
                                 {{ course.Free ? 'Бесплатно' : money(course.Price) }}<span v-if="!course.Free" class="cur"> ₽</span>
                             </div>
-                            <p v-if="course.old_price" class="pd-price__old">{{ money(course.old_price) }} ₽</p>
+                            <p v-if="discount" class="pd-price__old">{{ money(discount.oldPrice) }} ₽</p>
                             <template v-if="owns">
                                 <button v-if="canRenew" class="pd-btn pd-btn--lg pd-btn--block" type="button" :disabled="buying" @click="onRenew">{{ renewLabel }}</button>
                                 <a v-else class="pd-btn pd-btn--lg pd-btn--block" :href="myCoursesHref">Уже в библиотеке</a>
@@ -200,6 +200,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
+import { getCourseDiscount } from '@/_front/course/discount.js';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
 import { getBuyerRow, ownsCourse, enrollFree, addToCart, courseInCart } from '@/_front/course/coursesApi.js';
@@ -289,6 +290,7 @@ const descrParagraphs = computed(() => (course.value?.Decription || '').split(/\
 const learnItems = computed(() => bullets(course.value?.WhatTeach));
 const forItems = computed(() => bullets(course.value?.For));
 const priceText = computed(() => (course.value?.Free ? 'Бесплатно' : `${money(course.value?.Price)} ₽`));
+const discount = computed(() => getCourseDiscount(course.value));
 const teaserStarted = ref(false);
 const teaserEmbed = computed(() => (course.value?.video_id ? embedUrl(course.value.video_id, { autoplay: true }) : ''));
 // CTA label for the NON-owner button: free enroll, in-cart, or buy.

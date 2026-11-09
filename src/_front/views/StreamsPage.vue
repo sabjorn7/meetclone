@@ -221,7 +221,7 @@
                                     : 'Классический эфир: камера телефона или OBS, один ведущий.' }}
                             </p>
                         </div>
-                        <StreamQualityField :full-hd-enabled="false" id="stream-create-quality" v-model="form.video_quality" :solo="form.format === 'solo'" />
+                        <StreamQualityField :full-hd-enabled="fullHdEnabled" id="stream-create-quality" v-model="form.video_quality" :solo="form.format === 'solo'" />
                         <div class="sp-field">
                             <span>Доступ</span>
                             <div class="sp-radio-row">
@@ -484,7 +484,7 @@ import StreamQualityField from '@/_front/components/StreamQualityField.vue';
 import StreamViewer from '@/_front/components/StreamViewer.vue';
 import StreamDiagnostics from '@/_front/components/StreamDiagnostics.vue';
 import { videoProfile } from '@/_front/streams/videoQuality.js';
-import { streamFullHdAllowed } from '@/_front/streams/streamQualityAccess.js';
+import { fullHdAvailable } from '@/_front/streams/streamQualityAccess.js';
 import PushToggle from '@/_front/components/PushToggle.vue';
 import { logClientEvent } from '@/_front/chrome/errorLogger.js';
 
@@ -528,6 +528,7 @@ const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', vi
 const shareMsg = ref('');
 const linkFallback = ref('');
 const unlistedEnabled = ref(false);
+const fullHdEnabled = ref(false);
 const editFullHdAllowed = ref(false);
 const editQualityChecking = ref(false);
 let editQualityGeneration = 0;
@@ -1102,7 +1103,7 @@ async function openManage(s) {
     manageStream.value = s;
     editForm.value = { title: s.title || '', description: s.description || '', cover_url: s.cover_url || '', scheduledAt: toLocalInput(s.scheduled_at), video_quality: 'hd' };
     editError.value = ''; editCoverError.value = ''; confirmDeleteId.value = null;
-    const allowed = s.author === me.value?.id && s.mode === 'multi' && await streamFullHdAllowed(supa(), s.id);
+    const allowed = s.author === me.value?.id && await fullHdAvailable(supa());
     if (version !== editQualityGeneration || manageStream.value?.id !== s.id) return;
     editFullHdAllowed.value = !!allowed;
     editForm.value.video_quality = allowed ? videoProfile(s.video_quality).id : 'hd';
@@ -1130,7 +1131,7 @@ async function saveEdit() {
     if (title.length < 3) { editError.value = 'Название — минимум 3 символа.'; return; }
     editBusy.value = true; editError.value = '';
     try {
-        if (draft.video_quality === 'full_hd' && !(await streamFullHdAllowed(supa(), s.id))) throw new Error('Тестовый допуск Full HD недоступен или истёк. Выберите HD.');
+        if (draft.video_quality === 'full_hd' && !(await fullHdAvailable(supa()))) throw new Error('Full HD сейчас отключён. Выберите HD.');
         if (version !== editQualityGeneration || manageStream.value?.id !== s.id) return;
         const patch = {
             title,
@@ -1154,6 +1155,7 @@ async function createBroadcast() {
     creating.value = true;
     error.value = '';
     try {
+        if (form.value.video_quality === 'full_hd' && !(await fullHdAvailable(supa()))) throw new Error('Full HD сейчас отключён. Выберите HD.');
         const paid = form.value.kind === 'paid';
         validateVisibility({ visibility: form.value.visibility, price: paid ? form.value.price : 0 });
         await requireUnlistedSupport(supa(), form.value.visibility);
@@ -1273,6 +1275,7 @@ async function removeStream(s) {
 }
 
 onMounted(() => {
+    fullHdAvailable(supa()).then(enabled => { fullHdEnabled.value = enabled; });
     visibilityCapabilities(supa()).then(c => { unlistedEnabled.value = c.unlisted_enabled === true; }).catch(() => {});
     // Open the detail + chat immediately; don't block them behind the stream-list load.
     if (activeStreamId.value) loadDetail(activeStreamId.value);

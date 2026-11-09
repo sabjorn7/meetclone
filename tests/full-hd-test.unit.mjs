@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { streamFullHdAllowed } from '../src/_front/streams/streamQualityAccess.js';
-test('permission request names only stream_id; owner comes from server auth',async()=>{
- const calls=[];assert.equal(await streamFullHdAllowed({rpc:async(...args)=>{calls.push(args);return {data:{version:2,full_hd_allowed:true}};}},'synthetic-stream'),true);
- assert.deepEqual(calls,[['stream_video_quality_for_stream',{p_stream_id:'synthetic-stream'}]]);
+import { fullHdAvailable } from '../src/_front/streams/streamQualityAccess.js';
+test('global capability request has no stream, owner or grant identifier',async()=>{
+ const calls=[];assert.equal(await fullHdAvailable({rpc:async(...args)=>{calls.push(args);return {data:{version:1,full_hd_enabled:true}};}}),true);
+ assert.deepEqual(calls,[['stream_video_quality_capabilities']]);
 });
-test('only an explicit scoped version-2 permission enables the UI, never the global flag',async()=>{
- for(const data of [null,{version:1,full_hd_allowed:true},{version:2,full_hd_allowed:false},{version:2,full_hd_enabled:true},{version:2,full_hd_allowed:'true'}])assert.equal(await streamFullHdAllowed({rpc:async()=>({data})},'s'),false);
+test('only explicit global flag enables Full HD; personal grants cannot override it',async()=>{
+ for(const data of [null,{version:1,full_hd_enabled:false},{version:2,full_hd_allowed:true},{version:1,full_hd_enabled:'true'}])assert.equal(await fullHdAvailable({rpc:async()=>({data})}),false);
 });
-test('RPC/transport errors fail closed without any fallback or write request',async()=>{
- assert.equal(await streamFullHdAllowed({rpc:async()=>({data:{version:2,full_hd_allowed:true},error:{code:'denied'}})},'s'),false);
- assert.equal(await streamFullHdAllowed({rpc:async()=>{throw Error('offline');}},'s'),false);
+test('RPC/transport failures fail closed without writes',async()=>{
+ assert.equal(await fullHdAvailable({rpc:async()=>({data:{version:1,full_hd_enabled:true},error:{code:'offline'}})}),false);
+ assert.equal(await fullHdAvailable({rpc:async()=>{throw Error('offline');}}),false);
 });

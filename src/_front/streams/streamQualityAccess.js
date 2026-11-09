@@ -1,7 +1,7 @@
-// Read-only, per-stream permission. No caller-supplied owner and no global fallback.
-export async function streamFullHdAllowed(supabase, streamId) {
+// Global feature availability only; ownership and capacity remain server-enforced.
+export async function fullHdAvailable(supabase) {
     try {
-        const { data, error } = await supabase.rpc('stream_video_quality_for_stream', { p_stream_id: streamId });
-        return !error && data?.version === 2 && data.full_hd_allowed === true;
+        const { data, error } = await supabase.rpc('stream_video_quality_capabilities');
+        return !error && data?.version === 1 && data.full_hd_enabled === true;
     } catch { return false; }
 }

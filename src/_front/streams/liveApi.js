@@ -27,6 +27,12 @@ const ERROR_MESSAGES = {
     bad_email: 'Введите корректный email.',
     user_not_found: 'Пользователь с таким email не найден.',
     rate_limited: 'Слишком много запросов. Подождите немного.',
+    full_hd_capacity: 'Все места Full HD заняты. Выберите HD или попробуйте позже.',
+    full_hd_not_enabled: 'Full HD пока не включён администратором. Выберите HD.',
+    stream_settings_changed: 'Настройки эфира изменились. Обновите страницу перед запуском.',
+    stream_start_in_progress: 'Эфир уже запускается. Подождите.',
+    video_reservation_expired: 'Запуск занял слишком много времени. Обновите страницу и попробуйте снова.',
+    video_start_reconciliation_required: 'Результат запуска неизвестен. Нужна проверка администратора; не запускайте эфир повторно.',
     internal: 'Ошибка сервера. Попробуйте позже.',
 };
 
@@ -47,7 +53,7 @@ function errorCodeFrom(body) {
     return 'internal';
 }
 
-async function post(supabase, path, body) {
+async function post(supabase, path, body, signal) {
     const { data } = await supabase.auth.getSession();
     const token = data?.session?.access_token;
     if (!token) throw new LiveApiError('invalid_token', 401);
@@ -58,6 +64,7 @@ async function post(supabase, path, body) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify(body),
+            signal,
         });
     } catch {
         // fetch rejects only on network failure, never on HTTP status.
@@ -78,6 +85,13 @@ async function post(supabase, path, body) {
 /** Mint a publish token for an owner/cohost of `streamId` (403 if not a member). */
 export function getLiveToken(supabase, streamId) {
     return post(supabase, '/live/token', { stream_id: streamId });
+}
+
+export async function getLiveQuality(supabase, streamId) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try { return await post(supabase, '/live/quality', { stream_id: streamId }, controller.signal); }
+    finally { clearTimeout(timer); }
 }
 
 /** Owner-only: create the PeerTube live + start the composite egress. 409 if already live. */

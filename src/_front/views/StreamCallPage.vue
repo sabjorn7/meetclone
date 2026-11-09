@@ -20,6 +20,7 @@
         <template v-else>
             <div v-if="reconnecting" class="lkc-banner">Переподключение…</div>
 
+            <StreamDiagnostics :room="room" :profile="captureQuality" :stream-id="streamId" />
             <!-- Screen share present → spotlight (big screen + small camera strip); else camera grid -->
             <div v-if="screenShares.length" class="lkc-stage">
                 <div class="lkc-spotlight">
@@ -220,6 +221,8 @@ import { getLiveToken, inviteCohost, removeCohost, LiveApiError } from '@/_front
 import { listCohosts } from '@/_front/streams/cohosts.js';
 import { readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import StreamTile from './StreamTile.vue';
+import StreamDiagnostics from '@/_front/components/StreamDiagnostics.vue';
+import { videoProfile, roomVideoOptions, enableProfileCamera } from '@/_front/streams/videoQuality.js';
 
 const supa = () => window.wwLib?.wwPlugins?.supabase?.instance;
 
@@ -227,6 +230,7 @@ const route = useRoute();
 const router = useRouter();
 const streamId = String(route.query.stream || '');
 
+const captureQuality = ref('hd');
 const room = shallowRef(null); // LiveKit Room — NOT deeply reactive
 const phase = ref('loading'); // loading | connecting | connected | reconnecting | error
 const errorMsg = ref(null);
@@ -474,7 +478,7 @@ function onVisibility() {
     const r = room.value;
     if (!r) return;
     if (document.visibilityState === 'visible') {
-        if (userWantsCamera.value) r.localParticipant.setCameraEnabled(true).catch(() => {});
+        if (userWantsCamera.value) enableProfileCamera(r.localParticipant, captureQuality.value).catch(() => {});
         acquireWakeLock(); // the browser releases the wake lock on hide → re-take it on return
     } else if (isCoarsePointer) {
         // Phone/tablet hidden: the OS suspends capture anyway → drop the camera, keep the mic (audio
@@ -510,7 +514,9 @@ async function connect() {
         const grant = await getLiveToken(supa(), streamId);
         role.value = grant.role;
 
-        const r = new Room({ adaptiveStream: true, dynacast: true });
+        // Server returns the immutable active run profile, not an editable future preference.
+        captureQuality.value = videoProfile(grant.video_quality).id;
+        const r = new Room(roomVideoOptions(captureQuality.value));
         REBUILD_ON.forEach((ev) => r.on(ev, syncParticipants));
         r.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
         r.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
@@ -519,7 +525,7 @@ async function connect() {
         r.on(RoomEvent.Disconnected, onRoomDisconnected);
 
         await r.connect(grant.url, grant.token); // the "Войти" click gave the user-gesture for audio autoplay
-        await r.localParticipant.setCameraEnabled(true);
+        await enableProfileCamera(r.localParticipant, captureQuality.value);
         await r.localParticipant.setMicrophoneEnabled(true);
 
         room.value = r;
@@ -627,7 +633,8 @@ function toggleMic() {
 function toggleCam() {
     const next = !camOn.value;
     userWantsCamera.value = next;
-    room.value?.localParticipant.setCameraEnabled(next).catch(() => {});
+    const participant = room.value?.localParticipant;
+    if (participant) (next ? enableProfileCamera(participant, captureQuality.value) : participant.setCameraEnabled(false)).catch(() => {});
 }
 function onPickCam(e) {
     const id = e.target.value;
@@ -646,7 +653,8 @@ async function toggleScreenShare() {
         // Video only (no screen audio in v1). getDisplayMedia shows the browser's native picker;
         // if the user cancels or denies it rejects → no-op. Stopping via the browser's own "Stop
         // sharing" bar fires LocalTrackUnpublished → syncParticipants resets screenSharing.
-        await r.localParticipant.setScreenShareEnabled(!screenSharing.value);
+        const p = videoProfile(captureQuality.value);
+        await r.localParticipant.setScreenShareEnabled(!screenSharing.value, { resolution: { width: p.width, height: p.height, frameRate: p.fps } });
     } catch {
         /* picker cancelled / permission denied */
     }

@@ -1,5 +1,6 @@
 // Supabase data helpers for the "Трансляции" (live streams) feature.
 // Requires pending_stream_visibility.sql for unlisted access; never falls back to broad reads.
+import { videoProfile } from './videoQuality.js';
 import { STREAM_VIEW_FIELDS, validateVisibility, requireUnlistedSupport } from './visibility.js';
 
 // Roles allowed to create a broadcast (same set as the subscriptions feature).
@@ -28,7 +29,8 @@ export function canStream(user) {
 
 /** Insert a stream metadata row. `peertube_video_id` = the live video uuid. price 0 = free.
  *  `scheduled_at` = planned start (ISO) or null. */
-export async function createStream(supabase, { author, title, description = '', price = 0, peertube_video_id = null, access_months = null, backing_course_id = null, scheduled_at = null, mode = 'solo', chat_enabled = false, recording_course_enabled = false, cover_url = null, visibility = 'public' }) {
+export async function createStream(supabase, { author, title, description = '', price = 0, peertube_video_id = null, access_months = null, backing_course_id = null, scheduled_at = null, mode = 'solo', chat_enabled = false, recording_course_enabled = false, cover_url = null, visibility = 'public', video_quality = 'hd' }) {
+    videoProfile(video_quality);
     validateVisibility({ visibility, price, backing_course_id, chat_enabled, recording_course_enabled });
     await requireUnlistedSupport(supabase, visibility);
     // chat_enabled=true → the BEFORE INSERT trigger tg_stream_create_chat auto-creates a group chat
@@ -41,7 +43,7 @@ export async function createStream(supabase, { author, title, description = '', 
     // it appears in /all_course as «Запись семинара» and in «Мои курсы» of everyone who bought.
     const { data, error } = await supabase
         .from('streams')
-        .insert({ author, title, description, price, peertube_video_id, access_months, backing_course_id, scheduled_at, mode, chat_enabled, recording_course_enabled, cover_url, visibility })
+        .insert({ author, title, description, price, peertube_video_id, access_months, backing_course_id, scheduled_at, mode, chat_enabled, recording_course_enabled, cover_url, visibility, video_quality })
         .select(STREAM_VIEW_FIELDS)
         .limit(1);
     if (error) throw new Error(`Не удалось сохранить эфир: ${error.message}`);
@@ -52,7 +54,8 @@ export async function createStream(supabase, { author, title, description = '', 
  *  price/backing_course/mode/peertube. `cover_url`/`scheduled_at`/`title`/`description` only. */
 export async function updateStream(supabase, streamId, fields) {
     const patch = {};
-    for (const k of ['title', 'description', 'cover_url', 'scheduled_at']) {
+    if ('video_quality' in fields) videoProfile(fields.video_quality);
+    for (const k of ['title', 'description', 'cover_url', 'scheduled_at', 'video_quality']) {
         if (k in fields) patch[k] = fields[k];
     }
     const { error } = await supabase.from('streams').update(patch).eq('id', streamId);

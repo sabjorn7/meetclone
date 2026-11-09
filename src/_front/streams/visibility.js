@@ -1,5 +1,5 @@
 // Display/transport contract only. PostgreSQL enforces visibility and ownership independently.
-export const STREAM_VIEW_FIELDS = 'id,created_at,author,title,description,peertube_video_id,price,status,scheduled_at,cover_url,backing_course_id,access_months,hidden,mode,chat,chat_enabled,recording_course,recording_course_enabled,visibility';
+export const STREAM_VIEW_FIELDS = 'id,created_at,author,title,description,peertube_video_id,price,status,scheduled_at,cover_url,backing_course_id,access_months,hidden,mode,chat,chat_enabled,recording_course,recording_course_enabled,visibility,video_quality';
 export function validateVisibility({ visibility = 'public', price = 0, backing_course_id = null, chat_enabled = false, recording_course_enabled = false }) {
     if (!['public', 'unlisted'].includes(visibility)) throw new Error('Выберите доступность эфира.');
     if (visibility === 'unlisted' && (Number(price) !== 0 || backing_course_id || chat_enabled || recording_course_enabled)) {

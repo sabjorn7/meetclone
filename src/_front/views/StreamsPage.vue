@@ -68,14 +68,8 @@
                         </div>
                     </div>
                     <!-- Live / ended (replay ready): PeerTube iframe -->
-                    <div v-else class="sp-player">
-                        <iframe
-                            :src="playerSrc"
-                            allowfullscreen
-                            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                            allow="autoplay; fullscreen"
-                        ></iframe>
-                    </div>
+                    <StreamViewer v-else :src="playerSrc" />
+                    <StreamDiagnostics v-if="detail.mode === 'multi' && (isAuthor || me?.role === 'admin')" :key="detail.id" :stream-id="detail.id" />
                 </div>
 
                 <!-- Multi-host (co-host) controls — ONLY mode='multi'; the solo path is untouched. -->
@@ -227,6 +221,7 @@
                                     : 'Классический эфир: камера телефона или OBS, один ведущий.' }}
                             </p>
                         </div>
+                        <StreamQualityField :full-hd-enabled="fullHdEnabled" id="stream-create-quality" v-model="form.video_quality" :solo="form.format === 'solo'" />
                         <div class="sp-field">
                             <span>Доступ</span>
                             <div class="sp-radio-row">
@@ -435,6 +430,7 @@
                         <span class="pd-field__lb">Дата и время эфира <span class="sp-optional">(необязательно)</span></span>
                         <input v-model="editForm.scheduledAt" class="pd-input" type="datetime-local" />
                     </label>
+                    <StreamQualityField :full-hd-enabled="fullHdEnabled" id="stream-edit-quality" v-model="editForm.video_quality" :live="manageStream.status === 'live'" :solo="manageStream.mode !== 'multi'" />
                     <p v-if="editError" class="sp-note sp-note-err">{{ editError }}</p>
                 </div>
                 <div class="pd-dialog__foot">
@@ -478,6 +474,10 @@ import { listCohosts, getMyCohostRole } from '@/_front/streams/cohosts.js';
 // Fast auth: resolve the uid from the stored session/cookie synchronously (no stall-prone
 // auth.getSession()), and wait out the session-restore race without flashing "no access".
 import { readStoredSession, authCookieUser, waitForUid } from '@/_front/chrome/headerAccount.js';
+import StreamQualityField from '@/_front/components/StreamQualityField.vue';
+import StreamViewer from '@/_front/components/StreamViewer.vue';
+import StreamDiagnostics from '@/_front/components/StreamDiagnostics.vue';
+import { videoProfile } from '@/_front/streams/videoQuality.js';
 import PushToggle from '@/_front/components/PushToggle.vue';
 import { logClientEvent } from '@/_front/chrome/errorLogger.js';
 
@@ -502,7 +502,7 @@ const buyersLoading = ref({});
 const buyersError = ref({});
 // manage/edit modal (per stream)
 const manageStream = ref(null);
-const editForm = ref({ title: '', description: '', cover_url: '', scheduledAt: '' });
+const editForm = ref({ title: '', description: '', cover_url: '', scheduledAt: '', video_quality: 'hd' });
 const editBusy = ref(false);
 const editError = ref('');
 const editCoverBusy = ref(false);
@@ -511,10 +511,11 @@ const notice = ref('');
 const error = ref('');
 const creds = ref(null);
 const maskKey = ref(false);
-const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', visibility: 'public', price: null, months: 3, format: 'solo', chat: false, recording: false, cover_url: '' });
+const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', visibility: 'public', video_quality: 'hd', price: null, months: 3, format: 'solo', chat: false, recording: false, cover_url: '' });
 const shareMsg = ref('');
 const linkFallback = ref('');
 const unlistedEnabled = ref(false);
+const fullHdEnabled = ref(false);
 // cover upload (same bucket/pattern as course/profile covers)
 const COVER_BUCKET = 'profile';
 const COVER_STORAGE_URL = 'https://sb.meetgu.ru/storage/v1/object/public/profile//';
@@ -1039,7 +1040,7 @@ watch([hasAccess, accessResolved], ([access, resolved]) => {
 // ---------- create / author actions ----------
 function cancelForm() {
     showForm.value = false;
-    form.value = { title: '', description: '', scheduledAt: '', kind: 'free', visibility: 'public', price: null, months: 3, format: 'solo', chat: false, recording: false, cover_url: '' };
+    form.value = { title: '', description: '', scheduledAt: '', kind: 'free', visibility: 'public', video_quality: 'hd', price: null, months: 3, format: 'solo', chat: false, recording: false, cover_url: '' };
     error.value = '';
     coverError.value = '';
 }
@@ -1073,7 +1074,7 @@ function toLocalInput(iso) {
 }
 function openManage(s) {
     manageStream.value = s;
-    editForm.value = { title: s.title || '', description: s.description || '', cover_url: s.cover_url || '', scheduledAt: toLocalInput(s.scheduled_at) };
+    editForm.value = { title: s.title || '', description: s.description || '', cover_url: s.cover_url || '', scheduledAt: toLocalInput(s.scheduled_at), video_quality: videoProfile(s.video_quality).id };
     editError.value = ''; editCoverError.value = ''; confirmDeleteId.value = null;
 }
 function closeManage() { manageStream.value = null; }
@@ -1098,6 +1099,7 @@ async function saveEdit() {
     try {
         const patch = {
             title,
+            video_quality: videoProfile(editForm.value.video_quality).id,
             description: (editForm.value.description || '').trim(),
             cover_url: editForm.value.cover_url || null,
             scheduled_at: editForm.value.scheduledAt ? new Date(editForm.value.scheduledAt).toISOString() : null,
@@ -1136,6 +1138,7 @@ async function createBroadcast() {
         const row = await createStream(supa(), {
             author: me.value.id,
             visibility: form.value.visibility,
+            video_quality: videoProfile(form.value.video_quality).id,
             title: form.value.title,
             description: form.value.description,
             price,
@@ -1233,6 +1236,7 @@ async function removeStream(s) {
 }
 
 onMounted(() => {
+    supa().rpc('stream_video_quality_capabilities').then(({ data, error }) => { fullHdEnabled.value = !error && data?.version === 1 && data.full_hd_enabled === true; }).catch(() => {});
     visibilityCapabilities(supa()).then(c => { unlistedEnabled.value = c.unlisted_enabled === true; }).catch(() => {});
     // Open the detail + chat immediately; don't block them behind the stream-list load.
     if (activeStreamId.value) loadDetail(activeStreamId.value);

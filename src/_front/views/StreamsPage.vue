@@ -270,42 +270,21 @@
                         </div>
                     </form>
                     <p v-if="error" class="sp-error">{{ error }}</p>
-                </section>
-
-                <!-- All streams (catalog style, like /all_course) -->
-                <section class="sp-catalog">
-                    <h2 class="pd-h2">Все эфиры</h2>
-                    <div v-if="!listItems.length" class="pd-state">Пока нет эфиров.</div>
-                    <div v-else class="pd-cards pd-cards--courses">
-                        <button v-for="s in listItems" :key="s.id" class="pd-course" type="button" @click="openStream(s.id)">
-                            <span class="pd-course__cover">
-                                <img v-if="s.cover_url || s.thumb" :src="s.cover_url || s.thumb" :alt="s.title" loading="lazy" />
-                                <span v-else class="pd-course__cover--ph" aria-hidden="true">📡</span>
-                                <span class="pd-course__badge" :class="'sp-badge-' + s.status">{{ statusLabel(s.status) }}</span>
-                            </span>
-                            <h3 class="pd-course__t">{{ s.title }}</h3>
-                            <div v-if="s.status === 'scheduled' && s.scheduled_at" class="pd-course__when">🕐 {{ formatDateTime(s.scheduled_at) }}</div>
-                            <div class="pd-course__foot">
-                                <span v-if="s.authorUser" class="pd-course__auth">
-                                    <img v-if="s.authorUser.Photo" class="pd-course__ava" :src="s.authorUser.Photo" :alt="s.authorUser.Name" />
-                                    <span v-else class="pd-course__ava pd-course__ava--i">{{ (s.authorUser.Name || '?').slice(0, 1) }}</span>
-                                    <span class="pd-course__author">{{ s.authorUser.Name }}</span>
-                                </span>
-                                <span v-else></span>
-                                <span class="pd-course__price" :class="{ 'is-free': !(Number(s.price) > 0) }">{{ priceLabel(s) }}</span>
-                            </div>
-                        </button>
-                    </div>
+                    <p v-if="createdStream && createdStream.author === me?.id" class="sp-notice sp-created" role="status">Трансляция создана. <button type="button" class="sp-btn sp-btn-mini" @click="openStream(createdStream.id)">Открыть эфир</button></p>
                 </section>
 
                 <!-- Author's own streams -->
-                <section v-if="isStreamer" class="sp-card">
-                    <h2>Мои эфиры</h2>
+                <section v-if="me && (isStreamer || myStreams.length)" class="sp-card sp-mine" aria-labelledby="my-streams-title">
+                    <h2 id="my-streams-title">Мои трансляции</h2>
+                    <div class="sp-mine-filters" role="group" aria-label="Доступность моих трансляций">
+                        <button v-for="filter in myVisibilityFilters" :key="filter.value" type="button" class="sp-btn sp-btn-mini" :class="{ 'sp-btn-primary': myVisibility === filter.value }" :aria-pressed="myVisibility === filter.value" @click="myVisibility = filter.value">{{ filter.label }}</button>
+                    </div>
+                    <p v-if="myStreamsError" class="sp-error" role="alert">{{ myStreamsError }} <button type="button" class="sp-btn sp-btn-mini" @click="load">Повторить загрузку</button></p>
                     <p v-if="notice" class="sp-notice" role="status">{{ notice }}</p>
                     <label v-if="linkFallback" class="sp-field"><span>Ссылка на эфир — скопируйте вручную</span><input :value="linkFallback" readonly @focus="$event.target.select()" /></label>
-                    <div v-if="!myStreams.length" class="sp-muted">Пока нет созданных эфиров.</div>
-                    <ul v-else class="sp-list">
-                        <li v-for="s in myStreams" :key="s.id" class="sp-item">
+                    <div v-if="!myStreamsError && !visibleMyStreams.length" class="sp-muted">{{ myVisibility === 'all' ? 'Пока нет созданных трансляций.' : 'Нет трансляций с выбранной доступностью.' }}</div>
+                    <ul v-if="visibleMyStreams.length" class="sp-list">
+                        <li v-for="s in visibleMyStreams" :key="s.id" class="sp-item">
                             <div class="sp-item-main">
                                 <div class="sp-item-title">{{ s.title }}</div>
                                 <div class="sp-item-meta">
@@ -327,10 +306,10 @@
                                     <button class="sp-btn sp-btn-mini" :disabled="busyId === s.id" @click="confirmDeleteId = null">Отмена</button>
                                 </template>
                                 <template v-else>
-                                    <button v-if="s.visibility === 'unlisted'" type="button" class="sp-btn sp-btn-mini" @click="copyStreamLink(s)">Скопировать ссылку</button>
+                                    <button type="button" class="sp-btn sp-btn-mini" @click="openStream(s.id)">Открыть эфир</button>
+                                    <button type="button" class="sp-btn sp-btn-mini" @click="copyStreamLink(s)">Копировать ссылку</button>
                                     <!-- завершён: запись + редактирование + удаление (без «Я в эфире»/«Данные OBS»/«Завершить») -->
                                     <template v-if="s.status === 'ended'">
-                                        <button class="sp-btn sp-btn-mini" @click="openStream(s.id)">Смотреть запись</button>
                                         <button class="sp-btn sp-btn-mini" @click="openManage(s)">✏️ Редактировать</button>
                                         <button v-if="!s.hidden" class="sp-btn sp-btn-mini sp-btn-danger" :disabled="busyId === s.id" @click="confirmDeleteId = s.id">Удалить</button>
                                     </template>
@@ -379,6 +358,33 @@
                         </li>
                     </ul>
                 </section>
+
+                <!-- All streams (catalog style, like /all_course) -->
+                <section class="sp-catalog">
+                    <h2 class="pd-h2">Все эфиры</h2>
+                    <div v-if="!listItems.length" class="pd-state">Пока нет эфиров.</div>
+                    <div v-else class="pd-cards pd-cards--courses">
+                        <button v-for="s in listItems" :key="s.id" class="pd-course" type="button" @click="openStream(s.id)">
+                            <span class="pd-course__cover">
+                                <img v-if="s.cover_url || s.thumb" :src="s.cover_url || s.thumb" :alt="s.title" loading="lazy" />
+                                <span v-else class="pd-course__cover--ph" aria-hidden="true">📡</span>
+                                <span class="pd-course__badge" :class="'sp-badge-' + s.status">{{ statusLabel(s.status) }}</span>
+                            </span>
+                            <h3 class="pd-course__t">{{ s.title }}</h3>
+                            <div v-if="s.status === 'scheduled' && s.scheduled_at" class="pd-course__when">🕐 {{ formatDateTime(s.scheduled_at) }}</div>
+                            <div class="pd-course__foot">
+                                <span v-if="s.authorUser" class="pd-course__auth">
+                                    <img v-if="s.authorUser.Photo" class="pd-course__ava" :src="s.authorUser.Photo" :alt="s.authorUser.Name" />
+                                    <span v-else class="pd-course__ava pd-course__ava--i">{{ (s.authorUser.Name || '?').slice(0, 1) }}</span>
+                                    <span class="pd-course__author">{{ s.authorUser.Name }}</span>
+                                </span>
+                                <span v-else></span>
+                                <span class="pd-course__price" :class="{ 'is-free': !(Number(s.price) > 0) }">{{ priceLabel(s) }}</span>
+                            </div>
+                        </button>
+                    </div>
+                </section>
+
             </template>
         </template>
         <!-- Guest clicked "Купить" → login prompt popup -->
@@ -488,6 +494,12 @@ const loading = ref(true);
 const me = ref(null);
 const listItems = ref([]);
 const myStreams = ref([]);
+const myStreamsError = ref('');
+const myVisibility = ref('all');
+const createdStream = ref(null);
+const myVisibilityFilters = [{ value: 'all', label: 'Все' }, { value: 'public', label: 'Публичные' }, { value: 'unlisted', label: 'Скрытые' }];
+// The server already scopes this query to the owner. Keep the UI scoped as well.
+const visibleMyStreams = computed(() => myStreams.value.filter(s => s.author === me.value?.id && (myVisibility.value === 'all' || (s.visibility || 'public') === myVisibility.value)));
 
 // create-form state
 const showForm = ref(false);
@@ -675,11 +687,20 @@ async function copy(text) {
 async function load() {
     loading.value = true;
     error.value = '';
+    myStreamsError.value = '';
+    myStreams.value = [];
     try {
         await ensureMe();
-        listItems.value = await listAllStreams(supa());
+        // A catalog failure must not hide the organizer's own streams (and vice versa).
+        const [catalog, own] = await Promise.allSettled([
+            listAllStreams(supa()),
+            me.value ? listMyStreams(supa(), me.value.id) : Promise.resolve([]),
+        ]);
+        listItems.value = catalog.status === 'fulfilled' ? catalog.value : [];
+        if (catalog.status === 'rejected') error.value = catalog.reason?.message || 'Не удалось загрузить общий список.';
         loadThumbs();
-        if (isStreamer.value && me.value) myStreams.value = await listMyStreams(supa(), me.value.id);
+        if (own.status === 'fulfilled') myStreams.value = own.value;
+        else myStreamsError.value = own.reason?.message || 'Не удалось загрузить ваши трансляции.';
     } catch (e) {
         error.value = e.message || String(e);
     } finally {
@@ -1153,6 +1174,8 @@ async function createBroadcast() {
         });
         const withAuthor = { ...row, authorUser: me.value };
         myStreams.value.unshift(withAuthor);
+        createdStream.value = withAuthor;
+        myVisibility.value = 'all';
         if (isPublicStream(withAuthor)) listItems.value.unshift(withAuthor);
         if (multi) {
             // No OBS creds for a co-host stream — send the owner to the stream page,
@@ -1249,6 +1272,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.sp-mine-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+.sp-mine-filters button:focus-visible { outline: 2px solid #1f5fc9; outline-offset: 3px; }
+.sp-created { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.sp-mine .sp-item-main { min-width: 0; }
+.sp-mine .sp-item-title { overflow-wrap: anywhere; }
+
 .sp-visibility { border: 0; padding: 0; margin: 0; min-width: 0; }
 .sp-visibility legend { padding: 0; margin-bottom: 8px; }
 .streams-page {

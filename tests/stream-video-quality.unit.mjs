@@ -34,12 +34,12 @@ test('actual available resolutions only, including conditional Auto; no fictiona
     assert.deepEqual(availableResolutions(null),[]);
 });
 const report=(time,bytes,packets=100,lost=2)=>new Map([
-    ['video',{id:'video',type:'outbound-rtp',kind:'video',timestamp:time,bytesSent:bytes,packetsSent:packets,frameWidth:1920,frameHeight:1080,framesPerSecond:29,remoteId:'remote',qualityLimitationReason:'bandwidth',address:'PRIVATE-IP',token:'PRIVATE-TOKEN'}],
-    ['remote',{type:'remote-inbound-rtp',kind:'video',packetsLost:lost,roundTripTime:.08,jitter:.004}],
+    ['video',{id:'video',type:'outbound-rtp',kind:'video',timestamp:time,framesSent:time/100,bytesSent:bytes,packetsSent:packets,frameWidth:1920,frameHeight:1080,framesPerSecond:29,remoteId:'remote',qualityLimitationReason:'bandwidth',address:'PRIVATE-IP',token:'PRIVATE-TOKEN'}],
+    ['remote',{type:'remote-inbound-rtp',kind:'video',timestamp:time,localId:'video',fractionLost:lost===4?0.02:undefined,packetsLost:lost,roundTripTime:.08,jitter:.004}],
 ]);
 test('bitrate needs two monotonic samples; RTT, losses and unavailable metrics stay distinct', () => {
-    const a=summarizeVideoStats(report(1000,1000));assert.equal(a.layers[0].bitrate,null);assert.equal(a.layers[0].lossPercent,null);
-    const b=summarizeVideoStats(report(3000,1001000,200,4),a.previous);assert.equal(b.layers[0].bitrate,4000000);assert.equal(b.layers[0].lossPercent,2);assert.equal(b.rttMs,80);assert.equal(b.layers[0].jitterMs,4);
+    const a=summarizeVideoStats(report(1000,1000),undefined,{now:1000});assert.equal(a.layers[0].bitrate,null);assert.equal(a.layers[0].lossPercent,null);
+    const b=summarizeVideoStats(report(3000,1001000,200,4),a.previous,{now:3000});assert.equal(b.layers[0].bitrate,4000000);assert.equal(b.layers[0].lossPercent,2);assert.equal(b.layers[0].rttMs,80);assert.equal(b.layers[0].jitterMs,4);
     assert.equal(summarizeVideoStats(report(100,10),b.previous).layers[0].bitrate,null);
     assert(!JSON.stringify(b.layers).includes('PRIVATE'));assert.equal(summarizeVideoStats(null).layers.length,0);
 });

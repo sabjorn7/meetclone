@@ -1,0 +1,56 @@
+// Actual Vue panel. Synthetic sender/RTCP/server only; no room, camera or production API.
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import http from 'node:http';
+import {spawn} from 'node:child_process';
+import assert from 'node:assert/strict';
+import {build} from 'vite';
+import vue from '@vitejs/plugin-vue';
+const root=path.resolve(new URL('..',import.meta.url).pathname),work=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'mg-diagnostics-ui-')));
+fs.symlinkSync(path.join(root,'node_modules'),path.join(work,'node_modules'),'dir');
+fs.writeFileSync(path.join(work,'index.html'),'<html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="app"></div><script type="module" src="/main.js"></script></html>');
+fs.writeFileSync(path.join(work,'main.js'),`import {createApp,ref} from 'vue';import Panel from ${JSON.stringify(path.join(root,'src/_front/components/StreamDiagnostics.vue'))};
+window.fixture={t:1000,remoteStale:false,server:'ok',serverCalls:0,statsCalls:0,counts:{q:{bytes:1000,frames:10},h:{bytes:1000,frames:10},f:{bytes:1000,frames:10}}};
+const epoch=performance.timeOrigin;Object.defineProperty(performance,'now',{value:()=>window.fixture.t});
+const jobs=[];window.setInterval=(fn,ms)=>{jobs.push({fn,ms});return jobs.length};window.clearInterval=id=>{if(jobs[id-1])jobs[id-1].fn=()=>{}};
+window.advance=async ms=>{window.fixture.t+=ms;await Promise.all(jobs.filter(j=>j.ms!==5000).map(j=>j.fn()));};window.serverTick=()=>jobs.find(j=>j.ms===5000)?.fn();
+const encodings=[{rid:'q',active:true},{rid:'h',active:false},{rid:'f',active:true}];
+const track={sender:{getParameters:()=>({encodings}),setParameters(){throw Error('Must not change media settings')}},mediaStreamTrack:{label:'Synthetic camera',getSettings:()=>({width:1280,height:720,frameRate:30})},getRTCStatsReport:async()=>{const f=window.fixture,r=new Map();f.statsCalls++;for(const rid of ['f','q','h']){r.set(rid,{id:'stats-'+rid,type:'outbound-rtp',kind:'video',rid,ssrc:rid.charCodeAt(0),active:true,timestamp:epoch+f.t-(f.statsStale?20000:0),bytesSent:f.counts[rid].bytes,framesSent:f.counts[rid].frames,framesPerSecond:99,frameWidth:rid==='f'?1280:320,frameHeight:rid==='f'?720:180,remoteId:'r-'+rid,qualityLimitationReason:'bandwidth'});r.set('r-'+rid,{type:'remote-inbound-rtp',kind:'video',localId:'stats-'+rid,timestamp:epoch+f.t-(f.remoteStale?20000:0),roundTripTime:.043,jitter:.58,fractionLost:0});}return r;}};
+window.changeEncoding=(rid,active)=>{encodings.find(e=>e.rid===rid).active=active};
+createApp({components:{Panel},setup(){const streamId=ref('stream-a');window.changeStream=id=>streamId.value=id;return {streamId,room:{state:'connected',localParticipant:{isCameraEnabled:true,getTrackPublication:source=>source==='camera'?{track}:null}}}},template:'<main style="max-width:900px;margin:auto;font-family:Arial"><Panel :room="room" :stream-id="streamId"/></main>'}).mount('#app');`);
+await build({root:work,configFile:false,plugins:[{name:'synthetic-server',enforce:'pre',resolveId(id){if(id.endsWith('/streams/liveApi.js'))return '\0mock-server.js';},load(id){if(id==='\0mock-server.js')return `export async function getLiveQuality(){const f=window.fixture;f.serverCalls++;if(f.server==='fail')throw Error('Synthetic failure');if(f.server==='pending')return new Promise(r=>window.resolveServer=r);return {state:'active',profile:{label:'HD (720p)',width:1280,height:720,fps:30,egressBitrate:3000000}};}`;}},vue()],logLevel:'error',resolve:{alias:{'@':path.join(root,'src'),'vue':path.join(root,'node_modules/vue/dist/vue.esm-bundler.js')}},build:{outDir:'dist'}});
+const server=http.createServer((req,res)=>{res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:; frame-src 'none'");const file=path.join(work,'dist',req.url==='/'?'index.html':req.url.split('?')[0]);if(!file.startsWith(path.join(work,'dist')+path.sep)||!fs.existsSync(file)){res.writeHead(404).end();return;}res.setHeader('Content-Type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(file));});
+await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin='http://127.0.0.1:'+server.address().port;
+let browser,ws;const results=[],exceptions=[];
+try{
+ browser=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--disable-gpu','--no-first-run','--disable-background-networking','--disable-component-update','--disable-sync','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1','--remote-debugging-port=0','--user-data-dir='+path.join(work,'profile'),'about:blank'],{stdio:['ignore','ignore','pipe']});
+ const address=await new Promise((resolve,reject)=>{let s='';const t=setTimeout(()=>reject(Error('Chrome timeout')),15000);browser.stderr.on('data',b=>{s+=b;const m=s.match(/DevTools listening on (ws:\/\/[^\s]+)/);if(m){clearTimeout(t);resolve(m[1]);}});browser.on('exit',()=>reject(Error('Chrome exited')));});
+ ws=new WebSocket(address);await new Promise(r=>ws.addEventListener('open',r,{once:true}));let id=0;const pending=new Map();
+ ws.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.id){const p=pending.get(m.id);pending.delete(m.id);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}if(m.method==='Runtime.exceptionThrown')exceptions.push(m.params.exceptionDetails.exception?.description||m.params.exceptionDetails.text);});
+ const send=(method,params={},sessionId)=>new Promise((resolve,reject)=>{const n=++id;pending.set(n,{resolve,reject});ws.send(JSON.stringify({id:n,method,params,...(sessionId?{sessionId}:{})}));});
+ const {targetId}=await send('Target.createTarget',{url:'about:blank'});const {sessionId}=await send('Target.attachToTarget',{targetId,flatten:true});
+ const ev=async expression=>{const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true},sessionId);if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result.value;};
+ await send('Page.enable',{},sessionId);await send('Runtime.enable',{},sessionId);await send('Network.enable',{},sessionId);await send('Network.setBlockedURLs',{urls:['https://*','wss://*','ws://*']},sessionId);await send('Page.navigate',{url:origin},sessionId);
+ const until=async expression=>{for(let i=0;i<100;i++){if(await ev(expression))return;await new Promise(r=>setTimeout(r,100));}throw Error('Condition timeout: '+expression+' '+exceptions.join(' '));};
+ await until('!!document.querySelector("details")');assert.equal(await ev('window.fixture.serverCalls'),0);
+ await ev('document.querySelector("details").open=true');await until('document.querySelectorAll(".sq-layers li").length===3');
+ assert(await ev('document.querySelectorAll(".sq-layers li")[0].textContent.includes("Неизвестно")'));
+ assert.deepEqual(await ev('[...document.querySelectorAll(".sq-layers strong")].map(x=>x.textContent)'),['Камера · LOW (q)','Камера · MEDIUM (h)','Камера · HIGH (f)']);
+ assert(await ev('document.querySelectorAll(".sq-layers li")[1].textContent.includes("Encoding отключён")'));results.push('RID order, encoding-disabled state and unknown first sample');
+ await ev('fixture.counts.q={bytes:100000,frames:70};fixture.counts.f={bytes:1200000,frames:100};advance(3000)');
+ await until('document.querySelectorAll(".sq-layers li")[2].textContent.includes("30.0 FPS")');
+ assert(await ev('document.querySelectorAll(".sq-layers li")[2].textContent.includes("Передаётся")'));results.push('FPS and bitrate derived from growing counters rather than browser 99 FPS');
+ await ev('fixture.remoteStale=true;fixture.counts.f.frames+=90;advance(3000)');await until('document.querySelectorAll(".sq-layers li")[2].textContent.includes("устарела или недоступна")');
+ assert(!await ev('document.querySelectorAll(".sq-layers li")[2].textContent.includes("580 мс")'));results.push('stale RTCP hides jitter, RTT and loss while sending continues');
+ await ev('advance(3000)');await until('document.querySelectorAll(".sq-layers li")[2].textContent.includes("Кадры не отправляются")');results.push('unchanged frame counters are idle, never stale reported FPS');
+ await ev('fixture.statsStale=true;advance(3000)');await until('document.querySelectorAll(".sq-layers li")[2].textContent.includes("Данные устарели")');results.push('stale outbound timestamp hides old FPS and bitrate');await ev('fixture.statsStale=false');
+ await ev('fixture.server="fail";serverTick()');await until('document.querySelector("section[aria-label=Egress]").textContent.includes("Данные устарели")');assert(!await ev('document.querySelector("section[aria-label=Egress]").textContent.includes("active")'));results.push('server failure immediately invalidates old Egress active');
+ await ev('fixture.server="ok";serverTick()');await until('document.querySelector("section[aria-label=Egress]").textContent.includes("active")');
+ await ev('advance(11000)');await until('document.querySelector("section[aria-label=Egress]").textContent.includes("Данные устарели")');results.push('Egress active expires by age even without another API response');
+ await ev('fixture.server="pending";serverTick();undefined');await until('typeof window.resolveServer==="function"');await ev('changeStream("stream-b");resolveServer({state:"active",profile:{label:"OLD"}})');await new Promise(r=>setTimeout(r,30));assert(!await ev('document.querySelector("section[aria-label=Egress]").textContent.includes("OLD")'));results.push('late response for previous stream cannot overwrite current state');
+ assert(await ev('document.querySelector("section[aria-label=\\"Качество у зрителя\\"]").textContent.includes("недоступно")'));results.push('viewer measurements and configured Egress profile remain distinct');
+ for(const width of [390,1366]){await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width===390},sessionId);assert(await ev('document.documentElement.scrollWidth<=innerWidth'));const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);fs.writeFileSync(path.join(work,'diagnostics-'+width+'.png'),Buffer.from(shot.data,'base64'));results.push('responsive panel '+width);}
+ await ev('document.querySelector("details").open=false');await new Promise(r=>setTimeout(r,30));const calls=await ev('fixture.serverCalls');const statsCalls=await ev('fixture.statsCalls');await ev('advance(3000);serverTick()');assert.equal(await ev('fixture.serverCalls'),calls);assert.equal(await ev('fixture.statsCalls'),statsCalls);results.push('closed panel stops stats/server diagnostics polling');
+ assert.deepEqual(exceptions,[]);console.log(JSON.stringify({pass:results.length,fail:0,results,artifacts:work}));
+}finally{ws?.close();browser?.kill();server.closeAllConnections();await new Promise(r=>server.close(r));}

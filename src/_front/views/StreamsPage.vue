@@ -221,7 +221,7 @@
                                     : 'Классический эфир: камера телефона или OBS, один ведущий.' }}
                             </p>
                         </div>
-                        <StreamQualityField :full-hd-enabled="fullHdEnabled" id="stream-create-quality" v-model="form.video_quality" :solo="form.format === 'solo'" />
+                        <StreamQualityField :full-hd-enabled="false" id="stream-create-quality" v-model="form.video_quality" :solo="form.format === 'solo'" />
                         <div class="sp-field">
                             <span>Доступ</span>
                             <div class="sp-radio-row">
@@ -436,13 +436,13 @@
                         <span class="pd-field__lb">Дата и время эфира <span class="sp-optional">(необязательно)</span></span>
                         <input v-model="editForm.scheduledAt" class="pd-input" type="datetime-local" />
                     </label>
-                    <StreamQualityField :full-hd-enabled="fullHdEnabled" id="stream-edit-quality" v-model="editForm.video_quality" :live="manageStream.status === 'live'" :solo="manageStream.mode !== 'multi'" />
+                    <StreamQualityField :full-hd-enabled="editFullHdAllowed" :checking="editQualityChecking" id="stream-edit-quality" v-model="editForm.video_quality" :live="manageStream.status === 'live'" :solo="manageStream.mode !== 'multi'" />
                     <p v-if="editError" class="sp-note sp-note-err">{{ editError }}</p>
                 </div>
                 <div class="pd-dialog__foot">
                     <button class="pd-btn pd-btn--ghost" type="button" @click="closeManage">Закрыть</button>
                     <span class="pd-foot-spacer"></span>
-                    <button class="pd-btn" type="button" :disabled="editBusy" @click="saveEdit">{{ editBusy ? 'Сохранение…' : 'Сохранить' }}</button>
+                    <button class="pd-btn" type="button" :disabled="editBusy || editQualityChecking" @click="saveEdit">{{ editBusy ? 'Сохранение…' : 'Сохранить' }}</button>
                 </div>
             </div>
         </div>
@@ -484,6 +484,7 @@ import StreamQualityField from '@/_front/components/StreamQualityField.vue';
 import StreamViewer from '@/_front/components/StreamViewer.vue';
 import StreamDiagnostics from '@/_front/components/StreamDiagnostics.vue';
 import { videoProfile } from '@/_front/streams/videoQuality.js';
+import { streamFullHdAllowed } from '@/_front/streams/streamQualityAccess.js';
 import PushToggle from '@/_front/components/PushToggle.vue';
 import { logClientEvent } from '@/_front/chrome/errorLogger.js';
 
@@ -527,7 +528,9 @@ const form = ref({ title: '', description: '', scheduledAt: '', kind: 'free', vi
 const shareMsg = ref('');
 const linkFallback = ref('');
 const unlistedEnabled = ref(false);
-const fullHdEnabled = ref(false);
+const editFullHdAllowed = ref(false);
+const editQualityChecking = ref(false);
+let editQualityGeneration = 0;
 // cover upload (same bucket/pattern as course/profile covers)
 const COVER_BUCKET = 'profile';
 const COVER_STORAGE_URL = 'https://sb.meetgu.ru/storage/v1/object/public/profile//';
@@ -1093,12 +1096,19 @@ function toLocalInput(iso) {
     const d = new Date(iso);
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
-function openManage(s) {
+async function openManage(s) {
+    const version = ++editQualityGeneration;
+    editFullHdAllowed.value = false; editQualityChecking.value = true;
     manageStream.value = s;
-    editForm.value = { title: s.title || '', description: s.description || '', cover_url: s.cover_url || '', scheduledAt: toLocalInput(s.scheduled_at), video_quality: videoProfile(s.video_quality).id };
+    editForm.value = { title: s.title || '', description: s.description || '', cover_url: s.cover_url || '', scheduledAt: toLocalInput(s.scheduled_at), video_quality: 'hd' };
     editError.value = ''; editCoverError.value = ''; confirmDeleteId.value = null;
+    const allowed = s.author === me.value?.id && s.mode === 'multi' && await streamFullHdAllowed(supa(), s.id);
+    if (version !== editQualityGeneration || manageStream.value?.id !== s.id) return;
+    editFullHdAllowed.value = !!allowed;
+    editForm.value.video_quality = allowed ? videoProfile(s.video_quality).id : 'hd';
+    editQualityChecking.value = false;
 }
-function closeManage() { manageStream.value = null; }
+function closeManage() { editQualityGeneration++; manageStream.value = null; editQualityChecking.value = false; editFullHdAllowed.value = false; }
 async function onEditCover(e) {
     const file = e.target.files?.[0]; e.target.value = '';
     if (!file || editCoverBusy.value) return;
@@ -1113,17 +1123,21 @@ function removeEditCover() {
 }
 async function saveEdit() {
     const s = manageStream.value;
-    if (!s || editBusy.value) return;
-    const title = (editForm.value.title || '').trim();
+    if (!s || editBusy.value || editQualityChecking.value) return;
+    const version = editQualityGeneration;
+    const draft = { ...editForm.value };
+    const title = (draft.title || '').trim();
     if (title.length < 3) { editError.value = 'Название — минимум 3 символа.'; return; }
     editBusy.value = true; editError.value = '';
     try {
+        if (draft.video_quality === 'full_hd' && !(await streamFullHdAllowed(supa(), s.id))) throw new Error('Тестовый допуск Full HD недоступен или истёк. Выберите HD.');
+        if (version !== editQualityGeneration || manageStream.value?.id !== s.id) return;
         const patch = {
             title,
-            video_quality: videoProfile(editForm.value.video_quality).id,
-            description: (editForm.value.description || '').trim(),
-            cover_url: editForm.value.cover_url || null,
-            scheduled_at: editForm.value.scheduledAt ? new Date(editForm.value.scheduledAt).toISOString() : null,
+            video_quality: videoProfile(draft.video_quality).id,
+            description: (draft.description || '').trim(),
+            cover_url: draft.cover_url || null,
+            scheduled_at: draft.scheduledAt ? new Date(draft.scheduledAt).toISOString() : null,
         };
         await updateStream(supa(), s.id, patch);
         const apply = (row) => { if (row && row.id === s.id) Object.assign(row, patch); };
@@ -1132,7 +1146,7 @@ async function saveEdit() {
         apply(detail.value);
         Object.assign(manageStream.value, patch);
         notice.value = 'Изменения сохранены.';
-    } catch (e) { editError.value = e.message || String(e); }
+    } catch (e) { if (version === editQualityGeneration && manageStream.value?.id === s.id) editError.value = e.message || String(e); }
     finally { editBusy.value = false; }
 }
 async function createBroadcast() {
@@ -1259,7 +1273,6 @@ async function removeStream(s) {
 }
 
 onMounted(() => {
-    supa().rpc('stream_video_quality_capabilities').then(({ data, error }) => { fullHdEnabled.value = !error && data?.version === 1 && data.full_hd_enabled === true; }).catch(() => {});
     visibilityCapabilities(supa()).then(c => { unlistedEnabled.value = c.unlisted_enabled === true; }).catch(() => {});
     // Open the detail + chat immediately; don't block them behind the stream-list load.
     if (activeStreamId.value) loadDetail(activeStreamId.value);

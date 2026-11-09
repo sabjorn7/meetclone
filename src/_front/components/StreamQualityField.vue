@@ -1,18 +1,20 @@
 <template>
     <div class="sp-field">
         <label :for="id">Качество видеотрансляции</label>
-        <select :id="id" :value="modelValue || 'hd'" @change="$emit('update:modelValue', $event.target.value)">
+        <select :id="id" :value="modelValue || 'hd'" :disabled="checking" @change="$emit('update:modelValue', $event.target.value)">
             <option value="hd">HD (720p)</option>
-            <option value="full_hd" :disabled="!fullHdEnabled">Full HD (1080p)</option>
+            <option v-if="fullHdEnabled" value="full_hd">Full HD (1080p)</option>
         </select>
+        <p v-if="checking" class="sp-note" role="status">Проверяем тестовый допуск…</p>
+        <p v-if="fullHdEnabled" class="sp-note" role="status">Full HD — тестовый режим только для этого эфира. Фактическое качество зависит от камеры, сети и PeerTube.</p>
         <p class="sp-note">{{ modelValue === 'full_hd' ? 'Для стабильного интернета, качественных камер и демонстрации мелких деталей.' : 'Для нестабильного интернета и устройств с ограниченной производительностью.' }}</p>
         <p v-if="solo" class="sp-note">Для OBS настройте такое же разрешение в программе. Внешний источник MeetGuru автоматически не перенастраивает.</p>
-        <p v-if="!fullHdEnabled" class="sp-note">Full HD будет доступен после проверки серверной мощности и включения администратором.</p>
+        <p v-if="!fullHdEnabled" class="sp-note">Создайте эфир в HD. Full HD можно выбрать в настройках только после отдельного тестового допуска.</p>
         <p v-if="live" class="sp-note" role="status">Изменение применится при следующем запуске. Текущий эфир продолжится с прежним качеством.</p>
     </div>
 </template>
 <script setup>
-defineProps({ modelValue: String, id: { type: String, required: true }, live: Boolean, solo: Boolean, fullHdEnabled: Boolean });
+defineProps({ modelValue: String, id: { type: String, required: true }, live: Boolean, solo: Boolean, fullHdEnabled: Boolean, checking: Boolean });
 defineEmits(['update:modelValue']);
 </script>
 <style scoped>

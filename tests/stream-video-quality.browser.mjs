@@ -22,11 +22,15 @@ const results=[];let browser,ws;
 const layoutSource=fs.readFileSync(path.join(root,'reviews/2026-11-09-stream-quality/template/grid.html'),'utf8');
 const layoutStyle=layoutSource.match(/<style>([\s\S]*?)<\/style>/)[1];
 const layoutCode=layoutSource.slice(layoutSource.indexOf("        const grid = document.getElementById('grid');"),layoutSource.indexOf('        (async () =>'));
-const frame=`<html><body style="background:#15233e;color:white">Synthetic stream<script>
-let current=-1;const rows=()=>[{id:-1,height:0,active:current===-1},{id:7,height:1080,active:current===7},{id:4,height:720,active:current===4}];
-window.addEventListener('message',e=>{if(location.search.includes('unsupported'))return;let m;try{m=JSON.parse(e.data)}catch{return}const send=x=>parent.postMessage(JSON.stringify(x),location.origin);
-if(m.method==='peertube::__ready'){if(m.params==='ping')send({method:'peertube::__ready',params:'pong'});return;}
-if(!m.id)return;let result;if(m.method==='peertube::isReady')result=true;if(m.method==='peertube::getResolutions')result=rows();if(m.method==='peertube::setResolution'){current=m.params;result=null;}send({id:m.id,result});});</script></body></html>`;
+// Strict ready-state fixture: duplicate incoming handshake messages are fatal,
+// as in PeerTube's jschannel. Duplicate outgoing notifications must be harmless
+// because the native-iframe wrapper does not create an external API channel.
+const frame=`<html><body style="background:#15233e;color:white"><button id="native-control" onclick="this.dataset.clicked='yes'">Native player control</button><script>
+window.received=0;window.readyFailure=false;
+window.addEventListener('message',e=>{let m;try{m=JSON.parse(e.data)}catch{return}if(m.method==='peertube::__ready'){window.received++;if(window.received>1){window.readyFailure=true;document.body.textContent='received ready message while in ready state.';}}});
+for(let i=0;i<2;i++)setTimeout(()=>parent.postMessage(JSON.stringify({method:'peertube::__ready',params:'ping'}),location.origin),100+i*50);
+</script></body></html>`;
+
 const server=http.createServer((req,res)=>{
     res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'self'; img-src 'self' data:");
     if(req.url==='/layout'){res.setHeader('Content-Type','text/html');res.end('<html><style>'+layoutStyle+'</style><div id="grid"></div><script>'+layoutCode+'</script></html>');return;}
@@ -49,17 +53,20 @@ try{
     await send('Network.setBlockedURLs',{urls:['https://*','wss://*','ws://*']},sessionId);
     await send('Page.navigate',{url:origin},sessionId);
     const until=async expression=>{for(let i=0;i<100;i++){if(await evaluate(expression))return;await new Promise(resolve=>setTimeout(resolve,100));}throw Error('Fixture condition timeout');};
-    try { await until('document.querySelectorAll(".sq-viewer option").length===3'); }
-    catch(error){console.log('FIXTURE STATE',await evaluate('JSON.stringify({body:document.body.textContent,src:document.querySelector("iframe")?.src})'));throw error;}
+    await until('!!document.querySelector("iframe")?.contentDocument?.querySelector("#native-control")');
     assert.equal(await evaluate('document.querySelector("#selected").textContent'),'hd');
-    results.push({name:'HD default and only advertised viewer resolutions',status:'PASS'});
+    assert.equal(await evaluate('new URL(document.querySelector("iframe").src).searchParams.has("api")'),false);
+    results.push({name:'HD default, native iframe URL unchanged without api=1',status:'PASS'});
     await evaluate('document.querySelector("#quality").value="full_hd";document.querySelector("#quality").dispatchEvent(new Event("change",{bubbles:true}))');
     await until('document.querySelector("#selected").textContent==="full_hd"');
     assert(await evaluate('document.body.textContent.includes("ниже выбранного")'));assert(await evaluate('document.body.textContent.includes("следующем запуске")'));
     results.push({name:'Full HD selection, unsupported camera warning, next-start notice',status:'PASS'});
-    await evaluate('const s=document.querySelector(".sq-viewer select");s.value="4";s.dispatchEvent(new Event("change",{bubbles:true}));');
-    await until('document.querySelector(".sq-viewer").textContent.includes("Текущее качество: 720p")');
-    results.push({name:'viewer switches through Embed API to actual 720p ID',status:'PASS'});
+    await new Promise(resolve=>setTimeout(resolve,400));
+    assert.equal(await evaluate('document.querySelector("iframe").contentWindow.received'),0);
+    assert.equal(await evaluate('document.querySelector("iframe").contentWindow.readyFailure'),false);
+    await evaluate('document.querySelector("iframe").contentDocument.querySelector("#native-control").click()');
+    assert.equal(await evaluate('document.querySelector("iframe").contentDocument.querySelector("#native-control").dataset.clicked'),'yes');
+    results.push({name:'duplicate ready notifications cause no reply, no channel error; native controls work',status:'PASS'});
     for(const width of [390,1366]){
         await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width===390},sessionId);
         assert(await evaluate('document.documentElement.scrollWidth<=innerWidth'));
@@ -67,8 +74,16 @@ try{
         results.push({name:'responsive controls width '+width,status:'PASS'});
     }
     await evaluate('document.getElementById("unsupported").click()');
-    await until('document.body.textContent.includes("Управление качеством недоступно")');
-    assert(await evaluate('!!document.querySelector("iframe")'));results.push({name:'unsupported Embed API keeps original iframe functional',status:'PASS'});
+    await until('document.querySelector("iframe")?.src.includes("unsupported=1") && !!document.querySelector("iframe").contentDocument.querySelector("#native-control")');
+    await new Promise(resolve=>setTimeout(resolve,400));
+    assert.equal(await evaluate('document.querySelector("iframe").contentWindow.received'),0);
+    results.push({name:'reopening/remounting viewer does not initialize another API channel',status:'PASS'});
+    await send('Page.reload',{},sessionId);
+    await until('!!document.querySelector("iframe")?.contentDocument?.querySelector("#native-control")');
+    await new Promise(resolve=>setTimeout(resolve,400));
+    assert.equal(await evaluate('document.querySelector("iframe").contentWindow.received'),0);
+    assert.equal(await evaluate('document.querySelector("iframe").contentWindow.readyFailure'),false);
+    results.push({name:'browser refresh with duplicate ready preserves native iframe',status:'PASS'});
     await send('Page.navigate',{url:origin+'/layout'},sessionId);await until('typeof tileFor==="function"');
     for(const [width,height]of [[1280,720],[1920,1080]]){
         await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false},sessionId);

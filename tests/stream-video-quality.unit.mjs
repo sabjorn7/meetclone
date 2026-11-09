@@ -43,27 +43,23 @@ test('bitrate needs two monotonic samples; RTT, losses and unavailable metrics s
     assert.equal(summarizeVideoStats(report(100,10),b.previous).layers[0].bitrate,null);
     assert(!JSON.stringify(b.layers).includes('PRIVATE'));assert.equal(summarizeVideoStats(null).layers.length,0);
 });
-function fakeEmbed({reply=true,rows=[{id:-1},{id:1080,height:1080}]}={}) {
-    const listeners=new Set(),calls=[]; const host={addEventListener:(_,fn)=>listeners.add(fn),removeEventListener:(_,fn)=>listeners.delete(fn)};
-    let origin='https://player.invalid';
-    const target={postMessage(raw,destination){const m=JSON.parse(raw);calls.push(m);assert.equal(destination,origin);
-        if(reply&&m.id)queueMicrotask(()=>{for(const fn of listeners)fn({origin,source:target,data:JSON.stringify({id:m.id,result:m.method.endsWith('isReady')?true:m.method.endsWith('getResolutions')?rows:null})});});}};
-    return {host,calls,listeners,target,iframe:{src:origin+'/videos/embed/synthetic?api=1',contentWindow:target}};
-}
-test('Embed protocol handshake, available qualities and switching work without media requests', async () => {
-    const e=fakeEmbed();const client=connectPeerTubeQuality(e.iframe,{window:e.host,timeout:50});
-    await client.ready;assert.equal((await client.getResolutions()).length,2);await client.setResolution(-1);
-    assert(e.calls.some(m=>m.method==='peertube::setResolution'&&m.params===-1));client.dispose();assert.equal(e.listeners.size,0);
+test('disabled quality controller cannot register listeners or post a handshake', () => {
+    const host={addEventListener(){assert.fail('must not listen')},removeEventListener(){}};
+    const iframe={get src(){assert.fail('must not read iframe')},get contentWindow(){assert.fail('must not contact player')}};
+    assert.throws(()=>connectPeerTubeQuality(iframe,{window:host}),/disabled/);
 });
-test('wrong origin/source responses cannot satisfy requests; unsupported API times out', async () => {
-    const e=fakeEmbed({reply:false});const client=connectPeerTubeQuality(e.iframe,{window:e.host,timeout:10});
-    for(const fn of e.listeners)fn({origin:'https://evil.invalid',source:e.target,data:JSON.stringify({id:1,result:true})});
-    for(const fn of e.listeners)fn({origin:'https://player.invalid',source:{},data:JSON.stringify({id:1,result:true})});
-    await assert.rejects(client.ready,/unavailable/);client.dispose();assert.equal(e.listeners.size,0);
+test('repeat ready messages have no external quality listener to respond to', () => {
+    const listeners=new Set(),calls=[];
+    const host={addEventListener:(_,fn)=>listeners.add(fn),removeEventListener:(_,fn)=>listeners.delete(fn)};
+    const target={postMessage:m=>calls.push(m)};
+    assert.throws(()=>connectPeerTubeQuality({src:'https://player.invalid/embed',contentWindow:target},{window:host}),/disabled/);
+    for(let i=0;i<2;i++)for(const fn of listeners)fn({origin:'https://player.invalid',source:target,data:JSON.stringify({method:'peertube::__ready',params:'ping'})});
+    assert.equal(listeners.size,0);assert.equal(calls.length,0);
 });
-test('disposing a loading iframe cancels timers and pending readiness', async () => {
-    const e=fakeEmbed({reply:false});const client=connectPeerTubeQuality(e.iframe,{window:e.host,timeout:20});
-    const result=assert.rejects(client.ready,/closed|unavailable/);client.dispose();await result;assert.equal(e.listeners.size,0);
+test('reopening an iframe never reinitializes a custom quality channel', () => {
+    for(let i=0;i<3;i++)assert.throws(()=>connectPeerTubeQuality({src:'https://player.invalid/embed',contentWindow:{postMessage(){assert.fail('unexpected message')}}}),/disabled/);
+    const s=fs.readFileSync(new URL('../src/_front/components/StreamViewer.vue',import.meta.url),'utf8');
+    assert.match(s,/:src="src"/);assert(!s.includes('connectPeerTubeQuality'));assert(!s.includes('@load'));assert(!s.includes("searchParams.set('api'"));
 });
 test('backend profile contract is exactly the same module; admission precedes resource allocation', () => {
     const root=new URL('../reviews/2026-11-09-stream-quality/orchestrator/src/',import.meta.url);

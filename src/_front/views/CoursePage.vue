@@ -265,7 +265,7 @@ const statItems = computed(() => {
         { icon: 'star', text: `${nRatings.value} ${plural(nRatings.value, ['оценка', 'оценки', 'оценок'])} · ср. ${avgText.value}` },
     ];
     if (c.DurationLong) items.push({ icon: 'cal', text: `Доступ на ${c.DurationLong} ${plural(c.DurationLong, ['месяц', 'месяца', 'месяцев'])}` });
-    if (c.DurationPrice) items.push({ icon: 'renew', text: `Продление за ${money(c.DurationPrice)} ₽` });
+    if (Number(c.DurationLong) > 0 && Number(c.DurationPrice) > 0) items.push({ icon: 'renew', text: `Продление за ${money(c.DurationPrice)} ₽` });
     return items;
 });
 const STAT_ICONS = {

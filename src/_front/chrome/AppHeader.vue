@@ -34,7 +34,7 @@
                         <template v-if="cart.length">
                             <ul class="mgh__cart-list">
                                 <li v-for="item in cart" :key="item.id">
-                                    <span class="mgh__cart-name">{{ item.course_name || 'Курс' }}</span>
+                                    <span class="mgh__cart-name">{{ item.course_name }}<small>{{ PRODUCT_LABELS[item.product_type] || 'Товар' }}{{ item.payment_type === 'deposit' ? ' · предоплата' : '' }}</small><small v-if="item.available === false">Товар сейчас недоступен — удалите из корзины</small></span>
                                     <span class="mgh__cart-price">{{ money(item.price) }} ₽</span>
                                     <button class="mgh__cart-x" type="button" aria-label="Убрать" @click="remove(item.id)">×</button>
                                 </li>
@@ -66,12 +66,14 @@
                                     <a href="/politica" target="_blank" rel="noopener">Политикой обработки персональных данных</a>.
                                 </span>
                             </label>
-                            <button class="mgh__btn mgh__btn--block" type="button" :disabled="busy || !agreedCart" @click="doCheckout">
+                            <button class="mgh__btn mgh__btn--block" type="button" :disabled="busy || !agreedCart || cart.some(i => i.available === false)" @click="doCheckout">
                                 {{ busy ? 'Переход к оплате…' : 'Оформить заказ' }}
                             </button>
                             <p v-if="err" class="mgh__err">{{ err }}</p>
                         </template>
                         <p v-else class="mgh__empty">Корзина пуста</p>
+                        <p v-if="err && !cart.length" class="mgh__err" role="alert">{{ err }}</p>
+                        <CheckoutOrders v-if="user" :key="user.id" :supabase="sb" :user-id="user.id" @changed="reloadCart" />
                     </div>
                 </div>
 
@@ -128,6 +130,8 @@ import {
     getSupabase, loadUser, waitForUid, avatarUrl, initials, loadCart, removeCartItem, cartTotal, signOutUser, checkoutCart,
 } from './headerAccount.js';
 import { hasUnread, initUnread, resetUnread } from './unread.js';
+import { quoteCart, PRODUCT_LABELS } from '@/_front/checkout/cartApi.js';
+import CheckoutOrders from '@/_front/checkout/CheckoutOrders.vue';
 
 const props = defineProps({
     ctaLabel: { type: String, default: '' },
@@ -184,7 +188,10 @@ const burgerItems = computed(() => {
 
 const sb = getSupabase();
 
-function toggle(which) { open.value = open.value === which ? null : which; }
+function toggle(which) {
+    open.value = open.value === which ? null : which;
+    if (open.value === 'cart') reloadCart();
+}
 function go(path) { open.value = null; menuOpen.value = false; router.push(path); }
 // Auth transitions (login / register / logout) need a FULL page load: WeWeb keeps its own auth
 // state and its per-page bindings that a client-side router.push leaves stale (the app still
@@ -200,7 +207,8 @@ async function refreshUser() {
     if (user.value) reloadCart(); else cart.value = [];
 }
 async function reloadCart() {
-    if (user.value?.id) cart.value = await loadCart(sb, user.value.id);
+    try { if (user.value?.id) cart.value = await loadCart(sb, user.value.id); }
+    catch { cart.value = []; err.value = 'Не удалось загрузить корзину. Обновите страницу.'; }
     // the cart changed → any applied promo is now stale; make the user re-apply against the new set
     promo.applied = null; promo.error = '';
 }
@@ -222,8 +230,7 @@ async function applyPromo() {
     promo.checking = true; promo.error = '';
     try {
         const shopIds = cart.value.map((r) => r.id);
-        const { data, error } = await sb.rpc('preview_promo', { p_code: code, p_shop_ids: shopIds });
-        if (error) throw error;
+        const data = await quoteCart(sb, shopIds, code);
         if (data?.valid) { promo.applied = data; }
         else { promo.applied = null; promo.error = PROMO_REASONS[data?.reason] || 'Промокод недействителен.'; }
     } catch (e) { promo.error = 'Не удалось проверить промокод.'; }
@@ -363,6 +370,7 @@ function ensureFont() {
 .mgh__cart-list { list-style: none; margin: 0 0 8px; padding: 0; max-height: 260px; overflow-y: auto; }
 .mgh__cart-list li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 9px 6px; border-bottom: 1px solid var(--line); }
 .mgh__cart-name { font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mgh__cart-name small { display: block; color: var(--ink-2); font-size: 12px; white-space: normal; }
 .mgh__cart-price { font-weight: 700; font-size: 14px; }
 .mgh__cart-x { border: none; background: none; color: var(--ink-2); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
 .mgh__cart-x:hover { color: #c2410c; }

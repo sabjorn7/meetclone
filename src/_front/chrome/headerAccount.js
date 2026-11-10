@@ -1,13 +1,9 @@
+import { getCart, removeProduct, payCart } from '@/_front/checkout/cartApi.js';
 // Account + cart data for the shared AppHeader. Uses the same global Supabase client as the rest
 // of the app (window.wwLib.wwPlugins.supabase.instance) — the same one used for auth elsewhere.
 //
-// Mirrors the WeWeb header exactly:
-//   - cart      = `shop` rows where owner == currentUser.id AND status == 'cart'
-//   - total     = plain sum of the `price` column over those rows
-//   - live      = `shop` is realtime-enabled; the header subscribes and reloads on change
-//   - checkout  = a verbatim port of the site's course-purchase flow (see
-//                 src/_front/streams/streamsApi.js purchaseStream): create an `order` from the
-//                 cart, get a Prodamus payment link, redirect. This is the ONLY money-adjacent code.
+// The existing shop cart is read through owner-bound RPCs. Checkout delegates to the
+// shared server-priced endpoint; BuyCourse remains the payment callback.
 
 const SUPABASE_URL = 'https://sb.meetgu.ru';
 const AVATAR_BUCKET = 'profile';
@@ -116,16 +112,12 @@ export function initials(user) {
 // Cart = shop rows for this owner with status 'cart'. Newest first (matches the WeWeb collection sort).
 export async function loadCart(sb, ownerId) {
     if (!sb || !ownerId) return [];
-    const { data } = await sb.from('shop')
-        .select('id, price, quantity, course_name, course_id, status, position')
-        .eq('owner', ownerId).eq('status', 'cart')
-        .order('created_at', { ascending: false });
-    return data || [];
+    return getCart(sb);
 }
 
 export async function removeCartItem(sb, id) {
     if (!sb || !id) return;
-    await sb.from('shop').delete().eq('id', id);
+    return removeProduct(sb, id);
 }
 
 export function cartTotal(cart) {
@@ -215,59 +207,11 @@ export async function signOutUser(sb) {
     try { sb?.auth?.signOut(); } catch (e) { /* ignore */ }
 }
 
-// MONEY (reviewed before deploy): verbatim port of the site's cart checkout, same flow the WeWeb
-// "Оформить заказ" runs and the same as streamsApi.purchaseStream — create an `order` from the cart,
-// fetch a Prodamus payment link (do=link), persist it, then redirect the buyer to Prodamus. It does
-// NOT move funds itself; the buyer completes payment on Prodamus (n8n BuyCourse finalizes via callback).
+// One server-priced checkout for course, event and stream positions.
 export async function checkoutCart(sb, { user, cart, promoCode = null }) {
-    if (window.__mgGuestAuth) throw new Error('Нет связи с аккаунтом. Обновите страницу.'); // (a') guard
+    if (window.__mgGuestAuth) throw new Error('Нет связи с аккаунтом. Обновите страницу.');
     if (!sb || !user?.id || !cart?.length) return;
-
-    // Promo (optional). Re-validate server-side at checkout so the discount is authoritative and
-    // reflects the CURRENT cart (not a stale "applied" snapshot). preview_promo returns per-line
-    // new prices; we persist them to shop.price so n8n BuyCourse bills the author's commission on the
-    // discounted price (the invariant order.summ == Σ shop.price == amount charged stays intact).
-    const priceById = {};
-    let promoId = null, promoDiscount = 0;
-    if (promoCode) {
-        const { data: pv, error: pErr } = await sb.rpc('preview_promo', {
-            p_code: promoCode, p_shop_ids: cart.map((r) => r.id),
-        });
-        if (pErr) throw new Error(`Промокод: ${pErr.message}`);
-        if (!pv?.valid) throw new Error('Промокод больше не действует — обновите корзину.');
-        promoId = pv.promo_id;
-        promoDiscount = Number(pv.discount) || 0;
-        for (const l of (pv.lines || [])) {
-            priceById[l.shop_id] = Number(l.new_price);
-            await sb.from('shop').update({ price: Number(l.new_price) }).eq('id', l.shop_id);
-        }
-    }
-    const priceOf = (r) => (priceById[r.id] !== undefined ? priceById[r.id] : Number(r.price || 0));
-    const summ = cart.reduce((s, r) => s + priceOf(r), 0);
-
-    const { data: orderRows, error } = await sb.from('order')
-        .insert({ summ, owner: user.id, course_positions: cart.map((r) => r.id),
-                  promo_code_id: promoId, promo_discount: promoId ? promoDiscount : null })
-        .select('id');
-    if (error) throw new Error(`Заказ: ${error.message}`);
-    const orderId = orderRows?.[0]?.id;
-
-    const base = 'https://meetguru.payform.ru/?do=link&sys=meetguru';
-    // Return to the home dashboard ("Ваши курсы") — a paid cart can hold several courses, so there is
-    // no single ?course=<id> to deep-link, and bare /my_courses now shows "Курс не найден".
-    const urlSuccess = 'https://app.meetgu.ru/';
-    const products = cart.map((r, i) =>
-        `products[${i}][price]=${encodeURIComponent(priceOf(r))}` +
-        `&products[${i}][quantity]=${encodeURIComponent(r.quantity || 1)}` +
-        `&products[${i}][name]=${encodeURIComponent(r.course_name || 'Курс')}`
-    ).join('&');
-    const buildUrl = `${base}&order_id=${encodeURIComponent(orderId)}&${products}&urlSuccess=${encodeURIComponent(urlSuccess)}`;
-
-    const res = await fetch(buildUrl);
-    if (!res.ok) throw new Error(`Prodamus (${res.status})`);
-    const payLink = (await res.text()).trim();
-    if (!/^https?:\/\//.test(payLink)) throw new Error('Prodamus вернул не ссылку.');
-
-    await sb.from('order').update({ num: orderId, pageUrl: payLink }).eq('id', orderId);
-    window.location.href = payLink;
+    const result = await payCart(sb, { userId: user.id, ids: cart.map(r => r.id), code: promoCode });
+    if (result.completed) window.location.assign('/?order=' + encodeURIComponent(result.orderId));
+    else window.location.assign(result.payLink);
 }

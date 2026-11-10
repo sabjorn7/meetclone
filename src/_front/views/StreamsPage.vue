@@ -40,9 +40,8 @@
                         <div v-if="canBuy">
                             <div class="sp-msg-title">Платный эфир — {{ priceLabel(detail) }}</div>
                             <div class="sp-muted">Доступ к эфиру и записи на {{ detail.access_months }} мес. с даты эфира.</div>
-                            <input v-model="streamPromo" type="text" class="sp-promo-input" placeholder="Промокод (необязательно)" />
                             <button class="sp-btn sp-btn-primary sp-buy-btn" :disabled="buying" @click="buyStream">
-                                {{ buying ? 'Переход к оплате…' : 'Купить за ' + priceLabel(detail) }}
+                                {{ buying ? 'Добавляем…' : streamInCart ? 'В корзине' : 'Добавить в корзину' }}
                             </button>
                             <p v-if="error" class="sp-error sp-buy-error">{{ error }}</p>
                             <button v-if="error && !buying" class="sp-btn sp-btn-secondary sp-retry-btn" @click="buyStream">↻ Повторить</button>
@@ -451,6 +450,7 @@
 </template>
 
 <script setup>
+import { addProduct, openSharedCart, getCart } from '@/_front/checkout/cartApi.js';
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { validateVisibility, isPublicStream, streamLinkKey, streamShareUrl, visibilityCapabilities, requireUnlistedSupport } from '@/_front/streams/visibility.js';
@@ -460,7 +460,6 @@ import {
     createStream,
     getStreamLinkKey,
     createBackingCourse,
-    purchaseStream,
     hasBoughtStream,
     accessExpiry,
     listMyStreams,
@@ -557,7 +556,7 @@ const boughtResolved = ref(false); // true once the paid-access (hasBoughtStream
 const myId = ref(null);            // fast uid from the stored session/cookie (no getSession stall)
 const meResolved = ref(false);     // true once auth is determined (session restored or confirmed guest)
 const buying = ref(false);
-const streamPromo = ref('');
+const streamInCart = ref(false);
 let pollTimer = null;
 
 // multi-host (co-host) detail state — only used when detail.mode === 'multi'
@@ -808,6 +807,10 @@ async function loadDetail(id) {
             try {
                 if (detail.value && Number(detail.value.price) > 0 && detail.value.backing_course_id && myId.value) {
                     bought.value = await hasBoughtStream(supa(), detail.value, myId.value);
+                    // Cart lookup must never delay resolving the existing paid-access gate.
+                    getCart(supa()).then(cart => {
+                        if (detail.value?.id === id) streamInCart.value = cart.some(i => i.product_type === 'stream' && i.product_id === id);
+                    }).catch(() => {});
                 }
             } catch (_) { /* access stays false */ }
             boughtResolved.value = true;
@@ -917,15 +920,15 @@ async function buyStream() {
     if (buying.value || !detail.value) return;
     // Guest → login prompt popup (matches the /course buy flow) instead of a tiny inline error.
     if (!me.value) { showAuthModal.value = true; return; }
+    if (streamInCart.value) { openSharedCart(); return; }
     buying.value = true;
     error.value = '';
     try {
-        const payLink = await purchaseStream(supa(), { buyer: me.value.id, stream: detail.value, promoCode: streamPromo.value.trim() || null });
-        window.location.href = payLink; // same-origin edge fn returned the link → go to Prodamus
+        await addProduct(supa(), { type: 'stream', id: detail.value.id });
+        streamInCart.value = true;
+        buying.value = false;
     } catch (e) {
         error.value = e.message || 'Не удалось перейти к оплате. Попробуйте ещё раз.';
-        // Record the failure (UA + user_id added by the logger) so "не открывается оплата" leaves data.
-        try { logClientEvent('payment_link_error', `stream=${detail.value?.id} ${e.message || e}`); } catch (_) { /* logging must not break */ }
         buying.value = false;
     }
 }
@@ -1273,6 +1276,8 @@ async function removeStream(s) {
         busyId.value = null;
     }
 }
+
+watch(activeStreamId, () => { streamInCart.value = false; });
 
 onMounted(() => {
     fullHdAvailable(supa()).then(enabled => { fullHdEnabled.value = enabled; });

@@ -4,7 +4,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ERRORS = {
     already_owned: 'Этот продукт уже приобретён.', already_registered: 'Вы уже записаны на мероприятие.',
     product_not_available: 'Продукт сейчас недоступен для покупки.', terms_required: 'Подтвердите согласие с условиями участия.',
-    product_already_in_pending_order: 'Этот продукт уже есть в ожидающем оплаты заказе. Откройте заказы в корзине.',
     stream_access_ended: 'Срок доступа к этому эфиру завершён.', checkout_disabled: 'Оформление временно недоступно.',
 };
 export async function checkoutRpc(sb, name, args = {}) {
@@ -49,6 +48,6 @@ export async function payCart(sb, { userId, ids, code = null, orderId = null, st
     if (error || problem?.error) throw new Error(ERRORS[problem?.error] || problem?.message || 'Не удалось открыть оплату. Повторите попытку — заказ будет использован повторно.');
     if (data?.completed === true) return { completed: true, orderId: data.order_id };
     let url; try { url = new URL(data?.payLink); } catch { throw new Error('Сервис оплаты не вернул ссылку.'); }
-    if (url.protocol !== 'https:' || url.username || url.password || !['meetguru.payform.ru'].includes(url.hostname)) throw new Error('Сервис оплаты вернул неподтверждённую ссылку.');
+    if (url.protocol !== 'https:' || url.port || url.username || url.password || !['meetguru.payform.ru', 'payform.ru'].includes(url.hostname)) throw new Error('Сервис оплаты вернул неподтверждённую ссылку.');
     return { payLink: url.href, orderId: data.order_id };
 }

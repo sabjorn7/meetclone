@@ -86,3 +86,19 @@ test('financial loop/date math/credit algorithm remains byte-identical to inspec
  const base=fs.readFileSync(new URL('./fixtures/checkout-legacy-fulfillment.sql',import.meta.url),'utf8');const sql=fs.readFileSync(new URL('../supabase/migrations/pending_unified_checkout.sql',import.meta.url),'utf8');
  const part=s=>s.slice(s.indexOf('    -- Lock all credited authors'),s.indexOf('    update public."order" set paid=true,payment_id=p_payment_id where id=p_order_id;')).replace('    perform checkout_private.finish_products(p_order_id);\n','');assert.equal(part(sql),part(base));
 });
+
+test('safe stage identifies RPC preparation and provider network failures without leaking raw errors',async()=>{
+ const rpc=fixture({rpcError:'synthetic-service private internal failure'});const a=await(await rpc.request()).json();assert.equal(a.stage,'prepare');assert.equal(a.upstream_status,400);assert(!JSON.stringify(a).includes('synthetic-service'));
+ const provider=fixture({providerError:true});const b=await(await provider.request()).json();assert.equal(b.stage,'provider_fetch');assert(!JSON.stringify(b).includes('synthetic-service'));
+ const bad=fixture({badLink:'https://evil.invalid'});const c=await(await bad.request()).json();assert.equal(c.stage,'provider_response');assert(!JSON.stringify(c).includes('evil.invalid'));
+});
+
+test('actual Prodamus short links on payform.ru are accepted by server and browser',async()=>{
+ const f=fixture({badLink:'https://payform.ru/synthetic-short-code/'});const response=await f.request();assert.equal(response.status,200);assert.equal((await response.json()).payLink,'https://payform.ru/synthetic-short-code/');
+ const result=await payCart({functions:{invoke:async()=>({data:{payLink:'https://payform.ru/synthetic-short-code/',order_id:O}})}},{userId:U,ids:[P],storage:null});assert.equal(result.payLink,'https://payform.ru/synthetic-short-code/');
+});
+test('lookalike payment hosts, non-HTTPS, credentials and ports remain rejected',async()=>{
+ for(const url of ['https://payform.ru.evil.invalid/x','https://evilpayform.ru/x','https://payform.ru@evil.invalid/x','http://payform.ru/x','https://payform.ru:8443/x','https://user:password@payform.ru/x']){
+ const f=fixture({badLink:url});assert.equal((await f.request()).status,503);assert(!f.calls.some(c=>c.url.pathname.endsWith('checkout_store_link')));
+ }
+});

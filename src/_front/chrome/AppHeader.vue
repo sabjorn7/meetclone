@@ -73,7 +73,6 @@
                         </template>
                         <p v-else class="mgh__empty">Корзина пуста</p>
                         <p v-if="err && !cart.length" class="mgh__err" role="alert">{{ err }}</p>
-                        <CheckoutOrders v-if="user" :key="user.id" :supabase="sb" :user-id="user.id" @changed="reloadCart" />
                     </div>
                 </div>
 
@@ -131,7 +130,6 @@ import {
 } from './headerAccount.js';
 import { hasUnread, initUnread, resetUnread } from './unread.js';
 import { quoteCart, PRODUCT_LABELS } from '@/_front/checkout/cartApi.js';
-import CheckoutOrders from '@/_front/checkout/CheckoutOrders.vue';
 
 const props = defineProps({
     ctaLabel: { type: String, default: '' },

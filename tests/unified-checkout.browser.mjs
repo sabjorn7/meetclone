@@ -1,4 +1,4 @@
-// Real AppHeader/CheckoutOrders and course/cart clients. Synthetic RPC boundary; no provider or production calls.
+// Real AppHeader and course/cart clients. Synthetic RPC boundary; no provider or production calls.
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import http from 'node:http';import {spawn} from 'node:child_process';import assert from 'node:assert/strict';import {build} from 'vite';import vue from '@vitejs/plugin-vue';
 const root=path.resolve(new URL('..',import.meta.url).pathname),work=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'mg-checkout-ui-')));
 fs.symlinkSync(path.join(root,'node_modules'),path.join(work,'node_modules'),'dir');
@@ -55,10 +55,13 @@ try{
  await ev('document.querySelector(".mgh__cart-x[aria-label=Убрать]").click()');await until('document.querySelectorAll(".mgh__cart-list li").length===2');assert.equal(await ev('!!document.querySelector(".mgh__promo-on")'),false);results.push('remove uses server RPC and invalidates stale promo');
  await ev('fixture.free()');assert.equal(await ev('fixture.calls.at(-1).name'),'checkout_enroll_free_course');assert.equal(await ev('fixture.invokes.length'),2);results.push('free course enrollment never invokes checkout');
  await ev(`fixture.orders=[{order_id:'20000000-0000-4000-8000-000000000001',status:'pending',total:6000,items:[{name:'Mixed pending'}]}];window.dispatchEvent(new CustomEvent('mg-open-cart'));`);
- // remount the orders panel by closing/reopening the dropdown
- await ev('document.querySelector("[aria-label=Корзина]").click()');await ev('document.querySelector("[aria-label=Корзина]").click()');await until('!!document.querySelector(".checkout-orders article")');
- await ev('[...document.querySelectorAll(".checkout-orders button")].find(b=>b.textContent.includes("Продолжить")).click()');await until('fixture.invokes.length===3');assert.equal(await ev('fixture.invokes[2].body.order_id'),'20000000-0000-4000-8000-000000000001');results.push('pending order resumes existing payment instead of a second cart');
- await ev('[...document.querySelectorAll(".checkout-orders button")].find(b=>b.textContent.includes("Отменить")).click()');await until('document.querySelector(".checkout-orders").textContent.includes("Отменён")');results.push('cancel pending order without booking timer');
+ // Historical/pending rows may exist in the database, but must not be shown or queried by the cart.
+ await ev('document.querySelector("[aria-label=Корзина]").click()');await ev('document.querySelector("[aria-label=Корзина]").click()');
+ await until('document.querySelectorAll(".mgh__cart-list li").length===2');
+ assert.equal(await ev('!!document.querySelector(".checkout-orders")'),false);
+ assert.equal(await ev('fixture.calls.some(x=>x.name==="checkout_my_orders")'),false);
+ assert.equal(await ev('document.querySelector(".mgh__dd--cart").textContent.includes("Mixed pending")'),false);
+ results.push('cart shows products only; existing orders neither displayed nor queried');
  for(const width of [390,1366]){await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width===390},sessionId);assert(await ev('document.documentElement.scrollWidth<=innerWidth'));const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);fs.writeFileSync(path.join(work,'cart-'+width+'.png'),Buffer.from(shot.data,'base64'));results.push('responsive shared cart '+width);}
  await ev('fixture.failCart=true;window.dispatchEvent(new CustomEvent("mg-open-cart"))');await until('document.querySelector(".mgh__err")?.textContent.includes("загрузить корзину")');assert.equal(await ev('document.querySelectorAll(".mgh__cart-list li").length'),0);results.push('cart failure has no unsafe legacy checkout fallback');
  assert.deepEqual(exceptions,[]);const report={pass:results.length,fail:0,results,artifacts:work};fs.writeFileSync(path.join(work,'results.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));

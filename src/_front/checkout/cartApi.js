@@ -16,10 +16,12 @@ export async function checkoutRpc(sb, name, args = {}) {
 export async function addProduct(sb, { type, id, paymentType = 'full', renewal = false, agreed = false }) {
     if (!Object.hasOwn(PRODUCT_LABELS, type) || !UUID.test(id || '')) throw new Error('Некорректный товар.');
     if (!['full', 'deposit'].includes(paymentType) || (paymentType === 'deposit' && type !== 'event')) throw new Error('Некорректный вариант оплаты.');
-    return checkoutRpc(sb, 'cart_add_product', {
+    const result = await checkoutRpc(sb, 'cart_add_product', {
         p_type: type, p_product_id: id, p_payment_type: paymentType,
         p_renewal: renewal === true, p_agreed: agreed === true,
     });
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('mg-cart-changed'));
+    return result;
 }
 export const getCart = sb => checkoutRpc(sb, 'cart_get');
 export const removeProduct = (sb, id) => checkoutRpc(sb, 'cart_remove', { p_shop_id: id });

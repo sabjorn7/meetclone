@@ -278,6 +278,7 @@ onMounted(async () => {
     document.addEventListener('click', onDocClick);
     document.addEventListener('keydown', onKey);
     window.addEventListener('mg-open-cart', onOpenCart);
+    window.addEventListener('mg-cart-changed', reloadCart);
 
     await refreshUser();
     // Only logged-in users have a cart / need realtime. Guests do ZERO Supabase work here, so the
@@ -297,6 +298,7 @@ onBeforeUnmount(() => {
     document.removeEventListener('click', onDocClick);
     document.removeEventListener('keydown', onKey);
     window.removeEventListener('mg-open-cart', onOpenCart);
+    window.removeEventListener('mg-cart-changed', reloadCart);
     try { if (cartChannel && sb) sb.removeChannel(cartChannel); } catch (e) { /* noop */ }
 });
 

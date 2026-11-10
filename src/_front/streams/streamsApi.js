@@ -199,21 +199,44 @@ export async function hasBoughtStream(supabase, stream, userId) {
 
 /** Buyers of a paid stream (author view): user_course rows on the backing course + user Name/email,
  *  oldest purchase first. Streams have no "pending registration" like events — a row here = paid. */
+export async function grantStreamAccessByEmail(supabase, streamId, email) {
+    const normalized = String(email || '').trim().toLowerCase();
+    if (!normalized || normalized.length > 320 || !/^[^\s@]+@[^\s@]+$/.test(normalized)) throw new Error('Укажите корректный email.');
+    const { data, error } = await supabase.rpc('grant_stream_access_by_email', { p_stream_id: streamId, p_email: normalized });
+    if (error) {
+        const messages = {
+            registered_user_not_found: 'Пользователь с таким email не зарегистрирован на MeetGuru.',
+            ambiguous_email: 'Найдено несколько аккаунтов с таким email. Уточните аккаунт у поддержки.',
+            auth_required: 'Войдите в аккаунт организатора.',
+            not_stream_owner: 'Добавлять участников может только организатор этого эфира.',
+            not_paid_stream: 'Ручное добавление доступно только для платного эфира.',
+            invalid_email: 'Укажите корректный email.',
+            invalid_stream_access_configuration: 'Не удалось проверить настройки доступа к эфиру. Обратитесь в поддержку.',
+            ambiguous_existing_access: 'У пользователя несколько записей доступа. Обратитесь в поддержку.',
+        };
+        throw new Error(messages[error.message] || 'Не удалось предоставить доступ. Повторите попытку.');
+    }
+    if (!['granted', 'already_has_access'].includes(data?.status)) throw new Error('Сервер не подтвердил предоставление доступа.');
+    return data;
+}
+
 export async function listStreamBuyers(supabase, stream) {
     if (!stream.backing_course_id) return [];
-    const { data: ucs } = await supabase
+    const { data: ucs, error: accessError } = await supabase
         .from('user_course')
-        .select('id, "user", created_at')
+        .select('id, "user", created_at, "Free", buy')
         .eq('course', stream.backing_course_id)
         .order('created_at', { ascending: true });
+    if (accessError) throw new Error('Не удалось загрузить доступы к эфиру.');
     const rows = ucs || [];
     const ids = [...new Set(rows.map((r) => r.user).filter(Boolean))];
     let byId = {};
     if (ids.length) {
-        const { data: us } = await supabase.from('users').select('id, "Name", email').in('id', ids);
+        const { data: us, error: usersError } = await supabase.from('users').select('id, "Name", email').in('id', ids);
+        if (usersError) throw new Error('Не удалось загрузить участников эфира.');
         byId = Object.fromEntries((us || []).map((u) => [u.id, u]));
     }
-    return rows.map((r) => ({ id: r.id, created_at: r.created_at, user: byId[r.user] || null }));
+    return rows.map((r) => ({ id: r.id, created_at: r.created_at, addedWithoutPayment: r.Free === true && r.buy !== true, user: byId[r.user] || null }));
 }
 
 /** All streams by a given author, newest first (for the author's own list). */

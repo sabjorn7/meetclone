@@ -344,12 +344,21 @@
                                 <p class="sp-note">Никому не передавайте ключ потока — по нему можно вести эфир от вашего имени.</p>
                             </div>
                             <div v-if="expandedBuyers[s.id]" class="sp-buyers">
+                                <form class="sp-buyer-grant" @submit.prevent="grantBuyer(s)">
+                                    <label :for="'stream-grant-' + s.id">Предоставить доступ по email</label>
+                                    <div class="sp-buyer-grant-row">
+                                        <input :id="'stream-grant-' + s.id" v-model="grantEmail[s.id]" type="email" required maxlength="320" autocomplete="email" placeholder="Email зарегистрированного пользователя" :disabled="grantBusy[s.id]" />
+                                        <button class="sp-btn sp-btn-mini" type="submit" :disabled="grantBusy[s.id]">{{ grantBusy[s.id] ? 'Добавление…' : 'Добавить без оплаты' }}</button>
+                                    </div>
+                                    <p v-if="grantError[s.id]" class="sp-note-err" role="alert">{{ grantError[s.id] }}</p>
+                                    <p v-if="grantSuccess[s.id]" class="sp-muted" role="status">{{ grantSuccess[s.id] }}</p>
+                                </form>
                                 <div v-if="buyersLoading[s.id]" class="sp-muted">Загрузка…</div>
                                 <div v-else-if="buyersError[s.id]" class="sp-note-err">{{ buyersError[s.id] }}</div>
                                 <div v-else-if="!(buyers[s.id] || []).length" class="sp-muted">Пока никто не купил этот эфир.</div>
                                 <ul v-else class="sp-buyers-list">
                                     <li v-for="b in buyers[s.id]" :key="b.id" class="sp-buyers-item">
-                                        <span class="sp-buyers-name">{{ b.user?.Name || 'Без имени' }}</span>
+                                        <span class="sp-buyers-name">{{ b.user?.Name || 'Без имени' }}<span v-if="b.addedWithoutPayment" class="sp-buyer-manual">Добавлен без оплаты</span></span>
                                         <span class="sp-buyers-email">{{ b.user?.email || '—' }}</span>
                                     </li>
                                 </ul>
@@ -465,6 +474,7 @@ import {
     accessExpiry,
     listMyStreams,
     listStreamBuyers,
+    grantStreamAccessByEmail,
     updateStream,
     listAllStreams,
     getStreamById,
@@ -513,6 +523,10 @@ const expandedBuyers = ref({});
 const buyers = ref({});
 const buyersLoading = ref({});
 const buyersError = ref({});
+const grantEmail = ref({});
+const grantBusy = ref({});
+const grantError = ref({});
+const grantSuccess = ref({});
 // manage/edit modal (per stream)
 const manageStream = ref(null);
 const editForm = ref({ title: '', description: '', cover_url: '', scheduledAt: '', video_quality: 'hd' });
@@ -936,6 +950,23 @@ async function toggleBuyers(s) {
     expandedBuyers.value = { ...expandedBuyers.value, [s.id]: open };
     if (open) await loadBuyers(s);
 }
+async function grantBuyer(s) {
+    if (grantBusy.value[s.id]) return;
+    grantBusy.value = { ...grantBusy.value, [s.id]: true };
+    grantError.value = { ...grantError.value, [s.id]: '' };
+    grantSuccess.value = { ...grantSuccess.value, [s.id]: '' };
+    try {
+        const result = await grantStreamAccessByEmail(supa(), s.id, grantEmail.value[s.id]);
+        grantEmail.value = { ...grantEmail.value, [s.id]: '' };
+        grantSuccess.value = { ...grantSuccess.value, [s.id]: result.status === 'already_has_access' ? 'У пользователя уже есть доступ к эфиру.' : 'Доступ предоставлен без оплаты.' };
+        await loadBuyers(s);
+    } catch (e) {
+        grantError.value = { ...grantError.value, [s.id]: e.message || 'Не удалось предоставить доступ.' };
+    } finally {
+        grantBusy.value = { ...grantBusy.value, [s.id]: false };
+    }
+}
+
 async function loadBuyers(s) {
     buyersLoading.value = { ...buyersLoading.value, [s.id]: true };
     buyersError.value = { ...buyersError.value, [s.id]: '' };
@@ -2057,4 +2088,16 @@ textarea.pd-input { resize: vertical; }
     margin-top: 12px;
     text-align: center;
 }
+</style>
+
+<style scoped>
+.sp-buyer-grant { display: grid; gap: 8px; margin-bottom: 14px; }
+.sp-buyer-grant label { font-size: 13px; font-weight: 600; color: #091747; }
+.sp-buyer-grant-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.sp-buyer-grant-row input { flex: 1 1 230px; min-width: 0; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; font-size: 14px; }
+.sp-buyer-grant-row input:focus-visible { outline: 2px solid #1f5fc9; outline-offset: 2px; }
+.sp-buyer-grant-row input:disabled { opacity: .65; }
+.sp-buyer-manual { display: block; margin-top: 3px; color: #5b6472; font-size: 12px; font-weight: 400; }
+.sp-buyers-item > span { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .sp-buyer-grant-row > button { width: 100%; } .sp-buyers-item { flex-wrap: wrap; gap: 4px; } }
 </style>

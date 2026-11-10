@@ -1,4 +1,12 @@
-// Events metadata/registrations. All paid purchases use checkout/cartApi.js.
+// Offline-EVENTS data + payment helpers. DI style like streamsApi.js (pass the shared Supabase
+// client). The paid path is a verbatim clone of the course/stream purchase flow (shop → order →
+// Prodamus link) — the ONLY money-adjacent code here. Settlement (mark paid, grant, sales, balance)
+// is handled by the UNTOUCHED n8n BuyCourse via the Prodamus callback; the server-side DB trigger
+// trg_event_order_paid then flips the registration to 'paid' and adds the buyer to the event chat.
+//
+// KEY money-safety marker: order.event_id (nullable, invisible to BuyCourse) tags an order as an
+// event payment so the trigger fires only for events; course/stream orders are untouched.
+
 import { deleteLive } from '@/_front/streams/peertubeLive.js';
 
 /**
@@ -207,8 +215,11 @@ export async function listMyEvents(supabase, ownerId) {
 
 /** Count paid registrations for an event (roster size / capacity display / delete guard). */
 export async function countPaidRegistrations(supabase, eventId) {
-    const { count, error } = await supabase.from('event_registrations').select('id', { count: 'exact', head: true }).eq('event', eventId).eq('status', 'paid');
-    if (error) throw new Error(error.message);
+    const { count } = await supabase
+        .from('event_registrations')
+        .select('id', { count: 'exact', head: true })
+        .eq('event', eventId)
+        .eq('status', 'paid');
     return count || 0;
 }
 
@@ -247,11 +258,40 @@ export async function publishEvent(supabase, eventId) {
  * without an .order() (PGRST109).
  */
 export async function deleteEvent(supabase, eventId) {
+    const paidRegs = await countPaidRegistrations(supabase, eventId);
+    // A paid order also flips a registration to 'paid' via trg_event_order_paid, but check both.
+    const { count: paidOrders } = await supabase
+        .from('order')
+        .select('id', { count: 'exact', head: true })
+        .eq('event_id', eventId)
+        .eq('paid', true);
+    if (paidRegs > 0 || (paidOrders || 0) > 0) {
+        throw new Error(`Нельзя удалить: у мероприятия есть оплатившие участники (${paidRegs || paidOrders}). Сначала оформите возвраты.`);
+    }
+
+    // best-effort: drop the event's PeerTube videos (teaser + reviews) so they don't orphan
     const ev = await getEventById(supabase, eventId).catch(() => null);
-    const { error } = await supabase.rpc('checkout_delete_event', { p_event_id: eventId });
-    if (error) throw new Error(error.message);
     for (const vid of [ev?.video_id, ev?.review_video_id]) {
-        if (vid) { try { await deleteLive(supabase, vid); } catch (_) { /* existing best-effort cleanup */ } }
+        if (vid) { try { await deleteLive(supabase, vid); } catch (_) { /* already gone */ } }
+    }
+
+    // .neq('status','paid') / .eq('paid', false) are safety belts: a row flipped to paid by a
+    // callback mid-delete is never touched here.
+    const r1 = await supabase.from('event_registrations').delete().eq('event', eventId).neq('status', 'paid');
+    if (r1.error) throw new Error(`Не удалось очистить незавершённые регистрации: ${r1.error.message}`);
+    const r2 = await supabase.from('order').update({ event_id: null }).eq('event_id', eventId).eq('paid', false);
+    if (r2.error) throw new Error(`Не удалось отвязать незавершённые заказы: ${r2.error.message}`);
+    const r3 = await supabase.from('event_contact_requests').update({ event: null }).eq('event', eventId);
+    if (r3.error) throw new Error(`Не удалось отвязать заявки на звонок: ${r3.error.message}`);
+
+    const { error } = await supabase.from('events').delete().eq('id', eventId);
+    if (error) {
+        // Everything unpaid was cleared above; a lingering registrations-FK means a paid row
+        // appeared mid-delete. Match ONLY that constraint — not any "foreign key" text.
+        if (/event_registrations_event_fkey/i.test(error.message)) {
+            throw new Error('Нельзя удалить: у мероприятия появились оплатившие участники.');
+        }
+        throw new Error(`Не удалось удалить: ${error.message}`);
     }
 }
 
@@ -276,4 +316,123 @@ export async function getMyEventRegistration(supabase, eventId, userId) {
     return data?.[0] || null;
 }
 
-// Paid event positions use the shared cart; payment links are never created here.
+/**
+ * MONEY: initiate an event registration payment — clone of purchaseStream.
+ * `paymentType` = 'full' | 'deposit'. Returns the Prodamus payment URL (caller redirects).
+ * Gates: already-paid → blocked; a leftover 'pending' registration is reused (unique(event,user));
+ * capacity (if set) → blocked when paid registrations already fill it.
+ */
+export async function purchaseEvent(supabase, { buyer, event, paymentType, promoCode = null }) {
+    if (window.__mgGuestAuth) throw new Error('Нет связи с аккаунтом. Обновите страницу.'); // (a') guard
+    if (!event?.backing_course_id) throw new Error('У мероприятия нет курса-подложки.');
+    if (paymentType !== 'full' && paymentType !== 'deposit') throw new Error('Неверный тип оплаты.');
+    const amount = eventAmount(event, paymentType);
+    if (!(amount > 0)) throw new Error('Некорректная сумма к оплате.');
+
+    // Gate 1: existing registration. paid → block; pending/cancelled → reuse the row (unique(event,user)).
+    const existing = await getMyEventRegistration(supabase, event.id, buyer);
+    if (existing && existing.status === 'paid') {
+        throw new Error('Вы уже записаны на это мероприятие.');
+    }
+
+    // Gate 2: capacity (simple, non-locking count of paid registrations).
+    if (event.capacity != null) {
+        const { count } = await supabase
+            .from('event_registrations')
+            .select('id', { count: 'exact', head: true })
+            .eq('event', event.id)
+            .eq('status', 'paid');
+        if ((count || 0) >= Number(event.capacity)) {
+            throw new Error('На мероприятии не осталось свободных мест.');
+        }
+    }
+
+    // 1) shop cart row (price = the chosen amount — full or deposit)
+    const { count: cartCount } = await supabase
+        .from('shop')
+        .select('id', { count: 'exact', head: true })
+        .eq('owner', buyer)
+        .eq('status', 'cart');
+    const { data: shopRows, error: shopErr } = await supabase
+        .from('shop')
+        .insert({
+            owner: buyer,
+            price: amount,
+            status: 'cart',
+            prolong: 12,
+            position: (cartCount || 0) + 1,
+            quantity: 1,
+            course_id: event.backing_course_id,
+            course_name: event.title,
+        })
+        .select('id')
+        .limit(1);
+    if (shopErr) throw new Error(`Корзина: ${shopErr.message}`);
+    const shopId = shopRows?.[0]?.id;
+
+    // 1b) optional promo — FULL payment only (variant В). Deposit + promo is disallowed to avoid the
+    // "discount is tiny / partially lost" ambiguity of discounting a partial payment. Validated
+    // server-side; the discounted price is persisted to shop so n8n BuyCourse bills commission on it.
+    let price = amount;
+    let promoId = null, promoDiscount = 0;
+    if (promoCode) {
+        if (paymentType !== 'full') throw new Error('Промокод доступен только при полной оплате.');
+        const { data: pv, error: pErr } = await supabase.rpc('preview_promo', { p_code: promoCode, p_shop_ids: [shopId] });
+        if (pErr) throw new Error(`Промокод: ${pErr.message}`);
+        if (!pv?.valid) throw new Error('Промокод недействителен для этого мероприятия.');
+        price = Number(pv.new_total);
+        promoId = pv.promo_id;
+        promoDiscount = Number(pv.discount) || 0;
+        await supabase.from('shop').update({ price }).eq('id', shopId);
+    }
+
+    // 2) order — isolated to this event; event_id is the trigger marker (invisible to BuyCourse)
+    const { data: orderRows, error: orderErr } = await supabase
+        .from('order')
+        .insert({ summ: price, owner: buyer, course_positions: [shopId], event_id: event.id,
+                  promo_code_id: promoId, promo_discount: promoId ? promoDiscount : null })
+        .select('id')
+        .limit(1);
+    if (orderErr) throw new Error(`Заказ: ${orderErr.message}`);
+    const orderId = orderRows?.[0]?.id;
+
+    // 3) registration (pending) linked to the order — the trigger flips it to 'paid' on callback.
+    //    Reuse a leftover pending row (unique(event,user)) or insert a fresh one.
+    const regFields = {
+        payment_type: paymentType,
+        amount_paid: price,
+        amount_total: Number(event.price),
+        order: orderId,
+        status: 'pending',
+    };
+    if (existing) {
+        const { error: upErr } = await supabase
+            .from('event_registrations')
+            .update(regFields)
+            .eq('id', existing.id);
+        if (upErr) throw new Error(`Регистрация: ${upErr.message}`);
+    } else {
+        const { error: insErr } = await supabase
+            .from('event_registrations')
+            .insert({ event: event.id, user: buyer, ...regFields });
+        if (insErr) throw new Error(`Регистрация: ${insErr.message}`);
+    }
+
+    // 4) build + fetch the Prodamus payment link (same builder as courses/streams)
+    const base = 'https://meetguru.payform.ru/?do=link&sys=meetguru';
+    const urlSuccess = `https://app.meetgu.ru/events?event=${event.id}`;
+    const products =
+        `products[0][price]=${encodeURIComponent(price)}` +
+        `&products[0][quantity]=1` +
+        `&products[0][name]=${encodeURIComponent(event.title)}`;
+    const buildUrl = `${base}&order_id=${encodeURIComponent(orderId)}&${products}&urlSuccess=${encodeURIComponent(urlSuccess)}`;
+    const res = await fetch(buildUrl);
+    if (!res.ok) throw new Error(`Prodamus (${res.status})`);
+    const payLink = (await res.text()).trim();
+    if (!/^https?:\/\//.test(payLink)) throw new Error('Prodamus вернул не ссылку.');
+
+    // 5) store num + pageUrl on the order
+    await supabase.from('order').update({ num: orderId, pageUrl: payLink }).eq('id', orderId);
+
+    return payLink;
+}

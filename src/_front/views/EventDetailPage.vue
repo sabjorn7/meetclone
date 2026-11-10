@@ -54,7 +54,7 @@
                             <!-- pending -->
                             <template v-else-if="reg && reg.status === 'pending'">
                                 <p class="pd-buycard__note">Оплата обрабатывается. Если только что оплатили — обновите страницу через минуту.</p>
-                                <button class="pd-btn pd-btn--lg pd-btn--block" :disabled="busy" @click="openSharedCart">Открыть корзину и заказы</button>
+                                <button class="pd-btn pd-btn--lg pd-btn--block" :disabled="busy" @click="pay(reg.payment_type || 'full')">Оплатить снова</button>
                             </template>
                             <!-- new registration -->
                             <template v-else>
@@ -68,7 +68,9 @@
                                         <span class="ed-choice__sub">остаток {{ money(event.price - depositAmount) }} ₽ на месте</span>
                                     </label>
                                 </div>
-                                <p class="ed-promo-note">Промокод применяется в общей корзине. Для предоплаты скидка не действует.</p>
+                                <!-- promo only for full payment (variant В) -->
+                                <input v-if="choice === 'full'" v-model="eventPromo" type="text" class="ed-promo-input" placeholder="Промокод (необязательно)" />
+                                <p v-else class="ed-promo-note">Промокод доступен только при полной оплате.</p>
                                 <label class="ed-agree">
                                     <input type="checkbox" v-model="agreed" />
                                     <span>Я ознакомился(ась) и принимаю
@@ -76,8 +78,8 @@
                                         включая <a href="/vozvrat" target="_blank" rel="noopener">Правила отмены участия и возврата денежных средств</a>.
                                     </span>
                                 </label>
-                                <button class="pd-btn pd-btn--lg pd-btn--block" :disabled="busy || (!eventInCart && !agreed)" @click="pay(choice)">
-                                    {{ busy ? 'Сохраняем…' : Number(event.price) === 0 ? 'Записаться бесплатно' : eventInCart ? 'В корзине' : 'Добавить в корзину' }}
+                                <button class="pd-btn pd-btn--lg pd-btn--block" :disabled="busy || seatsFull || !agreed" @click="pay(choice)">
+                                    {{ seatsFull ? 'Мест нет' : (busy ? 'Переход к оплате…' : 'Записаться') }}
                                 </button>
                             </template>
                             <p v-if="payError" class="pd-buyerr">{{ payError }}</p>
@@ -85,6 +87,7 @@
                             <ul class="pd-statlist">
                                 <li v-if="whenText"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg><span>{{ whenText }}</span></li>
                                 <li v-if="event.location"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><span>{{ event.location }}</span></li>
+                                <li v-if="event.capacity != null"><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><span>{{ seatsLeft > 0 ? `Осталось мест: ${seatsLeft}` : 'Мест нет' }}</span></li>
                                 <li><svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Чат участников после оплаты</span></li>
                             </ul>
                         </div>
@@ -199,7 +202,6 @@
 </template>
 
 <script setup>
-import { addProduct, openSharedCart, checkoutRpc } from '@/_front/checkout/cartApi.js';
 import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { getCurrentUser } from '@/_front/streams/streamsApi.js';
@@ -210,6 +212,8 @@ import {
     getEventBySlug,
     getSpeakerProfile,
     getMyEventRegistration,
+    countPaidRegistrations,
+    purchaseEvent,
     eventAmount,
     submitContactRequest,
 } from '@/_front/streams/eventsApi.js';
@@ -228,9 +232,10 @@ const teaserEmbed = computed(() => (event.value?.video_id ? embedUrl(event.value
 const reviewEmbed = computed(() => (event.value?.review_video_id ? embedUrl(event.value.review_video_id, { autoplay: false }) : ''));
 const me = ref(null);
 const reg = ref(null);
+const paidCount = ref(0);
 const choice = ref('full');
 const agreed = ref(false); // обязательное согласие с офертой + правилами отмены перед оплатой
-const eventInCart = ref(false);
+const eventPromo = ref('');
 const busy = ref(false);
 const payError = ref('');
 const contactName = ref('');
@@ -292,6 +297,8 @@ const whenText = computed(() => {
 });
 const hasDeposit = computed(() => event.value?.deposit_percent != null && Number(event.value.deposit_percent) > 0);
 const depositAmount = computed(() => (hasDeposit.value ? eventAmount(event.value, 'deposit') : 0));
+const seatsLeft = computed(() => (event.value?.capacity != null ? Math.max(0, Number(event.value.capacity) - paidCount.value) : Infinity));
+const seatsFull = computed(() => event.value?.capacity != null && seatsLeft.value <= 0);
 
 function money(v) { return (Number(v) || 0).toLocaleString('ru-RU'); }
 
@@ -343,11 +350,8 @@ async function load() {
         event.value = ev;
         choice.value = 'full';
         if (ev.speaker_id) speaker.value = await getSpeakerProfile(sb(), ev.speaker_id).catch(() => null);
+        if (ev.capacity != null) paidCount.value = await countPaidRegistrations(sb(), ev.id).catch(() => 0);
         await loadReg();
-        if (me.value && Number(ev.price) > 0) {
-            const cart = await checkoutRpc(sb(), 'cart_get').catch(() => []);
-            eventInCart.value = cart.some(i => i.product_type === 'event' && i.product_id === ev.id);
-        }
     } catch {
         notFound.value = true;
     } finally {
@@ -357,19 +361,12 @@ async function load() {
 
 async function pay(paymentType) {
     if (busy.value || !event.value || !me.value) return;
-    if (eventInCart.value) { openSharedCart(); return; }
     busy.value = true; payError.value = '';
     try {
-        if (Number(event.value.price) === 0) {
-            await checkoutRpc(sb(), 'checkout_register_free_event', { p_event_id: event.value.id, p_agreed: agreed.value });
-            await loadReg();
-        } else {
-            await addProduct(sb(), { type: 'event', id: event.value.id, paymentType, agreed: agreed.value });
-            eventInCart.value = true;
-        }
-        busy.value = false;
+        const payLink = await purchaseEvent(sb(), { buyer: me.value.id, event: event.value, paymentType, promoCode: paymentType === 'full' ? (eventPromo.value.trim() || null) : null });
+        window.location.href = payLink;
     } catch (e) {
-        payError.value = e.message || 'Не удалось добавить товар в корзину.';
+        payError.value = e.message || 'Не удалось перейти к оплате.';
         busy.value = false;
     }
 }

@@ -297,7 +297,7 @@ const teaserEmbed = computed(() => (course.value?.video_id ? embedUrl(course.val
 const ctaLabel = computed(() => {
     if (buying.value) return 'Секунду…';
     if (course.value?.Free) return 'Получить бесплатно';
-    return inCart.value ? 'В корзине' : 'Добавить в корзину';
+    return inCart.value ? 'В корзине — оформить' : 'Купить';
 });
 // Renewal is offered to owners only when the author set a positive DurationPrice (parity with the
 // WeWeb course_info owner branch; DurationPrice<=0 → no self-serve renewal, just the library link).
@@ -338,6 +338,7 @@ async function addCourse(renewal) {
             // ADD to cart only — no order, no redirect. Checkout is done from the header cart.
             await addToCart(sb, { buyer: buyer.value, course: course.value, renewal });
             inCart.value = true;
+            openHeaderCart();
         }
     } catch (e) {
         buyError.value = e?.message || 'Не удалось добавить в корзину. Попробуйте ещё раз.';

@@ -91,7 +91,50 @@ export async function createBackingCourse(supabase, { owner, title, price, month
     return data?.[0]?.id;
 }
 
-// Paid checkout is owned by the shared cart; there is no stream-specific payment path.
+// Friendly messages for the error codes the stream-pay-link edge function returns.
+function mapPayError(code) {
+    return ({
+        promo_invalid: 'Промокод недействителен для этого эфира.',
+        no_backing_course: 'У эфира нет курса-подложки.',
+        stream_not_found: 'Эфир не найден.',
+        unauthorized: 'Нужно войти в аккаунт.',
+        link_failed: 'Платёжная система временно недоступна. Попробуйте ещё раз.',
+    })[code] || '';
+}
+
+/**
+ * MONEY: initiate a paid-stream purchase (variant B — server builds the link).
+ *
+ * The browser no longer touches meetguru.payform.ru: that cross-origin fetch was failing on
+ * mobile / in-app browsers (carrier DPI, WebView) and dead-ending the purchase. Instead we call
+ * our SAME-ORIGIN edge function `stream-pay-link` (via /sb/functions/v1/…), which builds the
+ * shop/order rows and fetches the Prodamus link server-side, and returns the ready payLink.
+ *
+ * Settlement is unchanged: the UNTOUCHED n8n `BuyCourse` workflow marks paid / grants access via
+ * the Prodamus callback. The `buyer` arg is kept for the call signature but the server derives
+ * the real buyer from the auth JWT (not trusted from the client). Returns the payment URL.
+ */
+export async function purchaseStream(supabase, { buyer, stream, promoCode = null }) {
+    void buyer; // identity is taken from the JWT server-side; kept for signature compatibility
+    if (window.__mgGuestAuth) throw new Error('Нет связи с аккаунтом. Обновите страницу.'); // (a') guard
+    if (!stream?.backing_course_id) throw new Error('У эфира нет курса-подложки.');
+
+    const { data, error } = await supabase.functions.invoke('stream-pay-link', {
+        body: { stream_id: stream.id, promo_code: promoCode || null },
+    });
+
+    if (error) {
+        // functions.invoke wraps a non-2xx in a FunctionsHttpError; surface the server code if any.
+        let code = '';
+        try { code = (await error.context?.json?.())?.error || ''; } catch (e) { /* non-json body */ }
+        throw new Error(mapPayError(code) || 'Не удалось связаться с платёжной системой. Попробуйте ещё раз.');
+    }
+    if (!data?.payLink || !/^https?:\/\//.test(data.payLink)) {
+        throw new Error('Платёжная система не вернула ссылку. Попробуйте ещё раз.');
+    }
+    // caller redirects the browser to payLink (same-origin → external payform page)
+    return data.payLink;
+}
 
 // ---------- access gate (NOT money) ----------
 
@@ -116,7 +159,6 @@ export async function hasBoughtStream(supabase, stream, userId) {
         .select('id')
         .eq('course', stream.backing_course_id)
         .eq('user', userId)
-        .or('buy.eq.true,Free.eq.true')
         .limit(1);
     return !!data?.length;
 }

@@ -211,7 +211,7 @@ const qvEmbed = computed(() => (qv.value?.video_id ? embedUrl(qv.value.video_id)
 const qvBuyLabel = computed(() => {
     if (buying.value) return 'Секунду…';
     if (qv.value?.Free) return 'Получить бесплатно';
-    return qvInCart.value ? 'В корзине' : 'Добавить в корзину';
+    return qvInCart.value ? 'В корзине — оформить' : 'Купить';
 });
 
 // Russian plural helper (one / few / many).
@@ -304,6 +304,7 @@ async function buyFromQuickView() {
         } else {
             await addToCart(sb, { buyer: buyer.value, course: qv.value });
             qvInCart.value = true;
+            openHeaderCart();
         }
     } catch (e) {
         buyError.value = e?.message || 'Не удалось добавить в корзину. Попробуйте ещё раз.';

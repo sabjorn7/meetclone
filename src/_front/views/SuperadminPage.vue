@@ -122,22 +122,22 @@
             <section v-else-if="active === 'commission'" class="sa-panel sa-pad">
                 <div class="sa-panelhead">
                     <h2>Комиссия авторов</h2>
-                    <span class="sa-note">Доля автора, % · влияет на будущие продажи</span>
+                    <span class="sa-note">Доля автора, % · оставшаяся часть принадлежит платформе · только будущие платежи</span>
                 </div>
                 <div class="sa-search"><input v-model="authors.search" type="search" placeholder="Поиск по имени" /></div>
                 <div v-if="authors.loading" class="sa-empty">Загрузка…</div>
+                <div v-else-if="authors.error" class="sa-empty" role="alert">{{ authors.error }}</div>
                 <div v-else-if="!authorsFiltered.length" class="sa-empty">Ничего не найдено</div>
                 <div v-else class="sa-tablewrap">
                     <table class="sa-table">
-                        <thead><tr><th>Автор</th><th>Роль</th><th class="ta-r">Комиссия</th><th class="ta-r">Баланс</th><th class="ta-r">Действия</th></tr></thead>
+                        <thead><tr><th>Автор</th><th>Роль</th><th v-for="category in shareCategories" :key="category.id" class="ta-r">{{ category.label }}</th><th class="ta-r">Баланс</th><th class="ta-r">Действия</th></tr></thead>
                         <tbody>
                             <tr v-for="a in authorsFiltered" :key="a.id">
                                 <td class="ttl">{{ a.Name || '—' }}</td>
                                 <td><span class="role-chip">{{ a.role }}</span></td>
-                                <td class="ta-r strong">{{ a.authorCommission ?? 100 }}%</td>
+                                <td v-for="category in shareCategories" :key="category.id" class="ta-r strong"><button type="button" class="btn btn-ghost" :aria-label="'Изменить долю автора: ' + category.label" @click="askCommission(a, category.id)">{{ a[category.field] }}%</button></td>
                                 <td class="ta-r muted">{{ fmtRub(a.Ammount) }}</td>
                                 <td class="ta-r acts">
-                                    <button type="button" class="btn btn-ghost" @click="askCommission(a)">Комиссия</button>
                                     <button type="button" class="btn btn-ghost" @click="askBalance(a)">Баланс</button>
                                 </td>
                             </tr>
@@ -388,11 +388,12 @@ async function loadCounts() {
 const queue = reactive({ loading: false, rows: [] });
 const aqueue = reactive({ loading: false, rows: [] });
 const rqueue = reactive({ loading: false, rows: [] });
-const authors = reactive({ loading: false, rows: [], search: '' });
+const shareCategories = [{ id: 'courses', label: 'Курсы', field: 'authorCommissionCourses' }, { id: 'streams', label: 'Трансляции', field: 'authorCommissionStreams' }];
+const authors = reactive({ loading: false, rows: [], search: '', error: '' });
 const pqueue = reactive({ loading: false, rows: [] });
 const video = reactive({ loading: false, status: null });
 const storage = reactive({ loading: false, owners: [], total: 0, totalVids: 0, withVideo: 0 });
-const modal = reactive({ open: false, entity: null, mode: null, item: null, value: null, comment: '', busy: false, error: '' });
+const modal = reactive({ open: false, entity: null, mode: null, item: null, value: null, category: null, comment: '', busy: false, error: '' });
 const modalCfg = computed(() => {
     const e = modal.entity, m = modal.mode;
     if (e === 'promo' && m === 'delete') return { title: 'Удалить промокод?', warn: '⚠️ Промокод перестанет действовать. История активаций сохранится.', confirm: 'Удалить', btn: 'btn-danger', needsComment: false, needsValue: false };
@@ -401,7 +402,7 @@ const modalCfg = computed(() => {
     if (e === 'report' && m === 'delete') return { title: 'Удалить сообщение?', warn: '⚠️ Сообщение будет удалено безвозвратно для всех участников чата.', confirm: 'Удалить', btn: 'btn-danger', needsComment: false, needsValue: false };
     if (e === 'report' && m === 'dismiss') return { title: 'Отклонить жалобу?', warn: '', confirm: 'Отклонить', btn: 'btn-primary', needsComment: false, needsValue: false };
     if (e === 'balance') return { title: 'Коррекция баланса', warn: '⚠️ Ручная правка баланса. Плюс — начислить, минус — списать. Операция попадёт в аудит-лог.', confirm: 'Применить', btn: 'btn-ok', needsComment: true, needsValue: true, numMin: undefined, numMax: undefined, numStep: 1, valueLabel: 'Сумма (+ начислить / − списать), ₽', commentHint: 'Причина — сохранится в аудит-логе.', commentPlaceholder: 'Например: ручная корректировка / возврат' };
-    if (e === 'commission') return { title: 'Изменить комиссию автора?', warn: 'Влияет только на будущие продажи — прошлые начисления не меняются.', confirm: 'Сохранить', btn: 'btn-ok', needsComment: true, needsValue: true, numMin: 0, numMax: 100, numStep: 1, valueLabel: 'Новая комиссия, %', commentHint: 'Причина изменения — сохранится в аудит-логе.', commentPlaceholder: 'Например: договорённость о новой ставке' };
+    if (e === 'commission') return { title: 'Изменить долю автора: ' + (shareCategories.find(c => c.id === modal.category)?.label || '') + '?', warn: 'Влияет только на будущие продажи — прошлые начисления не меняются.', confirm: 'Сохранить', btn: 'btn-ok', needsComment: true, needsValue: true, numMin: 0, numMax: 100, numStep: 1, valueLabel: 'Доля автора, %', commentHint: 'Причина изменения — сохранится в аудит-логе.', commentPlaceholder: 'Например: договорённость о новой ставке' };
     if (m === 'approve') return { title: `Опубликовать ${e === 'article' ? 'статью' : 'курс'}?`, warn: e === 'article' ? '⚠️ Статья станет видна всем пользователям платформы.' : '⚠️ Курс станет виден всем пользователям платформы.', confirm: 'Опубликовать', btn: 'btn-ok', needsComment: false, needsValue: false };
     return { title: 'Вернуть на доработку?', warn: '', confirm: 'Вернуть', btn: 'btn-warn', needsComment: true, needsValue: false, commentHint: 'Автор увидит этот комментарий в своём кабинете.', commentPlaceholder: 'Что нужно исправить' };
 });
@@ -431,17 +432,18 @@ function rtypeLabel(r) { const t = r && (r.recipient_type || (r.requisites && r.
 async function loadAuthors() {
     authors.loading = true;
     try {
-        const { data } = await sb.from('users').select('id,"Name",role,"authorCommission","Ammount"')
+        const { data, error } = await sb.from('users').select('id,"Name",role,"authorCommissionCourses","authorCommissionStreams","Ammount"')
             .in('role', ['Спикер', 'Учебное заведение']).order('Name', { ascending: true });
-        authors.rows = data || [];
-    } catch (e) { console.warn('loadAuthors failed', e); }
+        if (error) throw error;
+        authors.rows = data || []; authors.error = '';
+    } catch (e) { authors.rows = []; authors.error = 'Не удалось загрузить ставки авторов. Повторите открытие раздела.'; }
     authors.loading = false;
 }
 const authorsFiltered = computed(() => {
     const q = authors.search.trim().toLowerCase();
     return q ? authors.rows.filter((a) => (a.Name || '').toLowerCase().includes(q)) : authors.rows;
 });
-function askCommission(a) { modal.open = true; modal.entity = 'commission'; modal.mode = 'set'; modal.item = a; modal.value = (a.authorCommission ?? 100); modal.comment = ''; modal.error = ''; }
+function askCommission(a, category) { const field = shareCategories.find(c => c.id === category)?.field; if (!field) return; modal.open = true; modal.entity = 'commission'; modal.category = category; modal.mode = 'set'; modal.item = a; modal.value = a[field]; modal.comment = ''; modal.error = ''; }
 function askBalance(a) { modal.open = true; modal.entity = 'balance'; modal.mode = 'adjust'; modal.item = a; modal.value = null; modal.comment = ''; modal.error = ''; }
 
 async function loadPayoutQueue() {
@@ -676,7 +678,7 @@ async function confirmAction() {
                 ? await sb.rpc('admin_approve_withdrawal_v2', { p_id: id, p_comment: comment || null })
                 : await sb.rpc('admin_reject_withdrawal_v2', { p_id: id, p_comment: comment || null });
         } else if (modal.entity === 'commission') {
-            res = await sb.rpc('admin_set_commission', { p_user: id, p_value: modal.value, p_reason: comment });
+            res = await sb.rpc('admin_set_author_share', { p_user: id, p_category: modal.category, p_value: modal.value, p_reason: comment });
         } else if (modal.entity === 'balance') {
             res = await sb.rpc('admin_adjust_balance', { p_user: id, p_delta: modal.value, p_reason: comment });
         } else if (modal.entity === 'report') {
@@ -699,7 +701,7 @@ async function confirmAction() {
             pqueue.rows = pqueue.rows.filter((r) => r.id !== id); counts.payouts = pqueue.rows.length;
             done = modal.mode === 'approve' ? 'Выплата подтверждена' : 'Заявка отклонена, средства возвращены';
         } else if (modal.entity === 'commission') {
-            const row = authors.rows.find((r) => r.id === id); if (row) row.authorCommission = modal.value;
+            const row = authors.rows.find((r) => r.id === id); const field = shareCategories.find(c => c.id === modal.category)?.field; if (row && field) row[field] = modal.value;
             done = 'Комиссия обновлена';
         } else if (modal.entity === 'balance') {
             const row = authors.rows.find((r) => r.id === id); if (row && res.data != null) row.Ammount = res.data;

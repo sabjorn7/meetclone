@@ -1,0 +1,31 @@
+--- a/grid.html
++++ b/grid.html
+@@ -113,7 +113,14 @@
+                     __post('TrackSubscribed: ' + participant.identity + ' kind=' + track.kind + ' source=' + pub.source);
+                     if (track.kind === 'video') {
+                         const isScreen = pub.source === LK.Track.Source.ScreenShare;
+-                        const el = tileFor(participant.sid + ':' + pub.source, participant.identity, isScreen);
++                        const key = participant.sid + ':' + pub.source;
++                        const el = tileFor(key, participant.identity, isScreen);
++                        const entry = tiles.get(key);
++                        if (entry.track && entry.track !== track) {
++                            entry.track.detach().forEach((oldEl) => oldEl.remove());
++                        }
++                        entry.track = track;
++                        entry.publicationSid = pub.trackSid;
+                         el.insertBefore(track.attach(), el.firstChild);
+                     } else if (track.kind === 'audio') {
+                         document.body.appendChild(track.attach());
+@@ -122,7 +129,11 @@
+                 room.on(LK.RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
+                     __post('TrackUnsubscribed: ' + participant.identity + ' kind=' + track.kind + ' source=' + pub.source);
+                     track.detach().forEach((el) => el.remove());
+-                    if (track.kind === 'video') removeTile(participant.sid + ':' + pub.source);
++                    if (track.kind === 'video') {
++                        const key = participant.sid + ':' + pub.source;
++                        const entry = tiles.get(key);
++                        if (entry && entry.publicationSid === pub.trackSid) removeTile(key);
++                    }
+                 });
+                 room.on(LK.RoomEvent.ParticipantConnected, (pt) => __post('ParticipantConnected: ' + pt.identity));
+                 room.on(LK.RoomEvent.ParticipantDisconnected, (pt) => { __post('ParticipantDisconnected: ' + pt.identity); removeParticipantTiles(pt.sid); });

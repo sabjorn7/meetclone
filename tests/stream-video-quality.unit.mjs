@@ -15,9 +15,11 @@ test('capture, primary encoding and Egress profile agree; VP8 and adaptation ret
         assert.equal(r.videoCaptureDefaults.resolution.height,p.height);
         assert.equal(r.publishDefaults.videoEncoding.maxFramerate,30);
         assert.equal(r.publishDefaults.videoEncoding.maxBitrate,p.cameraBitrate);
-        assert.equal(r.publishDefaults.videoCodec,'vp8');assert(r.adaptiveStream&&r.dynacast&&r.publishDefaults.simulcast);
+        assert.equal(r.publishDefaults.videoCodec,'vp8');assert(r.adaptiveStream&&r.dynacast);
+        assert.equal(r.publishDefaults.simulcast,id==='hd');
         const layers=r.publishDefaults.videoSimulcastLayers;
-        assert(layers[0].height<layers[1].height&&layers[1].height<p.height);
+        if(id==='hd')assert(layers[0].height<layers[1].height&&layers[1].height<p.height);
+        else assert.deepEqual(layers,[]);
     }
     assert.equal(videoProfile('full_hd').egressPreset,'H264_1080P_30');
     assert.equal(videoProfile('full_hd').egressBitrate,4500000);

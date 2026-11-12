@@ -1,7 +1,7 @@
 // Shared, dependency-free profile contract. Capture is a request, never a measured result.
 export const VIDEO_QUALITY_PROFILES = Object.freeze({
     hd: Object.freeze({ id: 'hd', label: 'HD (720p)', width: 1280, height: 720, fps: 30, cameraBitrate: 1_700_000, egressBitrate: 3_000_000, egressPreset: 'H264_720P_30' }),
-    full_hd: Object.freeze({ id: 'full_hd', label: 'Full HD (1080p)', width: 1920, height: 1080, fps: 30, cameraBitrate: 4_500_000, egressBitrate: 4_500_000, egressPreset: 'H264_1080P_30' }),
+    full_hd: Object.freeze({ id: 'full_hd', label: 'Full HD (1080p)', width: 1920, height: 1080, fps: 30, cameraBitrate: 50_000_000, egressBitrate: 4_500_000, egressPreset: 'H264_1080P_30' }),
 });
 export function videoProfile(value) {
     if (value == null) return VIDEO_QUALITY_PROFILES.hd;
@@ -14,9 +14,9 @@ export function roomVideoOptions(value) {
         adaptiveStream: true, dynacast: true,
         videoCaptureDefaults: { resolution: { width: p.width, height: p.height, frameRate: p.fps } },
         publishDefaults: {
-            videoCodec: 'vp8', simulcast: true,
+            videoCodec: 'vp8', simulcast: p.id !== 'full_hd',
             videoEncoding: { maxBitrate: p.cameraBitrate, maxFramerate: p.fps },
-            videoSimulcastLayers: [
+            videoSimulcastLayers: p.id === 'full_hd' ? [] : [
                 { width: 320, height: 180, encoding: { maxBitrate: 160_000, maxFramerate: 20 } },
                 { width: p.width / 2, height: p.height / 2, encoding: { maxBitrate: p.id === 'hd' ? 450_000 : 800_000, maxFramerate: p.id === 'hd' ? 20 : 25 } },
             ],

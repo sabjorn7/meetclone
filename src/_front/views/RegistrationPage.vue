@@ -118,6 +118,7 @@
 </template>
 
 <script setup>
+import { readVkResponse } from '@/_front/auth/vkResponse.js';
 import { ref, onMounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
@@ -245,10 +246,11 @@ async function onVkSuccess(code, deviceId) {
         await wait(1500);
         const codeVerifier = readCookie('vkid_sdk:codeVerifier');
         await wait(1500);
-        const res = await fetch(N8N_VK, {
+        const response = await fetch(N8N_VK, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ authCode: code, DeviceId: deviceId, codeVerifier }),
-        }).then((r) => r.json());
+        });
+        const res = await readVkResponse(response);
         await window.wwLib.wwPlugins.supabaseAuth.verifyOTP({ type: 'email', email: res.email, token: res.otp });
         window.location.href = HOME;
     } catch (err) {

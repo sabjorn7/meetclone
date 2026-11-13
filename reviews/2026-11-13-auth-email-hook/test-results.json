@@ -1,0 +1,14 @@
+{
+  "backend_tests": { "passed": 18, "failed": 0, "transport": "mocked" },
+  "frontend_helper_tests": { "passed": 6, "failed": 0 },
+  "postgres": { "environment": "disposable local Unix-socket PostgreSQL", "concurrent_claims": 16, "senders": 1, "authorization_checks": "PASS" },
+  "browser": { "passed": 26, "failed": 0, "external_network": "blocked", "accounts": "synthetic", "viewport_widths": [390, 1366] },
+  "vite_without_postbuild": "PASS",
+  "n8n_validation": { "workflow_id": "05JlvBCVZFnbrx9u", "active": false, "errors": 0, "warnings": 0 },
+  "existing_workflows_changed": 0,
+  "production_sql_applied": false,
+  "production_auth_configuration_changed": false,
+  "production_frontend_deployed": false,
+  "real_emails_sent": 0,
+  "live_gotrue_n8n_unisender_integration": "NOT RUN"
+}

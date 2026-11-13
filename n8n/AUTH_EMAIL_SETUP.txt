@@ -1,0 +1,145 @@
+MeetGuru — prepared Supabase Auth email transport (GoTrue v2.171.0)
+
+Status: PREPARED, INACTIVE. Nothing here enables email confirmation.
+Created inactive workflow: 05JlvBCVZFnbrx9u
+https://n8n.meetgu.ru/workflow/05JlvBCVZFnbrx9u
+Do not merge into main, activate the workflow, apply SQL, set secrets or change
+production Auth configuration without separate approval.
+
+Artifacts
+- n8n/workflows/supabase-auth-email.json: secret-free inactive workflow export.
+- scripts/prepare-auth-email-workflow.mjs: offline generator, refuses to overwrite.
+- scripts/lib/auth-email-hook.mjs: exact logic serialized into Code nodes.
+- supabase/migrations/pending_auth_email_hook_dedup.sql: NOT APPLIED.
+
+Flow
+Frontend signUp -> existing auth.users/profile trigger -> signed GoTrue hook
+-> verify original bytes and timestamp -> atomically claim opaque delivery key
+-> existing Unisender sendEmail API -> record accepted/failed/uncertain -> JSON reply.
+GoTrue owns token generation and verification. The workflow uses the already generated
+email_data.token_hash in the native GET /auth/v1/verify?token=...&type=signup URL.
+There is no second signup, createUser, generateLink, UUID rewrite or profile write.
+Password never reaches this hook. The account/profile transaction is still GoTrue's.
+Role metadata.nickname and its existing Специалист -> Ученик mapping are preserved.
+
+Scope limitation (activation gate)
+Only email_action_type=signup is supported. Other signed Auth email actions return
+422 unsupported_email_action; they are NEVER silently acknowledged as delivered.
+The Send Email Hook is global: before activation, inventory all direct Auth send-email
+flows. If recovery, invite, magiclink, email_change or reauthentication is used directly,
+provide equivalent transport coverage and tests first, or do not enable this hook.
+The currently inspected VK_Auth and ResetPw use admin generate_link recovery and
+send through their own paths, so they do not invoke Send Email Hook. Those workflows
+and BuyCourse/subscription/course mail workflows must remain unchanged.
+
+Required settings for a later, separately approved enablement
+1. Administrator applies the pending SQL manually to the EXISTING Supabase PostgreSQL.
+   It adds a private, RLS-enabled delivery table plus two service-role-only RPCs.
+   No changes to auth.users, profile trigger, roles, prices, payments or access.
+   Audit function owner, GRANTs and REST exposure under the actual deployment.
+   Refresh the PostgREST schema cache if needed after applying SQL, then verify both
+   RPCs through the service-role connection before activation (without sending mail).
+2. Supply these SERVER-ONLY n8n secret/config references (never VITE_/client env):
+   MEETGURU_AUTH_HOOK_SECRETS: GoTrue Standard Webhooks signing secret(s),
+     v1,whsec_<base64 of 32 bytes>, optionally separated by | during rotation.
+   MEETGURU_UNISENDER_API_KEY: the existing Unisender API credential (no new provider/key required).
+   MEETGURU_AUTH_UNISENDER_LIST_ID: an approved existing numeric list_id for these messages.
+   MEETGURU_AUTH_SUPABASE_SERVICE_KEY: existing server credential for the two RPCs only.
+   The current Unisender workflows store their API key in node parameters, not a reusable
+   encrypted credential reference. This candidate intentionally does NOT copy that literal
+   into Git or another node. An administrator must bind the existing key securely at enablement.
+   No secrets were generated, set, rotated or copied during preparation.
+3. Check the actual n8n execution/runner configuration supports raw webhook binary data,
+   access to the listed server-side configuration, and the built-in crypto module.
+   Allow only crypto if an allowlist is needed; do not enable arbitrary external modules.
+   If environment access is blocked, do not broadly disable security just to make it work:
+   arrange an approved secret binding and re-test the exact execution mode first.
+   Verify the Code-node helper getBinaryDataBuffer and HTTP full-response shape on that runtime.
+4. Workflow settings must remain:
+   saveDataSuccessExecution=none, saveDataErrorExecution=none,
+   saveManualExecutions=false, saveExecutionProgress=false, executionTimeout=5.
+   No pinned events, debug runs with live payloads, body logging, external error workflow,
+   or logging of raw provider errors/URLs/headers. Ensure proxy/APM logs also redact verify
+   query tokens and request bodies. Retain only safe aggregate counts/provider message IDs
+   if additional operational monitoring is configured later.
+5. Administrator configures GoTrue:
+   GOTRUE_HOOK_SEND_EMAIL_ENABLED=true
+   GOTRUE_HOOK_SEND_EMAIL_URI=https://n8n.meetgu.ru/webhook/supabase-auth-email-meetguru
+   GOTRUE_HOOK_SEND_EMAIL_SECRETS=<same approved signing secret>
+   GOTRUE_SITE_URL=https://app.meetgu.ru
+   GOTRUE_URI_ALLOW_LIST must include exactly
+     https://app.meetgu.ru/login?email_confirmation=1
+   Check public Auth external URL/verify path resolves to https://sb.meetgu.ru/auth/v1/verify.
+   Keep the email provider enabled. SMTP is not used when this hook is enabled.
+   Keep existing rate limits; verify GOTRUE_SMTP_MAX_FREQUENCY (also used for hook sends),
+   GOTRUE_RATE_LIMIT_EMAIL_SENT and GOTRUE_MAILER_OTP_EXP. Do not disable rate limiting.
+   Do not change mailer_autoconfirm yet.
+6. Publish the reviewed email-only frontend changes after authorization, preserving the
+   already deployed VK helper and both VK callbacks. Includes explicit emailRedirectTo
+   support in the Auth plugin; this WeWeb-managed edit can be lost on re-export.
+7. Only after isolated integration checks, activate the new workflow and separately
+   authorize GOTRUE_MAILER_AUTOCONFIRM=false. Auth container recreation/reload, secret
+   installation, SQL, frontend deployment and workflow activation each need approval.
+   Do not switch the current registration during preparation.
+
+Transport deadline, failures and duplicate protection
+- Verify HMAC-SHA256 Standard Webhooks signature on ORIGINAL body bytes, not reserialized JSON.
+- Reject missing/malformed/stale/tampered signatures, unknown actions and external redirects.
+- Only the fixed MeetGuru sender, subject, recipient from signed user.email and callback are used.
+- Claim RPC timeout <=600ms; Unisender <=2000ms; finish RPC <=600ms. Each timeout is shortened
+  by the remaining hook budget. No per-node retries and no Wait/queue/email batch in the hook.
+- n8n needs a warm execution path and synchronized clocks. These budgets are not a guarantee
+  of delivery under a slow provider/queue; slow/unavailable infrastructure fails closed.
+- Unisender uses HTTPS POST form body, never API key/body/token in query parameters.
+  error_checking=1 is required. Only the one expected recipient with a valid message id and
+  no reported errors counts as accepted. HTTP 200 alone does not count as success.
+- Only accepted AND durably recorded delivery returns 200 application/json {}.
+  This is necessary in v2.171.0, whose hook decoder does not accept an empty response body.
+- Atomic unique delivery key = SHA256(signup + user UUID + email + GoTrue token hash).
+  The table stores only this opaque key, owner nonce, state and timestamps. No raw email,
+  password, OTP, token hash or confirmation URL is stored there.
+- A GoTrue retry with a NEW webhook-id sees the same key and does not send another letter.
+  A true auth.resend gets a fresh token and therefore a new key. No password is needed.
+- Concurrent sending, failed, uncertain and abandoned attempts are never reclaimed for
+  automatic sending. A timeout can mean the provider accepted the first request.
+  The user can request a NEW confirmation via the throttled public resend API.
+- Exactly-once external email delivery is impossible without provider idempotency: a provider
+  may accept mail while its response is lost, or Auth may roll back after external acceptance.
+  This design avoids an automatic second send of the same token and never falsely confirms
+  an account or claims successful delivery after an unknown provider result.
+- Retain ledger tombstones for at least the maximum token lifetime plus replay window.
+  With OTP_EXP<=86400, admin cleanup of rows older than 48 hours is sufficient. No cleanup
+  job was scheduled; do not prune if actual token lifetime is longer.
+- API acceptance is not inbox delivery. Existing sender/domain authorization, list suppression,
+  unsubscribe/block rules, quota and actual delivery latency must be checked with an explicitly
+  approved test account before rollout. Do not reuse marketing body/template fields blindly.
+
+Frontend behavior
+- Domain typo suggestion is optional and never rewrites email without a click.
+- No-session signup shows Проверьте почту, clears password refs and does not call the old
+  email+password notification hook. Successful session branch remains compatible with the
+  current autoconfirm configuration; after enabling confirmation it is not used for new users.
+- Callback uses the EXISTING SDK/client session, removes the callback hash and goes to /welcome.
+- Expired/missing session stays on login with an editable resend email field.
+- Resend uses auth.resend(type=signup), explicit same-origin callback, 60-second UI cooldown,
+  one in-flight request, and a 12-second UI timeout. Server limits remain authoritative.
+- Provider/hook errors do not show Проверьте почту or redirect to welcome. Error text is fixed
+  Russian copy; raw transport errors are not displayed or logged by these new components.
+- Password and verification tokens are never put into storage or a delayed welcome webhook.
+
+Offline verification (no production requests or actual emails)
+node tests/auth-email-hook.unit.mjs
+node tests/auth-email-frontend.unit.mjs
+node tests/auth-email-hook.postgres.mjs  # disposable local PostgreSQL, Unix socket only
+node tests/auth-email.browser.mjs        # Chrome fixture, outbound network blocked
+./node_modules/.bin/vite build -l warn    # no production SEO postbuild
+
+These are not a real GoTrue+n8n+Unisender integration test. Before enabling, test the exact
+GoTrue v2.171.0 container and n8n runner in an explicitly isolated environment, with synthetic
+events/provider mocks first; live mail and VK OAuth require an approved test account.
+
+Rollback, if future activation fails
+Restore the previously backed-up GoTrue settings and frontend, deactivate ONLY this new
+workflow, and retain the ledger for investigation. Do not delete users, profiles or access,
+replay purchase callbacks or edit the existing mail/VK workflows. Reverting autoconfirm changes
+future signup behavior; it does not confirm/delete pending users. Plan their recovery separately.

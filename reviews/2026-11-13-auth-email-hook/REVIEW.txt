@@ -1,0 +1,74 @@
+MeetGuru — email confirmation preparation, 2026-11-13
+
+Branch: feat/auth-email-hook-20261113
+Base: main adca0527ed5c5d410d61699266a85683db933e0d (already deployed VK-only fix).
+Email frontend source: reviewed commit 5593ad7, extended with resend/error handling.
+
+Prepared changes
+- Separate n8n workflow 05JlvBCVZFnbrx9u, PREPARED INACTIVE, 11 nodes.
+  https://n8n.meetgu.ru/workflow/05JlvBCVZFnbrx9u
+  New workflow only; no executions, activation, emails, or existing workflow changes.
+- Original-body Standard Webhooks HMAC-SHA256 verification, timestamp validation,
+  fixed callback/sender and strict signup event validation.
+- Russian MeetGuru email: subject «Подтвердите электронную почту — MeetGuru»,
+  MeetGuru <adv@meetgu.ru>, button «Подтвердить почту».
+- Hook uses the existing GoTrue-generated token hash and native /auth/v1/verify.
+  The Send Email Hook does not supply action_link. Its native verification URL is
+  composed from signed token_hash with fixed host/path/redirect; no second token,
+  generateLink, createUser, signup, verifyOTP or profile mutation occurs in n8n.
+- Persistent atomic delivery claims prepared as unapplied SQL: private RLS table,
+  service-role-only RPCs, fixed search_path and authorization checks.
+- HTTP budgets <=600ms claim, <=2000ms provider, <=600ms finish, reduced by remaining
+  deadline; 5-second workflow timeout, no automatic node retries.
+- No plaintext password, raw email, token, token hash or link stored in dedup table.
+  n8n successful/failed/manual/progress payload retention disabled.
+- Provider acceptance must be explicit and durably recorded before 200 JSON {}.
+  Ambiguous timeout/finish failure never triggers a second send for the same token.
+- Frontend: optional typo hints, no-session notice, password ref clearing, same SDK
+  callback/session, hash removal, editable resend on expired/unconfirmed email,
+  60-second cooldown, one in-flight request and fixed safe Russian error messages.
+- Existing VK callbacks/helper, email login, legacy reset flow and role metadata
+  remain functionally unchanged. The reviewed no-session branch skips the old
+  password-bearing welcome notification hook; it is not replayed after confirmation.
+- Auth plugin: only explicit emailRedirectTo support, preserving redirectPage fallback.
+  This is a WeWeb-managed file; a future export may overwrite the manual fix.
+
+Checks
+- 18/18 backend/unit/generated-workflow scenarios PASS; actual generated Code nodes
+  and request/response expressions run with synthetic payloads and HTTP mocks.
+- 6/6 frontend helper scenarios PASS, including rate limits and timeout cleanup.
+- Local disposable PostgreSQL PASS: 16 concurrent claims produce exactly one sender;
+  accepted tombstones survive reconnects; owner guard, private schema, RLS, GRANTs,
+  service-role authorization and failed/uncertain blocking verified.
+- 26/26 isolated Chrome scenarios PASS: email signup with/without session, typo hints,
+  real Supabase SDK callback using a local Auth endpoint, expired link, resend and
+  rate limit/failure UI, email login and eight VK response scenarios.
+- Mobile/desktop form/confirmation/expired-link/email screenshots inspected; no
+  horizontal overflow. All external browser network blocked; all accounts synthetic.
+- Vite build without production postbuild PASS; no SEO/postbuild invoked.
+- n8n validation PASS, 0 errors, 0 warnings. Read-back matches generated node parameters,
+  connections and protected settings. Workflow is inactive and has never been run.
+- All 21 pre-existing workflows retain original active flags and updatedAt values.
+- git diff --check PASS; final staged scope/secret checks recorded before commit.
+
+Activation gates and limitations
+- Pending SQL is NOT applied; no Supabase Auth configuration changes made.
+- mailer_autoconfirm remains true. Current production registration not switched.
+- No frontend deployment, merge into main, live OAuth or real email test performed.
+- The exact GoTrue+n8n+Unisender integration was NOT executed; local tests do not
+  establish provider latency/delivery or compatibility with the actual n8n runner's
+  crypto/secret bindings. Check this in an approved isolated environment before use.
+- Existing Unisender API key is currently stored in existing workflow node parameters,
+  not a reusable encrypted credential reference. The candidate uses server-only
+  secret references; no existing key was copied into Git/new node parameters.
+- No signing/provider/DB secrets generated or changed. Administrator binding needed.
+- Signup-only hook deliberately rejects other Auth email actions. Because the hook
+  is global, inventory direct recovery/magiclink/invite/change-email/reauthentication
+  calls before activation; add equivalent tested coverage if any are in use.
+- Current VK_Auth and ResetPw use admin generate_link recovery and bypass this hook.
+  Their files/workflows are unchanged; live OAuth still requires a test account.
+- Exactly-once external delivery cannot be guaranteed after a provider response loss
+  or GoTrue rollback. Same-token retries never send twice; user resend creates a new
+  token and must remain rate-limited. Retain tombstones longer than token lifetime.
+
+Full configuration and safe enable/rollback sequence: n8n/AUTH_EMAIL_SETUP.txt.

@@ -71,6 +71,8 @@
                             <button type="button" class="pd-link pd-auth__forgot" @click="goReset">Забыли пароль?</button>
                         </form>
 
+                        <EmailConfirmationResend v-if="confirmationFailed || needsConfirmation" :email="email" editable />
+
                         <div class="pd-auth__or"><span>или</span></div>
 
                         <!-- VK ID one-tap renders its own button into this container -->
@@ -125,10 +127,12 @@
 </template>
 
 <script setup>
-import { readVkResponse } from '@/_front/auth/vkResponse.js';
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { getSupabase, readStoredSession, isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
+import { confirmationSession } from '@/_front/auth/registration.js';
+import { readVkResponse } from '@/_front/auth/vkResponse.js';
+import EmailConfirmationResend from '@/_front/components/EmailConfirmationResend.vue';
 
 const route = useRoute();
 
@@ -138,6 +142,8 @@ const password = ref('');
 const showPass = ref(false);
 const loading = ref(false);
 const authError = ref('');
+const confirmationFailed = ref(false);
+const needsConfirmation = ref(false);
 
 const resetEmail = ref('');
 const resetLoading = ref(false);
@@ -166,6 +172,7 @@ function mapError(msg) { return ERROR_MAP[msg] || 'Не удалось войт�
 /* ── email / password ───────────────────────────────────────────────────── */
 async function submitLogin() {
     authError.value = '';
+    needsConfirmation.value = false;
     const e = email.value.trim();
     const p = password.value;
     if (!e || !p) { authError.value = 'Введите почту и пароль'; return; }
@@ -184,6 +191,7 @@ async function submitLogin() {
         } catch (err) { /* role lookup failed → default to home */ }
         window.location.href = role === 'admin' ? SUPERADMIN : HOME;
     } catch (err) {
+        needsConfirmation.value = err?.message === 'Email not confirmed' || err?.code === 'email_not_confirmed';
         authError.value = mapError(err?.message);
         loading.value = false;
     }
@@ -262,8 +270,26 @@ async function onVkSuccess(code, deviceId) {
     }
 }
 
-onMounted(() => {
+onMounted(async () => {
     ensureFonts();
+    if (route.query.email_confirmation === '1') {
+        loading.value = true;
+        try {
+            await confirmationSession(window.wwLib?.wwPlugins?.supabaseAuth?.publicInstance?.auth, window.location.hash);
+            window.location.replace('/welcome');
+            return;
+        } catch {
+            confirmationFailed.value = true;
+            authError.value = 'Не удалось подтвердить почту. Ссылка могла истечь. Попробуйте войти по почте или запросите новое письмо.';
+        } finally {
+            // The SDK already consumed the callback. Do not leave bearer tokens in the address bar.
+            if (window.location.hash) window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            loading.value = false;
+        }
+        loadVkSdk();
+        nextTick(() => { ready.value = true; });
+        return;
+    }
     // already-logged-in guard (the WeWeb page redirects home onload). ?preview=1 stays for previewing.
     if (route.query.preview !== '1' && isLikelyLoggedIn()) { window.location.replace(HOME); return; }
     loadVkSdk();

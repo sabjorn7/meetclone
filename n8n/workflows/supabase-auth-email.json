@@ -1,0 +1,468 @@
+{
+  "name": "MeetGuru — Supabase Auth email — PREPARED INACTIVE",
+  "nodes": [
+    {
+      "id": "auth-mail-webhook",
+      "name": "GoTrue Auth email",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "supabase-auth-email-meetguru",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "auth-mail-verify",
+      "name": "Verify signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "function hookFailure(status = 503, code = 'delivery_unavailable') {\n    return { send: false, status, body: { error: { http_code: status, message: code } } };\n}\nfunction confirmationEmail(url) {\n    const href = url.replace(/&/g, '&amp;').replace(/\"/g, '&quot;');\n    return {\n        subject: 'Подтвердите электронную почту — MeetGuru',\n        senderName: 'MeetGuru',\n        senderEmail: 'adv@meetgu.ru',\n        html: `<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Подтвердите почту — MeetGuru</title></head><body style=\"margin:0;background:#f1f6fd;color:#091747;font-family:Arial,sans-serif\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td align=\"center\" style=\"padding:32px 16px\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:560px;background:#fff;border-radius:16px\"><tr><td style=\"padding:32px\"><p style=\"margin:0 0 28px;font-size:26px;font-weight:700;color:#091747\">meet<span style=\"color:#2e6fd6\">guru</span>.</p><h1 style=\"font-size:26px;line-height:1.25;margin:0 0 16px\">Подтвердите электронную почту</h1><p style=\"font-size:16px;line-height:1.6;margin:0 0 24px\">Вы зарегистрировались в MeetGuru. Нажмите кнопку, чтобы подтвердить адрес и завершить вход.</p><p style=\"margin:0 0 24px\"><a href=\"${href}\" style=\"display:inline-block;background:#2e6fd6;color:#fff;padding:14px 24px;border-radius:10px;text-decoration:none;font-size:16px;font-weight:700\">Подтвердить почту</a></p><p style=\"font-size:14px;line-height:1.6;color:#5b6472\">Если ссылка истекла, запросите новое письмо на странице входа. Если вы не регистрировались, просто проигнорируйте это письмо.</p><p style=\"font-size:14px;line-height:1.6;color:#5b6472;margin-bottom:0\">Команда MeetGuru</p></td></tr></table></td></tr></table></body></html>`,\n    };\n}\nfunction verifyAuthEmail(raw, headers, config, crypto, now = Date.now()) {\n    try {\n        // Fail closed before parsing input or contacting either server.\n        if (!config.hookSecrets || !config.unisenderKey || !config.supabaseKey || !/^\\d+$/.test(config.listId || '')) return hookFailure();\n        if (!Buffer.isBuffer(raw) || raw.length === 0 || raw.length > 204800) return hookFailure(400, 'invalid_request');\n        const id = headers['webhook-id'];\n        const timestamp = headers['webhook-timestamp'];\n        const signatures = headers['webhook-signature'];\n        if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)\n            || typeof timestamp !== 'string' || !/^\\d{10}$/.test(timestamp)\n            || typeof signatures !== 'string' || signatures.length > 2048\n            || Math.abs(now / 1000 - Number(timestamp)) > 300) return hookFailure(401, 'invalid_signature');\n        const offered = [...signatures.matchAll(/(?:^|[\\s,])v1,([A-Za-z0-9+/]+={0,2})(?=$|[\\s,])/g)].map(m => Buffer.from(m[1], 'base64'));\n        let authentic = false;\n        for (const secret of config.hookSecrets.split('|')) {\n            if (!/^v1,whsec_[A-Za-z0-9+/]+={0,2}$/.test(secret)) return hookFailure();\n            const key = Buffer.from(secret.slice('v1,whsec_'.length), 'base64');\n            if (key.length !== 32) return hookFailure();\n            const expected = crypto.createHmac('sha256', key).update(`${id}.${timestamp}.`).update(raw).digest();\n            for (const signature of offered) if (signature.length === expected.length && crypto.timingSafeEqual(signature, expected)) authentic = true;\n        }\n        if (!authentic) return hookFailure(401, 'invalid_signature');\n        const event = JSON.parse(raw.toString('utf8'));\n        const data = event.email_data;\n        // This is deliberately a signup-only transport. Never acknowledge another Auth email as sent.\n        if (data?.email_action_type !== 'signup') return hookFailure(422, 'unsupported_email_action');\n        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(event.user?.id || '')\n            || typeof event.user.email !== 'string' || event.user.email.length > 254\n            || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(event.user.email)\n            || !/^(pkce_)?[0-9a-f]{64}$/i.test(data.token_hash || '')) return hookFailure(400, 'invalid_request');\n        const redirect = 'https://app.meetgu.ru/login?email_confirmation=1';\n        if (data.redirect_to !== redirect) return hookFailure(400, 'invalid_redirect');\n        // No extra generateLink: use the token already generated and stored by GoTrue.\n        const url = 'https://sb.meetgu.ru/auth/v1/verify?token=' + encodeURIComponent(data.token_hash)\n            + '&type=signup&redirect_to=' + encodeURIComponent(redirect);\n        const mail = confirmationEmail(url);\n        // An opaque high-entropy token hash is hashed again; no token/URL/email is persisted in the ledger.\n        // Do not key on webhook-id: GoTrue v2.171.0 regenerates it for transport retries.\n        const deliveryKey = crypto.createHash('sha256').update(`signup\\n${event.user.id}\\n${event.user.email}\\n${data.token_hash}`).digest('hex');\n        const deadline = Math.min(now + 3600, Number(timestamp) * 1000 + 4400);\n        if (deadline - now < 800) return hookFailure(503, 'hook_deadline');\n        return { send: true, deadline, deliveryKey, owner: crypto.randomUUID(), email: event.user.email, mail };\n    } catch {\n        return hookFailure(400, 'invalid_request');\n    }\n}\n\nlet result;\ntry {\n    const config = {\n        hookSecrets: $env.MEETGURU_AUTH_HOOK_SECRETS,\n        unisenderKey: $env.MEETGURU_UNISENDER_API_KEY,\n        supabaseKey: $env.MEETGURU_AUTH_SUPABASE_SERVICE_KEY,\n        listId: $env.MEETGURU_AUTH_UNISENDER_LIST_ID,\n    };\n    const raw = await this.helpers.getBinaryDataBuffer(0, 'data');\n    result = verifyAuthEmail(raw, $input.first().json.headers || {}, config, require('crypto'));\n} catch { result = hookFailure(); }\nreturn [{json: result}];"
+      },
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "id": "auth-mail-verified-if",
+      "name": "Authenticated signup?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "auth-mail-valid",
+              "leftValue": "={{ $json.send === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "id": "auth-mail-claim",
+      "name": "Claim delivery",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://sb.meetgu.ru/rest/v1/rpc/claim_auth_email_delivery",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.MEETGURU_AUTH_SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.MEETGURU_AUTH_SUPABASE_SERVICE_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {p_key:$('Verify signature').first().json.deliveryKey,p_owner:$('Verify signature').first().json.owner} }}",
+        "options": {
+          "timeout": "={{ Math.max(1, Math.min(600, $('Verify signature').first().json.deadline - Date.now() - 200)) }}",
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "position": [
+        720,
+        -100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "auth-mail-claim-result",
+      "name": "Inspect claim",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "function hookFailure(status = 503, code = 'delivery_unavailable') {\n    return { send: false, status, body: { error: { http_code: status, message: code } } };\n}\nfunction classifyClaim(response, verified, now = Date.now()) {\n    if (!response || response.statusCode !== 200 || !Array.isArray(response.body) || response.body.length !== 1) return hookFailure();\n    const decision = response.body[0].decision;\n    if (decision === 'accepted') return { send: false, status: 200, body: {} };\n    if (decision !== 'send') return hookFailure(503, 'delivery_in_progress');\n    if (verified.deadline - now < 800) return hookFailure(503, 'hook_deadline');\n    return { send: true };\n}\nreturn [{json:classifyClaim($input.first().json, $('Verify signature').first().json)}];"
+      },
+      "position": [
+        960,
+        -100
+      ]
+    },
+    {
+      "id": "auth-mail-send-if",
+      "name": "Send once?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "auth-mail-send",
+              "leftValue": "={{ $json.send === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1200,
+        -100
+      ]
+    },
+    {
+      "id": "auth-mail-provider",
+      "name": "Unisender API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.unisender.com/ru/api/sendEmail",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "format",
+              "value": "json"
+            },
+            {
+              "name": "error_checking",
+              "value": "1"
+            },
+            {
+              "name": "api_key",
+              "value": "={{ $env.MEETGURU_UNISENDER_API_KEY }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ $('Verify signature').first().json.email }}"
+            },
+            {
+              "name": "sender_email",
+              "value": "adv@meetgu.ru"
+            },
+            {
+              "name": "sender_name",
+              "value": "MeetGuru"
+            },
+            {
+              "name": "subject",
+              "value": "={{ $('Verify signature').first().json.mail.subject }}"
+            },
+            {
+              "name": "body",
+              "value": "={{ $('Verify signature').first().json.mail.html }}"
+            },
+            {
+              "name": "list_id",
+              "value": "={{ $env.MEETGURU_AUTH_UNISENDER_LIST_ID }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{ Math.max(1, Math.min(2000, $('Verify signature').first().json.deadline - Date.now() - 200)) }}",
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "position": [
+        1440,
+        -200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "auth-mail-assess",
+      "name": "Assess delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "function classifyUnisender(response, email) {\n    // A timeout or malformed reply may follow provider acceptance. Never retry it automatically.\n    if (!response || response.error || !Number.isInteger(response.statusCode)) return { state: 'uncertain' };\n    const body = response.body;\n    if (response.statusCode < 200 || response.statusCode >= 300) return { state: 'uncertain' };\n    if (!body || typeof body !== 'object' || Array.isArray(body)) return { state: 'uncertain' };\n    if (body.error || body.code) return { state: 'failed' };\n    // Use the documented error_checking=1 contract, one recipient, no CC.\n    const result = body.result;\n    if (!Array.isArray(result) || result.length !== 1) return { state: 'uncertain' };\n    const item = result[0];\n    if (!item || (Array.isArray(item.errors) && item.errors.length)) return { state: 'failed' };\n    if (item.index !== 0 || item.email !== email || (item.errors && !Array.isArray(item.errors))) return { state: 'uncertain' };\n    if (typeof item.id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(item.id)) return { state: 'uncertain' };\n    return { state: 'accepted' };\n}\nreturn [{json:classifyUnisender($input.first().json, $('Verify signature').first().json.email)}];"
+      },
+      "position": [
+        1680,
+        -200
+      ]
+    },
+    {
+      "id": "auth-mail-finish",
+      "name": "Record delivery result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://sb.meetgu.ru/rest/v1/rpc/finish_auth_email_delivery",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.MEETGURU_AUTH_SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.MEETGURU_AUTH_SUPABASE_SERVICE_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {p_key:$('Verify signature').first().json.deliveryKey,p_owner:$('Verify signature').first().json.owner,p_state:$json.state} }}",
+        "options": {
+          "timeout": "={{ Math.max(1, Math.min(600, $('Verify signature').first().json.deadline - Date.now() - 200)) }}",
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "position": [
+        1920,
+        -200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "auth-mail-result",
+      "name": "Sanitized result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "function hookFailure(status = 503, code = 'delivery_unavailable') {\n    return { send: false, status, body: { error: { http_code: status, message: code } } };\n}\nfunction finishAuthEmail(response, provider) {\n    const saved = response?.statusCode === 200 && Array.isArray(response.body)\n        && response.body.length === 1 && response.body[0].state === provider.state;\n    return saved && provider.state === 'accepted' ? { status: 200, body: {} } : hookFailure();\n}\nreturn [{json:finishAuthEmail($input.first().json, $('Assess delivery').first().json)}];"
+      },
+      "position": [
+        2160,
+        -200
+      ]
+    },
+    {
+      "id": "auth-mail-response",
+      "name": "Reply to GoTrue",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "responseCode": "={{ $json.status }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "position": [
+        2400,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "GoTrue Auth email": {
+      "main": [
+        [
+          {
+            "node": "Verify signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify signature": {
+      "main": [
+        [
+          {
+            "node": "Authenticated signup?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticated signup?": {
+      "main": [
+        [
+          {
+            "node": "Claim delivery",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply to GoTrue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim delivery": {
+      "main": [
+        [
+          {
+            "node": "Inspect claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inspect claim": {
+      "main": [
+        [
+          {
+            "node": "Send once?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send once?": {
+      "main": [
+        [
+          {
+            "node": "Unisender API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply to GoTrue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unisender API": {
+      "main": [
+        [
+          {
+            "node": "Assess delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess delivery": {
+      "main": [
+        [
+          {
+            "node": "Record delivery result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record delivery result": {
+      "main": [
+        [
+          {
+            "node": "Sanitized result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitized result": {
+      "main": [
+        [
+          {
+            "node": "Reply to GoTrue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 5,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false
+  }
+}

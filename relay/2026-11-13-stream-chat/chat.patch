@@ -1,0 +1,701 @@
+diff --git a/src/_front/streams/streamChat.js b/src/_front/streams/streamChat.js
+new file mode 100644
+index 0000000..d20d92b
+--- /dev/null
++++ b/src/_front/streams/streamChat.js
+@@ -0,0 +1,27 @@
++// Shared HTTP read only; authorization remains in the existing Supabase client/RLS.
++export async function fetchStreamChatRows(supabase, streamId, { history = false, limit = 200 } = {}) {
++    const rows = [];
++    let cursor = null;
++    do {
++        let query = supabase.from('stream_chat').select('*')
++            .eq('stream', streamId).neq('deleted', true)
++            .order('created_at', { ascending: false }).order('id', { ascending: false });
++        if (cursor) {
++            // Keep the original timestamp string: Date would discard PostgreSQL microseconds.
++            query = query.or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`);
++        }
++        const { data, error } = await query.limit(limit);
++        if (error) throw new Error(`Не удалось загрузить чат: ${error.message}`);
++        const page = data || [];
++        rows.push(...page);
++        if (!history || !page.length) break;
++        cursor = page[page.length - 1];
++        // Continue until empty, including when the server caps a page below the requested size.
++    } while (history);
++    return rows.reverse();
++}
++
++export function countNewChatMessages(previous, next) {
++    const ids = new Set(previous.map(message => message.id));
++    return next.reduce((count, message) => count + (ids.has(message.id) ? 0 : 1), 0);
++}
+diff --git a/src/_front/streams/streamsApi.js b/src/_front/streams/streamsApi.js
+index b4e77ec..4083c20 100644
+--- a/src/_front/streams/streamsApi.js
++++ b/src/_front/streams/streamsApi.js
+@@ -1,5 +1,6 @@
+ // Supabase data helpers for the "Трансляции" (live streams) feature.
+ // Requires pending_stream_visibility.sql for unlisted access; never falls back to broad reads.
++import { fetchStreamChatRows } from './streamChat.js';
+ import { videoProfile } from './videoQuality.js';
+ import { STREAM_VIEW_FIELDS, validateVisibility, requireUnlistedSupport } from './visibility.js';
+
+@@ -345,7 +346,7 @@ async function attachMessageAuthors(supabase, rows) {
+ }
+
+ /** Messages of a stream's chat (oldest first), with authors attached. */
+-export async function listStreamMessages(supabase, streamId, { limit = 200, linkKey = null } = {}) {
++export async function listStreamMessages(supabase, streamId, { limit = 200, linkKey = null, history = false } = {}) {
+     if (linkKey) {
+         const { data, error } = await supabase.rpc('get_stream_link_messages', { p_stream_id: streamId, p_key: linkKey, p_limit: limit });
+         if (error) throw new Error('Не удалось загрузить чат по ссылке.');
+@@ -353,15 +354,8 @@ export async function listStreamMessages(supabase, streamId, { limit = 200, link
+         // and moderation actions through server-derived booleans, not client claims.
+         return (data || []).map(m => ({ ...m, authorUser: { Name: m.is_mine ? 'Вы' : 'Участник' } }));
+     }
+-    const { data, error } = await supabase
+-        .from('stream_chat')
+-        .select('*')
+-        .eq('stream', streamId)
+-        .neq('deleted', true)
+-        .order('created_at', { ascending: true })
+-        .limit(limit);
+-    if (error) throw new Error(`Не удалось загрузить чат: ${error.message}`);
+-    return attachMessageAuthors(supabase, data || []);
++    const rows = await fetchStreamChatRows(supabase, streamId, { limit, history });
++    return attachMessageAuthors(supabase, rows);
+ }
+
+ /** Post a message to a stream's chat. `img` is an optional array of image URLs (UI: phase 2). */
+diff --git a/src/_front/views/StreamCallPage.vue b/src/_front/views/StreamCallPage.vue
+index 76ac022..5fc9e09 100644
+--- a/src/_front/views/StreamCallPage.vue
++++ b/src/_front/views/StreamCallPage.vue
+@@ -78,9 +78,10 @@
+                     <strong>Чат эфира</strong>
+                     <button class="lkc-x" @click="chatOpen = false">✕</button>
+                 </div>
++                <p v-if="chatRefreshError" class="lkc-chat__status" role="status">Не удалось обновить чат. Повторяем автоматически.</p>
+                 <div ref="chatFeedEl" class="lkc-chat__feed">
+                     <div v-if="chatLoading && !chatMessages.length" class="lkc-chat__muted">Загрузка чата…</div>
+-                    <div v-else-if="!chatMessages.length" class="lkc-chat__muted">Сообщений пока нет.</div>
++                    <div v-else-if="!chatMessages.length && !chatRefreshError" class="lkc-chat__muted">Сообщений пока нет.</div>
+                     <div v-for="m in chatMessages" :key="m.id" class="lkc-chat__row" :class="{ mine: m.owner === myUid }">
+                         <img v-if="m.authorUser && m.authorUser.Photo" :src="m.authorUser.Photo" class="lkc-chat__ava" alt="" />
+                         <div v-else class="lkc-chat__ava lkc-chat__ava--empty">{{ ((m.authorUser && m.authorUser.Name) || '?').slice(0, 1) }}</div>
+@@ -93,6 +94,7 @@
+                         </div>
+                     </div>
+                 </div>
++                <p v-if="chatSendError" class="lkc-chat__status" role="alert">Не удалось отправить сообщение. Попробуйте ещё раз.</p>
+                 <div class="lkc-chat__composer">
+                     <textarea
+                         v-model="chatText"
+@@ -219,6 +221,7 @@ import { DisconnectReason, Room, RoomEvent, Track } from 'livekit-client';
+
+ import { getLiveToken, inviteCohost, removeCohost, LiveApiError } from '@/_front/streams/liveApi.js';
+ import { listCohosts } from '@/_front/streams/cohosts.js';
++import { fetchStreamChatRows, countNewChatMessages } from '@/_front/streams/streamChat.js';
+ import { readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
+ import StreamTile from './StreamTile.vue';
+ import StreamDiagnostics from '@/_front/components/StreamDiagnostics.vue';
+@@ -306,9 +309,14 @@ const chatMessages = ref([]);
+ const chatText = ref('');
+ const chatSending = ref(false);
+ const chatLoading = ref(false);
++const chatRefreshError = ref(false);
++const chatSendError = ref(false);
+ const chatUnread = ref(0);
+ const chatFeedEl = ref(null);
+ let chatTimer = null;
++let chatRequest = null;
++let chatEpoch = 0;
++let chatRefreshQueued = false;
+
+ const devices = ref({ cams: [], mics: [] });
+ const selectedCam = ref('');
+@@ -421,11 +429,7 @@ async function fetchChatAuthors(rows) {
+     return rows.map((r) => ({ ...r, authorUser: byId[r.owner] || null }));
+ }
+ async function fetchChatMessages(id) {
+-    const { data, error } = await supa()
+-        .from('stream_chat').select('*').eq('stream', id).neq('deleted', true)
+-        .order('created_at', { ascending: true }).limit(200);
+-    if (error) throw new Error(error.message);
+-    return fetchChatAuthors(data || []);
++    return fetchChatAuthors(await fetchStreamChatRows(supa(), id));
+ }
+ async function postChatMessage(id, owner, text) {
+     const { error } = await supa().from('stream_chat').insert({ stream: id, owner, text, img: [] });
+@@ -440,24 +444,39 @@ function scrollChat() {
+ }
+ async function loadStreamChat({ scroll = false } = {}) {
+     if (!streamId) return;
+-    try {
+-        const prev = chatMessages.value.length;
+-        const rows = await fetchChatMessages(streamId);
+-        const grew = rows.length - prev;
+-        chatMessages.value = rows;
+-        if (grew > 0 && !chatOpen.value) chatUnread.value += grew; // badge only while the panel is closed
+-        if (scroll || grew !== 0) scrollChat();
+-    } catch { /* keep current messages on a transient refresh failure */ }
++    if (chatRequest) { chatRefreshQueued = true; return chatRequest; }
++    const epoch = chatEpoch;
++    chatRequest = (async () => {
++        try {
++            const rows = await fetchChatMessages(streamId);
++            if (epoch !== chatEpoch) return;
++            const added = countNewChatMessages(chatMessages.value, rows);
++            const changed = rows.length !== chatMessages.value.length || added > 0;
++            chatMessages.value = rows;
++            chatRefreshError.value = false;
++            if (added > 0 && !chatOpen.value) chatUnread.value += added;
++            if (scroll || changed) scrollChat();
++        } catch {
++            if (epoch === chatEpoch) chatRefreshError.value = true;
++        } finally {
++            if (epoch === chatEpoch) {
++                chatRequest = null;
++                if (chatRefreshQueued) { chatRefreshQueued = false; loadStreamChat(); }
++            }
++        }
++    })();
++    return chatRequest;
+ }
+ async function sendStreamChat() {
+     const text = chatText.value.trim();
+     if (!text || chatSending.value || !myUid) return;
+     chatSending.value = true;
++    chatSendError.value = false;
+     try {
+         await postChatMessage(streamId, myUid, text);
+         chatText.value = '';
+         await loadStreamChat({ scroll: true });
+-    } catch { /* transient — user can retry */ }
++    } catch { chatSendError.value = true; }
+     finally { chatSending.value = false; }
+ }
+ function toggleChat() {
+@@ -471,9 +490,16 @@ function startChatPoll() {
+     chatTimer = setInterval(() => loadStreamChat(), 7000);
+ }
+ function stopChatPoll() {
++    chatEpoch += 1;
++    chatRequest = null;
++    chatRefreshQueued = false;
+     if (chatTimer) { clearInterval(chatTimer); chatTimer = null; }
+ }
+
++function onChatVisibility() {
++    if (document.visibilityState === 'visible' && chatTimer) loadStreamChat();
++}
++
+ function onVisibility() {
+     const r = room.value;
+     if (!r) return;
+@@ -856,12 +882,14 @@ function teardownRoom() {
+
+ onMounted(() => {
+     document.addEventListener('visibilitychange', onVisibility);
++    document.addEventListener('visibilitychange', onChatVisibility);
+     window.addEventListener('beforeunload', beforeUnloadHandler);
+     connect();
+ });
+
+ onBeforeUnmount(() => {
+     document.removeEventListener('visibilitychange', onVisibility);
++    document.removeEventListener('visibilitychange', onChatVisibility);
+     window.removeEventListener('beforeunload', beforeUnloadHandler);
+     leaving = true;
+     teardownRoom();
+@@ -1128,6 +1156,7 @@ onBeforeRouteLeave(() => {
+     padding: 14px 16px;
+     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+ }
++.lkc-chat__status { margin: 0; padding: 8px 16px; color: #cbd5e1; font-size: 14px; }
+ .lkc-chat__feed {
+     flex: 1;
+     min-height: 0;
+diff --git a/src/_front/views/StreamsPage.vue b/src/_front/views/StreamsPage.vue
+index ccf4a94..a482ca5 100644
+--- a/src/_front/views/StreamsPage.vue
++++ b/src/_front/views/StreamsPage.vue
+@@ -111,9 +111,10 @@
+                 <!-- Viewer chat — same access gate as the stream itself -->
+                 <section v-if="hasAccess" class="sp-chat">
+                     <h3 class="sp-chat-title">Чат эфира</h3>
++                    <p v-if="chatRefreshError" class="sp-muted" role="status">Не удалось обновить чат. Повторяем автоматически.</p>
+                     <div ref="feedEl" class="sp-chat-feed">
+                         <div v-if="chatLoading" class="sp-muted">Загрузка чата…</div>
+-                        <div v-else-if="!messages.length" class="sp-muted">Сообщений пока нет. Будьте первым!</div>
++                        <div v-else-if="!messages.length && !chatRefreshError" class="sp-muted">Сообщений пока нет. Будьте первым!</div>
+                         <div
+                             v-for="m in messages"
+                             :key="m.id"
+@@ -460,6 +461,7 @@
+ </template>
+
+ <script setup>
++import { countNewChatMessages } from '@/_front/streams/streamChat.js';
+ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
+ import { useRoute, useRouter } from 'vue-router';
+ import { validateVisibility, isPublicStream, streamLinkKey, streamShareUrl, visibilityCapabilities, requireUnlistedSupport } from '@/_front/streams/visibility.js';
+@@ -587,9 +589,13 @@ const removingId = ref(null);
+ const messages = ref([]);
+ const chatText = ref('');
+ const chatLoading = ref(false);
++const chatRefreshError = ref(false);
+ const sending = ref(false);
+ const feedEl = ref(null);
+ let chatTimer = null;
++let chatRequest = null;
++let chatEpoch = 0;
++let chatRefreshQueued = false;
+
+ const isStreamer = computed(() => canStream(me.value));
+ const activeStreamId = computed(() => route.query.stream || null);
+@@ -813,8 +819,8 @@ async function loadDetail(id) {
+         // 1) Chat feed FIRST — independent of auth + video metadata, so messages arrive in ~40ms.
+         //    Visibility is still gated by hasAccess in the template; here we only populate the data.
+         chatLoading.value = true;
+-        loadChat(id, { scroll: true }).finally(() => { chatLoading.value = false; });
+         startChatPoll(id);
++        loadChat(id, { scroll: true }).finally(() => { chatLoading.value = false; });
+
+         // 2) Auth (fast uid, no getSession stall) → access + the paid-purchase check, in the
+         //    background. Resolving it off the critical path is what keeps the feed instant.
+@@ -1015,19 +1021,31 @@ function scrollFeed() {
+     });
+ }
+ async function loadChat(id, { scroll = false } = {}) {
+-    try {
+-        const prevLen = messages.value.length;
+-        const rows = await listStreamMessages(supa(), id, { linkKey: detail.value?.visibility === 'unlisted' ? streamLinkKey(route.hash) : null });
+-        // Guard against in-flight races: while this request was out, access may have resolved to
+-        // "no access" (the privacy watch cleared the feed) or the viewer may have switched streams.
+-        // In either case don't write the (stale/denied) messages back into the UI.
+-        if (detail.value?.id !== id) return;
+-        if (accessResolved.value && !hasAccess.value) return;
+-        messages.value = rows;
+-        if (scroll || messages.value.length !== prevLen) scrollFeed();
+-    } catch (_) {
+-        // keep the current messages on a transient refresh failure
+-    }
++    if (detail.value?.id !== id || (accessResolved.value && !hasAccess.value)) return;
++    if (chatRequest) { chatRefreshQueued = true; return chatRequest; }
++    const epoch = chatEpoch;
++    const history = detail.value.status === 'ended' || displayState.value === 'ended';
++    const linkKey = detail.value.visibility === 'unlisted' ? streamLinkKey(route.hash) : null;
++    chatRequest = (async () => {
++        try {
++            const rows = await listStreamMessages(supa(), id, { linkKey, history });
++            if (epoch !== chatEpoch || detail.value?.id !== id) return;
++            if (accessResolved.value && !hasAccess.value) return;
++            const added = countNewChatMessages(messages.value, rows);
++            const changed = rows.length !== messages.value.length || added > 0;
++            messages.value = rows;
++            chatRefreshError.value = false;
++            if (scroll || changed) scrollFeed();
++        } catch {
++            if (epoch === chatEpoch && detail.value?.id === id) chatRefreshError.value = true;
++        } finally {
++            if (epoch === chatEpoch) {
++                chatRequest = null;
++                if (chatRefreshQueued) { chatRefreshQueued = false; loadChat(id); }
++            }
++        }
++    })();
++    return chatRequest;
+ }
+ async function sendChat() {
+     const text = chatText.value.trim();
+@@ -1056,6 +1074,10 @@ function startChatPoll(id) {
+     chatTimer = setInterval(() => loadChat(id), 7000);
+ }
+ function stopChatPoll() {
++    chatEpoch += 1;
++    chatRequest = null;
++    chatRefreshQueued = false;
++    chatRefreshError.value = false;
+     if (chatTimer) {
+         clearInterval(chatTimer);
+         chatTimer = null;
+@@ -1064,6 +1086,10 @@ function stopChatPoll() {
+     chatText.value = '';
+ }
+
++function onChatVisibility() {
++    if (document.visibilityState === 'visible' && chatTimer && detail.value?.id) loadChat(detail.value.id);
++}
++
+ // React to ?stream= changes (list ↔ detail without a full reload).
+ watch(
+     () => [activeStreamId.value, route.hash],
+@@ -1306,6 +1332,7 @@ async function removeStream(s) {
+ }
+
+ onMounted(() => {
++    document.addEventListener('visibilitychange', onChatVisibility);
+     fullHdAvailable(supa()).then(enabled => { fullHdEnabled.value = enabled; });
+     visibilityCapabilities(supa()).then(c => { unlistedEnabled.value = c.unlisted_enabled === true; }).catch(() => {});
+     // Open the detail + chat immediately; don't block them behind the stream-list load.
+@@ -1313,6 +1340,7 @@ onMounted(() => {
+     load();
+ });
+ onBeforeUnmount(() => {
++    document.removeEventListener('visibilitychange', onChatVisibility);
+     stopPoll();
+     stopChatPoll();
+ });
+diff --git a/tests/stream-chat.browser.mjs b/tests/stream-chat.browser.mjs
+new file mode 100644
+index 0000000..1e0327f
+--- /dev/null
++++ b/tests/stream-chat.browser.mjs
+@@ -0,0 +1,132 @@
++// Actual chat templates/styles/functions extracted from both Vue pages; no video/auth/API startup.
++import fs from 'node:fs';
++import path from 'node:path';
++import os from 'node:os';
++import http from 'node:http';
++import { spawn } from 'node:child_process';
++import assert from 'node:assert/strict';
++import { build } from 'vite';
++import vue from '@vitejs/plugin-vue';
++import { functionsFrom, messages, mockDatabase, streamId } from './stream-chat.fixture.mjs';
++
++const root = process.cwd();
++const work = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'mg-chat-ui-')));
++fs.symlinkSync(path.join(root, 'node_modules'), path.join(work, 'node_modules'), 'dir');
++const helper = path.join(root, 'src/_front/streams/streamChat.js');
++const api = path.join(root, 'src/_front/streams/streamsApi.js');
++fs.writeFileSync(path.join(work, 'fixture.js'), `import {createClient} from '@supabase/supabase-js';
++export const streamId=${JSON.stringify(streamId)};
++export const messages=${messages.toString()};
++const mockDatabase=${mockDatabase.toString()};
++export const db=mockDatabase(messages(200)); window.db=db;window.makeMessages=messages;
++export const supa=()=>({from(table){const query=db.client.from(table);query.insert=async()=>({error:db.state.failSend?{message:'fixture send failed'}:null});return query;}});
++const jobs=new Map();let id=0;window.setInterval=(fn,ms)=>{if(ms!==7000)throw Error('Unexpected interval');jobs.set(++id,fn);return id};window.clearInterval=id=>jobs.delete(id);
++window.tick=()=>Promise.all([...jobs.values()].map(fn=>fn()));
++`);
++
++for (const kind of ['speaker', 'viewer']) {
++    const file = path.join(root, 'src/_front/views', kind === 'speaker' ? 'StreamCallPage.vue' : 'StreamsPage.vue');
++    const source = fs.readFileSync(file, 'utf8');
++    let template, script;
++    if (kind === 'speaker') {
++        template = source.slice(source.indexOf('<div v-if="chatOpen" class="lkc-chat">'), source.indexOf('<!-- Presenter-only slide navigation -->'));
++        script = `const myUid='fixture-owner';const chatOpen=ref(true),chatMessages=ref([]),chatText=ref(''),chatSending=ref(false),chatLoading=ref(false),chatRefreshError=ref(false),chatSendError=ref(false),chatUnread=ref(0),chatFeedEl=ref(null);
++let chatTimer=null,chatRequest=null,chatEpoch=0,chatRefreshQueued=false;
++${functionsFrom(file, ['fetchChatAuthors', 'fetchChatMessages', 'postChatMessage', 'msgTime', 'scrollChat', 'loadStreamChat', 'sendStreamChat', 'startChatPoll', 'stopChatPoll', 'onChatVisibility'])}
++onMounted(()=>{document.addEventListener('visibilitychange',onChatVisibility);startChatPoll()});
++onBeforeUnmount(()=>{document.removeEventListener('visibilitychange',onChatVisibility);stopChatPoll()});
++window.chat={load:loadStreamChat,send:sendStreamChat,setText:v=>chatText.value=v,setClosed:()=>chatOpen.value=false,state:()=>({count:chatMessages.value.length,last:chatMessages.value.at(-1)?.id,refreshError:chatRefreshError.value,sendError:chatSendError.value,unread:chatUnread.value,text:chatText.value})};`;
++    } else {
++        template = '<p v-if="error" class="sp-error">{{ error }}</p>' + source.slice(source.indexOf('<section v-if="hasAccess" class="sp-chat">'), source.indexOf('<!-- Access still resolving:'));
++        script = `const messages=ref([]),chatText=ref(''),chatLoading=ref(false),chatRefreshError=ref(false),sending=ref(false),feedEl=ref(null),error=ref('');
++const detail=ref({id:streamId,status:'live',visibility:'public'}),displayState=ref('live'),accessResolved=ref(true),hasAccess=ref(true),me=ref({id:'fixture-owner'}),isAuthor=ref(false);
++const route={hash:''};const streamLinkKey=()=>null;const deleteStreamMessage=async()=>{};const sendStreamMessage=async()=>{if(db.state.failSend)throw Error('Не удалось отправить сообщение. Попробуйте ещё раз.')};
++let chatTimer=null,chatRequest=null,chatEpoch=0,chatRefreshQueued=false;
++${functionsFrom(api, ['attachMessageAuthors', 'listStreamMessages'])}
++${functionsFrom(file, ['msgTime', 'canDeleteMsg', 'scrollFeed', 'loadChat', 'sendChat', 'removeMessage', 'startChatPoll', 'stopChatPoll', 'onChatVisibility'])}
++onMounted(()=>{document.addEventListener('visibilitychange',onChatVisibility);startChatPoll(streamId);loadChat(streamId)});
++onBeforeUnmount(()=>{document.removeEventListener('visibilitychange',onChatVisibility);stopChatPoll()});
++window.chat={load:()=>loadChat(streamId),send:sendChat,setText:v=>chatText.value=v,ended:()=>{detail.value.status='ended';displayState.value='ended'},state:()=>({count:messages.value.length,last:messages.value.at(-1)?.id,refreshError:chatRefreshError.value,text:chatText.value})};`;
++    }
++    const style = source.match(/<style scoped>([\s\S]*?)<\/style>/)[1];
++    fs.writeFileSync(path.join(work, kind + '.vue'), `<template>${template}</template><script setup>
++import {ref,onMounted,onBeforeUnmount,nextTick} from 'vue';
++import {fetchStreamChatRows,countNewChatMessages} from ${JSON.stringify(helper)};
++import {streamId,db,supa} from './fixture.js';
++${script}
++</script><style scoped>${style}</style>`);
++}
++fs.writeFileSync(path.join(work, 'index.html'), '<html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;font-family:Arial"><div id="app"></div><script type="module" src="/main.js"></script></body></html>');
++fs.writeFileSync(path.join(work, 'main.js'), `import {createApp} from 'vue';import Speaker from './speaker.vue';import Viewer from './viewer.vue';
++const kind=new URLSearchParams(location.search).get('kind');document.body.style.background=kind==='speaker'?'#091747':'#f5f6f8';
++const app=createApp(kind==='speaker'?Speaker:Viewer);app.mount('#app');window.unmountChat=()=>app.unmount();`);
++await build({ root: work, configFile: false, plugins: [vue()], logLevel: 'error', resolve: { alias: { vue: path.join(root, 'node_modules/vue/dist/vue.esm-bundler.js') } }, build: { outDir: 'dist' } });
++const server = http.createServer((req, res) => {
++    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:; frame-src 'none'");
++    const pathname = new URL(req.url, 'http://fixture').pathname;
++    const file = path.join(work, 'dist', pathname === '/' ? 'index.html' : pathname);
++    if (!file.startsWith(path.join(work, 'dist') + path.sep) || !fs.existsSync(file)) { res.writeHead(404).end(); return; }
++    res.setHeader('Content-Type', file.endsWith('.js') ? 'application/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html');
++    res.end(fs.readFileSync(file));
++});
++await new Promise(r => server.listen(0, '127.0.0.1', r));
++const origin = 'http://127.0.0.1:' + server.address().port;
++let browser, ws;
++const results = [], exceptions = [];
++try {
++    browser = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--disable-gpu', '--no-first-run', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1', '--remote-debugging-port=0', '--user-data-dir=' + path.join(work, 'profile'), 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
++    const address = await new Promise((resolve, reject) => {
++        let s = ''; const timer = setTimeout(() => reject(Error('Chrome timeout')), 15000);
++        browser.stderr.on('data', b => { s += b; const m = s.match(/DevTools listening on (ws:\/\/[^\s]+)/); if (m) { clearTimeout(timer); resolve(m[1]); } });
++        browser.on('exit', () => reject(Error('Chrome exited')));
++    });
++    ws = new WebSocket(address); await new Promise(r => ws.addEventListener('open', r, { once: true }));
++    let id = 0; const pending = new Map();
++    ws.addEventListener('message', e => {
++        const m = JSON.parse(e.data);
++        if (m.id) { const p = pending.get(m.id); pending.delete(m.id); m.error ? p.reject(Error(m.error.message)) : p.resolve(m.result); }
++        if (m.method === 'Runtime.exceptionThrown') exceptions.push(m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text);
++    });
++    const send = (method, params = {}, sessionId) => new Promise((resolve, reject) => { const n = ++id; pending.set(n, { resolve, reject }); ws.send(JSON.stringify({ id: n, method, params, ...(sessionId ? { sessionId } : {}) })); });
++    const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
++    const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
++    const ev = async expression => { const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, sessionId); if (r.exceptionDetails) throw Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
++    const until = async expression => { for (let i = 0; i < 100; i++) { if (await ev(expression)) return; await new Promise(r => setTimeout(r, 50)); } throw Error('Timeout: ' + expression + ' ' + exceptions.join(' ')); };
++    await send('Page.enable', {}, sessionId); await send('Runtime.enable', {}, sessionId); await send('Network.enable', {}, sessionId);
++    await send('Network.setBlockedURLs', { urls: ['https://*', 'wss://*', 'ws://*'] }, sessionId);
++    for (const kind of ['speaker', 'viewer']) {
++        await send('Page.navigate', { url: origin + '/?kind=' + kind }, sessionId);
++        await until('window.chat?.state().count===200');
++        await ev('db.state.rows=makeMessages(201);tick()');
++        await until('chat.state().last.endsWith("000000000201")');
++        assert.equal(await ev('chat.state().count'), 200); results.push(kind + ': latest message replaces window entry');
++        await ev('db.state.fail=true;chat.load()'); await until('document.querySelector("[role=status]")?.textContent.includes("Не удалось обновить чат")');
++        assert.equal(await ev('chat.state().count'), 200); results.push(kind + ': refresh status preserves messages');
++        await ev('db.state.fail=false;chat.load()'); await until('!document.querySelector("[role=status]")'); results.push(kind + ': recovery clears status');
++        await ev('db.state.failSend=true;chat.setText("Черновик");chat.send()');
++        await until(kind === 'speaker' ? '!!document.querySelector("[role=alert]")' : 'document.querySelector(".sp-error")?.textContent.includes("Не удалось отправить")');
++        assert.equal(await ev('document.querySelector("textarea").value'), 'Черновик'); results.push(kind + ': send error visible, draft retained');
++        // One batched desktop/mobile inspection for both existing chat surfaces.
++        await ev('db.state.fail=true;chat.load()');
++        for (const width of [390, 1366]) {
++            await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: width === 390 }, sessionId);
++            assert.ok(await ev('document.documentElement.scrollWidth<=innerWidth'));
++            const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
++            fs.writeFileSync(path.join(work, kind + '-' + width + '.png'), Buffer.from(shot.data, 'base64'));
++            results.push(kind + ': error state fits ' + width);
++        }
++        await ev('db.state.fail=false;db.state.rows=makeMessages(202);document.dispatchEvent(new Event("visibilitychange"))');
++        await until('chat.state().last.endsWith("000000000202")'); results.push(kind + ': visibility return refreshes immediately');
++        if (kind === 'viewer') {
++            await ev('db.state.rows=makeMessages(1000);chat.ended();chat.load()'); await until('chat.state().count===1000');
++            assert.equal(await ev('document.querySelectorAll(".sp-chat-row").length'), 1000); results.push('viewer: ended history renders all 1000');
++        }
++        await ev('unmountChat();undefined');
++        const calls = await ev('db.state.calls.length'); await ev('tick();document.dispatchEvent(new Event("visibilitychange"))');
++        assert.equal(await ev('db.state.calls.length'), calls); results.push(kind + ': unmount removes polling/listener');
++    }
++    assert.deepEqual(exceptions, []);
++    console.log(JSON.stringify({ pass: results.length, fail: 0, results, artifacts: work }, null, 2));
++} finally {
++    ws?.close(); browser?.kill(); server.closeAllConnections(); await new Promise(r => server.close(r));
++}
+diff --git a/tests/stream-chat.fixture.mjs b/tests/stream-chat.fixture.mjs
+new file mode 100644
+index 0000000..7480d1f
+--- /dev/null
++++ b/tests/stream-chat.fixture.mjs
+@@ -0,0 +1,52 @@
++import fs from 'node:fs';
++import { parse } from 'acorn';
++import { createClient } from '@supabase/supabase-js';
++
++export const streamId = 'd86a0c44-247f-4c24-954e-7fa7987df82f';
++export function messages(count) {
++    return Array.from({ length: count }, (_, i) => ({
++        id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
++        // Ties span entire page boundaries. Preserve sub-millisecond precision.
++        created_at: `2026-11-12T19:00:00.${String(Math.floor(i / 245)).padStart(6, '0')}+00:00`,
++        stream: streamId, owner: 'owner', text: `Сообщение ${i + 1}`, deleted: false,
++    }));
++}
++
++export function mockDatabase(initial, { cap = Infinity } = {}) {
++    const state = { rows: initial, calls: [], fail: false, failOn: 0, failSend: false, hold: null, active: 0, maxActive: 0 };
++    const fetch = async input => {
++        const url = new URL(typeof input === 'string' ? input : input.url);
++        const q = url.searchParams;
++        state.calls.push(Object.fromEntries(q));
++        state.active++; state.maxActive = Math.max(state.maxActive, state.active);
++        try {
++            if (state.hold) await state.hold;
++            if (state.fail || state.calls.length === state.failOn) return new Response(JSON.stringify({ message: 'fixture offline' }), { status: 503 });
++            if (url.pathname.endsWith('/users')) return new Response('[]', { status: 200 });
++            let rows = state.rows.filter(row => row.stream === q.get('stream')?.slice(3) && row.deleted === false);
++            const cursor = q.get('or');
++            if (cursor) {
++                const match = /^\(created_at\.lt\.(.*),and\(created_at\.eq\.(.*),id\.lt\.(.*)\)\)$/.exec(cursor);
++                if (!match || match[1] !== match[2]) throw Error('Unexpected cursor: ' + cursor);
++                rows = rows.filter(row => row.created_at < match[1] || (row.created_at === match[1] && row.id < match[3]));
++            }
++            if (q.get('order') !== 'created_at.desc,id.desc') throw Error('Expected stable descending order');
++            rows.sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
++            return new Response(JSON.stringify(rows.slice(0, Math.min(Number(q.get('limit')), cap))), { status: 200 });
++        } finally { state.active--; }
++    };
++    const client = createClient('https://fixture.invalid', 'fixture-public-key', {
++        global: { fetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
++    });
++    return { state, client };
++}
++
++export function functionsFrom(file, names) {
++    const source = fs.readFileSync(file, 'utf8');
++    const script = file.endsWith('.vue') ? source.match(/<script setup>([\s\S]*?)<\/script>/)[1] : source;
++    const ast = parse(script, { ecmaVersion: 'latest', sourceType: 'module' });
++    return ast.body.flatMap(node => {
++        const f = node.type === 'ExportNamedDeclaration' ? node.declaration : node;
++        return f?.type === 'FunctionDeclaration' && names.includes(f.id.name) ? [script.slice(f.start, f.end)] : [];
++    }).join('\n');
++}
+diff --git a/tests/stream-chat.unit.mjs b/tests/stream-chat.unit.mjs
+new file mode 100644
+index 0000000..cc1b4ae
+--- /dev/null
++++ b/tests/stream-chat.unit.mjs
+@@ -0,0 +1,148 @@
++import assert from 'node:assert/strict';
++import vm from 'node:vm';
++import fs from 'node:fs';
++import { fetchStreamChatRows, countNewChatMessages } from '../src/_front/streams/streamChat.js';
++import { messages, mockDatabase, functionsFrom, streamId } from './stream-chat.fixture.mjs';
++
++let passed = 0;
++async function check(name, fn) { await fn(); console.log('PASS', name); passed++; }
++const api = 'src/_front/streams/streamsApi.js';
++const speaker = 'src/_front/views/StreamCallPage.vue';
++const viewer = 'src/_front/views/StreamsPage.vue';
++function apiFunction(client) {
++    return new Function('fetchStreamChatRows', functionsFrom(api, ['attachMessageAuthors', 'listStreamMessages']) + ';return listStreamMessages;')(fetchStreamChatRows).bind(null, client);
++}
++function speakerFunction(client) {
++    return new Function('supa', 'fetchStreamChatRows', functionsFrom(speaker, ['fetchChatAuthors', 'fetchChatMessages']) + ';return fetchChatMessages;')(() => client, fetchStreamChatRows);
++}
++for (const count of [0, 50, 199, 200, 201, 245, 300, 1000, 1201]) {
++    await check(`live ${count}: speaker/viewer match latest 200`, async () => {
++        const rows = messages(count); const { client } = mockDatabase([...rows].reverse());
++        const a = await apiFunction(client)(streamId);
++        const b = await speakerFunction(client)(streamId);
++        assert.deepEqual(a.map(x => x.id), rows.slice(-200).map(x => x.id));
++        assert.deepEqual(a, b);
++    });
++    await check(`history ${count}: all rows, tie ordering, no duplicates`, async () => {
++        const rows = messages(count); const { client, state } = mockDatabase([...rows].reverse());
++        const all = await apiFunction(client)(streamId, { history: true });
++        assert.deepEqual(all.map(x => x.id), rows.map(x => x.id));
++        assert.equal(new Set(all.map(x => x.id)).size, count);
++        assert.ok(state.calls.length >= Math.ceil(count / 200) + 1);
++        assert.ok(state.calls.every(q => !q.offset));
++    });
++}
++await check('history respects server page cap; deleted and other-stream rows excluded', async () => {
++    const rows = messages(1000); rows[199].deleted = true; rows[244].deleted = true; rows[399].stream = 'other';
++    const { client } = mockDatabase(rows, { cap: 73 });
++    const all = await fetchStreamChatRows(client, streamId, { history: true });
++    assert.deepEqual(all.map(x => x.id), rows.filter(x => !x.deleted && x.stream === streamId).map(x => x.id));
++});
++await check('245 stored / 2 deleted: replay displays all 243 visible messages', async () => {
++    const rows = messages(245); rows[19].deleted = true; rows[200].deleted = true;
++    const { client } = mockDatabase(rows);
++    const all = await apiFunction(client)(streamId, { history: true });
++    assert.equal(all.length, 243);
++    assert.deepEqual(all.map(x => x.id), rows.filter(x => !x.deleted).map(x => x.id));
++    assert.equal(all.at(-1).id, rows.at(-1).id);
++});
++await check('history page failure rejects entire refresh, no partial result', async () => {
++    const { client, state } = mockDatabase(messages(245)); state.failOn = 2;
++    await assert.rejects(fetchStreamChatRows(client, streamId, { history: true }), /fixture offline/);
++});
++await check('full window detects new IDs despite unchanged length', async () => {
++    const db = mockDatabase(messages(200)); const before = await fetchStreamChatRows(db.client, streamId);
++    db.state.rows = messages(201); const after = await fetchStreamChatRows(db.client, streamId);
++    assert.equal(before.length, after.length); assert.equal(countNewChatMessages(before, after), 1);
++    assert.equal(countNewChatMessages(after, after), 0);
++});
++await check('link RPC still uses capability and never falls back to table', async () => {
++    const client = { async rpc(name, args) { assert.equal(name, 'get_stream_link_messages'); assert.equal(args.p_key, 'capability'); return { data: [{ id: 'm', is_mine: true }], error: null }; }, from() { throw Error('must not bypass link RLS'); } };
++    const rows = await apiFunction(client)(streamId, { linkKey: 'capability', history: true });
++    assert.equal(rows[0].authorUser.Name, 'Вы');
++});
++
++function controller(kind, db) {
++    const ref = value => ({ value }); const fns = kind === 'speaker'
++        ? ['fetchChatAuthors', 'fetchChatMessages', 'postChatMessage', 'loadStreamChat', 'sendStreamChat', 'startChatPoll', 'stopChatPoll', 'onChatVisibility']
++        : ['loadChat', 'sendChat', 'startChatPoll', 'stopChatPoll', 'onChatVisibility'];
++    let scrolls = 0; const intervals = new Map(); let next = 0;
++    const ctx = { fetchStreamChatRows, countNewChatMessages, supa: () => db.client, listStreamMessages: (client, id, options) => apiFunction(client)(id, options),
++        streamId, chatMessages: ref([]), messages: ref([]), chatText: ref('draft'), chatSending: ref(false), sending: ref(false),
++        chatRefreshError: ref(false), chatSendError: ref(false), chatOpen: ref(false), chatUnread: ref(0), chatLoading: ref(false),
++        detail: ref({ id: streamId, status: 'live', visibility: 'public' }), displayState: ref('live'), accessResolved: ref(true), hasAccess: ref(true),
++        myUid: 'fixture-owner', me: ref({ id: 'fixture-owner' }), error: ref(''), document: { visibilityState: 'visible' },
++        route: { hash: '' }, streamLinkKey: () => null, scrollChat: () => scrolls++, scrollFeed: () => scrolls++,
++        setInterval(fn, ms) { assert.equal(ms, 7000); intervals.set(++next, fn); return next; }, clearInterval(id) { intervals.delete(id); },
++        sendStreamMessage: async () => { if (db.state.failSend) throw Error('fixture send failed'); },
++    };
++    // Real send path for speaker, with an isolated insert stub (no database writes).
++    const supa = ctx.supa;
++    ctx.supa = () => ({ from(table) { const query = supa().from(table); query.insert = async () => ({ error: db.state.failSend ? { message: 'fixture send failed' } : null }); return query; } });
++    vm.createContext(ctx);
++    vm.runInContext('let chatTimer=null, chatRequest=null, chatEpoch=0, chatRefreshQueued=false;\n' + functionsFrom(kind === 'speaker' ? speaker : viewer, fns) + `\nglobalThis.actions={load:()=>${kind === 'speaker' ? 'loadStreamChat()' : 'loadChat(streamId)'},send:${kind === 'speaker' ? 'sendStreamChat' : 'sendChat'},start:()=>startChatPoll(streamId),stop:stopChatPoll,focus:onChatVisibility};`, ctx);
++    return { ctx, actions: ctx.actions, rows: kind === 'speaker' ? ctx.chatMessages : ctx.messages, scrolls: () => scrolls, intervals };
++}
++const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setImmediate(r)); };
++for (const kind of ['speaker', 'viewer']) {
++    await check(`${kind}: full window refresh updates IDs and scroll/unread`, async () => {
++        const db = mockDatabase(messages(200)); const c = controller(kind, db); await c.actions.load();
++        const before = c.scrolls(); if (kind === 'speaker') c.ctx.chatUnread.value = 0;
++        db.state.rows = messages(201); await c.actions.load();
++        assert.equal(c.rows.value.length, 200); assert.equal(c.rows.value.at(-1).id, messages(201).at(-1).id);
++        assert.equal(c.scrolls(), before + 1); if (kind === 'speaker') assert.equal(c.ctx.chatUnread.value, 1);
++    });
++    await check(`${kind}: load failure preserves feed, recovery clears error`, async () => {
++        const db = mockDatabase(messages(50)); const c = controller(kind, db); await c.actions.load();
++        db.state.fail = true; await c.actions.load(); assert.equal(c.rows.value.length, 50); assert.equal(c.ctx.chatRefreshError.value, true);
++        db.state.fail = false; db.state.rows = messages(51); await c.actions.load();
++        assert.equal(c.rows.value.length, 51); assert.equal(c.ctx.chatRefreshError.value, false);
++    });
++    await check(`${kind}: send failure visible and draft preserved; retry succeeds`, async () => {
++        const db = mockDatabase(messages(50)); const c = controller(kind, db); db.state.failSend = true;
++        await c.actions.send(); assert.equal(c.ctx.chatText.value, 'draft');
++        assert.ok(kind === 'speaker' ? c.ctx.chatSendError.value : c.ctx.error.value);
++        db.state.failSend = false; await c.actions.send(); assert.equal(c.ctx.chatText.value, '');
++        if (kind === 'speaker') assert.equal(c.ctx.chatSendError.value, false);
++    });
++    await check(`${kind}: 7s polling, focus refresh, hidden tab no extra request, stop cleanup`, async () => {
++        const db = mockDatabase(messages(50)); const c = controller(kind, db); c.actions.start(); await settle();
++        assert.equal(c.intervals.size, 1); db.state.rows = messages(51); c.actions.focus(); await settle(); assert.equal(c.rows.value.length, 51);
++        const calls = db.state.calls.length; c.ctx.document.visibilityState = 'hidden'; c.actions.focus(); await settle(); assert.equal(db.state.calls.length, calls);
++        c.actions.stop(); assert.equal(c.intervals.size, 0); c.actions.focus(); await settle(); assert.equal(db.state.calls.length, calls);
++    });
++    await check(`${kind}: slow refresh serialized, queued refresh catches new messages`, async () => {
++        const db = mockDatabase(messages(50)); const c = controller(kind, db);
++        let release; db.state.hold = new Promise(r => { release = r; });
++        const first = c.actions.load(); c.actions.load(); c.actions.load(); release(); db.state.hold = null;
++        await first; await settle(); assert.equal(db.state.maxActive, 1); assert.equal(c.rows.value.length, 50);
++    });
++    await check(`${kind}: late response after stop cannot restore old feed`, async () => {
++        const db = mockDatabase(messages(50)); const c = controller(kind, db);
++        let release; db.state.hold = new Promise(r => { release = r; }); const pending = c.actions.load();
++        c.actions.stop(); c.rows.value = []; release(); await pending; assert.equal(c.rows.value.length, 0);
++    });
++}
++await check('viewer ended mode fetches complete history and live→ended transition', async () => {
++    const db = mockDatabase(messages(1000)); const c = controller('viewer', db); await c.actions.load(); assert.equal(c.rows.value.length, 200);
++    c.ctx.detail.value.status = 'ended'; c.ctx.displayState.value = 'ended'; await c.actions.load(); assert.equal(c.rows.value.length, 1000);
++});
++await check('viewer history page error keeps entire previous feed and recovers', async () => {
++    const db = mockDatabase(messages(245)); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended';
++    await c.actions.load(); db.state.failOn = db.state.calls.length + 2; await c.actions.load();
++    assert.equal(c.rows.value.length, 245); assert.equal(c.ctx.chatRefreshError.value, true);
++    db.state.failOn = 0; await c.actions.load(); assert.equal(c.ctx.chatRefreshError.value, false);
++});
++await check('viewer privacy guard discards result after access revoked', async () => {
++    const db = mockDatabase(messages(50)); const c = controller('viewer', db);
++    let release; db.state.hold = new Promise(r => { release = r; }); const pending = c.actions.load();
++    c.ctx.hasAccess.value = false; release(); await pending; assert.equal(c.rows.value.length, 0);
++});
++await check('visibility listeners registered and removed in both components', async () => {
++    for (const file of [speaker, viewer]) {
++        const source = fs.readFileSync(file, 'utf8');
++        assert.ok(source.includes("document.addEventListener('visibilitychange', onChatVisibility)"));
++        assert.ok(source.includes("document.removeEventListener('visibilitychange', onChatVisibility)"));
++    }
++});
++console.log(`${passed} checks passed; synthetic data only; no production requests.`);

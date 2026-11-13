@@ -1,0 +1,77 @@
+MeetGuru: live chat window and complete replay history
+Branch: fix/stream-chat-history-20261113
+Base: 4928b388de04cd911d67e6e0154b1859e0dd2b8f (main)
+Status: prepared for review only. No production deployment or database changes.
+
+Problem and behavior
+The chat previously fetched the oldest 200 visible messages, so later messages
+were saved but never displayed. Live chats now request created_at DESC, id DESC,
+limit 200 and reverse the response for chronological display. Speaker and viewer
+use the same small read helper. New arrivals are detected by ID even when the
+window remains at 200. The existing 7-second HTTP poll remains.
+
+Ended streams fetch all visible messages in sequential pages of up to 200,
+ordered by created_at DESC, id DESC. Each subsequent page uses a strict older-than
+cursor on the original timestamp string and UUID; the complete result is reversed.
+There is no offset and no total limit. Reading continues until an empty page,
+including if the server returns smaller pages. Newly appended records are picked
+up by the next poll. Partial history is never substituted after a page failure.
+Deleted messages remain excluded by the original neq(deleted,true) condition.
+
+Both interfaces retain the feed and show a quiet status after refresh failure,
+clearing it on success. Speaker send failures show an error and retain the draft.
+Returning to a visible tab triggers refresh. Slow requests are serialized, one
+refresh can be queued, and obsolete responses cannot restore a stopped chat.
+The existing access checks and capability RPC path remain in place.
+
+Scope limitation: hidden/unlisted link chat
+get_stream_link_messages is a server RPC with an oldest-200 cap and no cursor.
+Its capability path is unchanged; it is not bypassed with table reads. Unlimited
+history/latest-window correction for that separate path requires a backend scope
+decision. No SQL/RPC/RLS edits were authorized or made. The audited public stream
+d86a0c44-247f-4c24-954e-7fa7987df82f uses the ordinary path fixed here.
+
+Validation
+39 Node checks PASS, 0 FAIL:
+- live 0/50/199/200/201/245/300/1000/1201: identical speaker/viewer latest window;
+- replay all rows for those counts, UUID tie ordering across page boundaries,
+  no duplicates or gaps, server page cap 73, excluded deleted/other-stream rows;
+- synthetic 245 stored / 2 deleted: all 243 visible, including the latest;
+- preserved feed on refresh/partial-history failures and subsequent recovery;
+- new ID within full window scrolls and increments speaker unread;
+- send failures/draft preservation, successful retry;
+- visibility return, 7-second poll, listener cleanup, serialized requests,
+  discarded late responses/access revocation, live-to-ended transition;
+- hidden capability path does not fall back to direct table reads.
+
+17 Chrome/Vue checks PASS, 0 FAIL:
+Actual chat templates, CSS and functions extracted from both pages, with synthetic
+Supabase transport, CSP connect-src none and external URLs blocked. Covers newest
+message in a full window, retained feed/error/recovery, send error/draft, focus,
+1000 rendered replay messages, listener/poll cleanup, desktop 1366 and mobile 390.
+Four screenshots inspected. No unhandled JS exceptions.
+These are isolated chat-surface fixtures, not a full authenticated route/media test.
+Safari/native media and real production users were not exercised.
+
+Local Vite application build PASS, without npm postbuild/SEO or production access.
+git diff --check and staged diff checks PASS. No dependencies were installed.
+Existing installed dependencies were linked from the original workspace locally;
+that link, build output and unrelated untracked assets are excluded from the commit.
+
+Run from repository root with installed dependencies:
+  node tests/stream-chat.unit.mjs
+  node tests/stream-chat.browser.mjs
+  ./node_modules/.bin/vite build -l warn
+Browser check uses installed Google Chrome on macOS and a temporary loopback server.
+
+Review / application
+chat.patch contains exactly the four implementation files and three test files.
+Apply it only to a clean checkout of the stated base, or review conflicts against
+the target branch first. The source branch already contains those same changes.
+Do not apply the patch on top of that branch a second time.
+No merge to main, frontend publication or service restart is part of this package.
+
+Tradeoff
+Replay refresh reads its complete history in bounded pages on the existing poll.
+Long histories therefore require more read requests and browser memory. Requests
+do not overlap; there is no new delivery service, cache or pagination UI.

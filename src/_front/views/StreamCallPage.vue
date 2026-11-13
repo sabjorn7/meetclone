@@ -78,9 +78,10 @@
                     <strong>Чат эфира</strong>
                     <button class="lkc-x" @click="chatOpen = false">✕</button>
                 </div>
+                <p v-if="chatRefreshError" class="lkc-chat__status" role="status">Не удалось обновить чат. Повторяем автоматически.</p>
                 <div ref="chatFeedEl" class="lkc-chat__feed">
                     <div v-if="chatLoading && !chatMessages.length" class="lkc-chat__muted">Загрузка чата…</div>
-                    <div v-else-if="!chatMessages.length" class="lkc-chat__muted">Сообщений пока нет.</div>
+                    <div v-else-if="!chatMessages.length && !chatRefreshError" class="lkc-chat__muted">Сообщений пока нет.</div>
                     <div v-for="m in chatMessages" :key="m.id" class="lkc-chat__row" :class="{ mine: m.owner === myUid }">
                         <img v-if="m.authorUser && m.authorUser.Photo" :src="m.authorUser.Photo" class="lkc-chat__ava" alt="" />
                         <div v-else class="lkc-chat__ava lkc-chat__ava--empty">{{ ((m.authorUser && m.authorUser.Name) || '?').slice(0, 1) }}</div>
@@ -93,6 +94,7 @@
                         </div>
                     </div>
                 </div>
+                <p v-if="chatSendError" class="lkc-chat__status" role="alert">Не удалось отправить сообщение. Попробуйте ещё раз.</p>
                 <div class="lkc-chat__composer">
                     <textarea
                         v-model="chatText"
@@ -219,6 +221,7 @@ import { DisconnectReason, Room, RoomEvent, Track } from 'livekit-client';
 
 import { getLiveToken, inviteCohost, removeCohost, LiveApiError } from '@/_front/streams/liveApi.js';
 import { listCohosts } from '@/_front/streams/cohosts.js';
+import { fetchStreamChatRows, countNewChatMessages } from '@/_front/streams/streamChat.js';
 import { readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import StreamTile from './StreamTile.vue';
 import StreamDiagnostics from '@/_front/components/StreamDiagnostics.vue';
@@ -306,9 +309,14 @@ const chatMessages = ref([]);
 const chatText = ref('');
 const chatSending = ref(false);
 const chatLoading = ref(false);
+const chatRefreshError = ref(false);
+const chatSendError = ref(false);
 const chatUnread = ref(0);
 const chatFeedEl = ref(null);
 let chatTimer = null;
+let chatRequest = null;
+let chatEpoch = 0;
+let chatRefreshQueued = false;
 
 const devices = ref({ cams: [], mics: [] });
 const selectedCam = ref('');
@@ -421,11 +429,7 @@ async function fetchChatAuthors(rows) {
     return rows.map((r) => ({ ...r, authorUser: byId[r.owner] || null }));
 }
 async function fetchChatMessages(id) {
-    const { data, error } = await supa()
-        .from('stream_chat').select('*').eq('stream', id).neq('deleted', true)
-        .order('created_at', { ascending: true }).limit(200);
-    if (error) throw new Error(error.message);
-    return fetchChatAuthors(data || []);
+    return fetchChatAuthors(await fetchStreamChatRows(supa(), id));
 }
 async function postChatMessage(id, owner, text) {
     const { error } = await supa().from('stream_chat').insert({ stream: id, owner, text, img: [] });
@@ -440,24 +444,39 @@ function scrollChat() {
 }
 async function loadStreamChat({ scroll = false } = {}) {
     if (!streamId) return;
-    try {
-        const prev = chatMessages.value.length;
-        const rows = await fetchChatMessages(streamId);
-        const grew = rows.length - prev;
-        chatMessages.value = rows;
-        if (grew > 0 && !chatOpen.value) chatUnread.value += grew; // badge only while the panel is closed
-        if (scroll || grew !== 0) scrollChat();
-    } catch { /* keep current messages on a transient refresh failure */ }
+    if (chatRequest) { chatRefreshQueued = true; return chatRequest; }
+    const epoch = chatEpoch;
+    chatRequest = (async () => {
+        try {
+            const rows = await fetchChatMessages(streamId);
+            if (epoch !== chatEpoch) return;
+            const added = countNewChatMessages(chatMessages.value, rows);
+            const changed = rows.length !== chatMessages.value.length || added > 0;
+            chatMessages.value = rows;
+            chatRefreshError.value = false;
+            if (added > 0 && !chatOpen.value) chatUnread.value += added;
+            if (scroll || changed) scrollChat();
+        } catch {
+            if (epoch === chatEpoch) chatRefreshError.value = true;
+        } finally {
+            if (epoch === chatEpoch) {
+                chatRequest = null;
+                if (chatRefreshQueued) { chatRefreshQueued = false; loadStreamChat(); }
+            }
+        }
+    })();
+    return chatRequest;
 }
 async function sendStreamChat() {
     const text = chatText.value.trim();
     if (!text || chatSending.value || !myUid) return;
     chatSending.value = true;
+    chatSendError.value = false;
     try {
         await postChatMessage(streamId, myUid, text);
         chatText.value = '';
         await loadStreamChat({ scroll: true });
-    } catch { /* transient — user can retry */ }
+    } catch { chatSendError.value = true; }
     finally { chatSending.value = false; }
 }
 function toggleChat() {
@@ -471,7 +490,14 @@ function startChatPoll() {
     chatTimer = setInterval(() => loadStreamChat(), 7000);
 }
 function stopChatPoll() {
+    chatEpoch += 1;
+    chatRequest = null;
+    chatRefreshQueued = false;
     if (chatTimer) { clearInterval(chatTimer); chatTimer = null; }
+}
+
+function onChatVisibility() {
+    if (document.visibilityState === 'visible' && chatTimer) loadStreamChat();
 }
 
 function onVisibility() {
@@ -856,12 +882,14 @@ function teardownRoom() {
 
 onMounted(() => {
     document.addEventListener('visibilitychange', onVisibility);
+    document.addEventListener('visibilitychange', onChatVisibility);
     window.addEventListener('beforeunload', beforeUnloadHandler);
     connect();
 });
 
 onBeforeUnmount(() => {
     document.removeEventListener('visibilitychange', onVisibility);
+    document.removeEventListener('visibilitychange', onChatVisibility);
     window.removeEventListener('beforeunload', beforeUnloadHandler);
     leaving = true;
     teardownRoom();
@@ -1128,6 +1156,7 @@ onBeforeRouteLeave(() => {
     padding: 14px 16px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
+.lkc-chat__status { margin: 0; padding: 8px 16px; color: #cbd5e1; font-size: 14px; }
 .lkc-chat__feed {
     flex: 1;
     min-height: 0;

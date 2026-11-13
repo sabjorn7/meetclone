@@ -1,5 +1,6 @@
 // Supabase data helpers for the "Трансляции" (live streams) feature.
 // Requires pending_stream_visibility.sql for unlisted access; never falls back to broad reads.
+import { fetchStreamChatRows } from './streamChat.js';
 import { videoProfile } from './videoQuality.js';
 import { STREAM_VIEW_FIELDS, validateVisibility, requireUnlistedSupport } from './visibility.js';
 
@@ -345,7 +346,7 @@ async function attachMessageAuthors(supabase, rows) {
 }
 
 /** Messages of a stream's chat (oldest first), with authors attached. */
-export async function listStreamMessages(supabase, streamId, { limit = 200, linkKey = null } = {}) {
+export async function listStreamMessages(supabase, streamId, { limit = 200, linkKey = null, history = false } = {}) {
     if (linkKey) {
         const { data, error } = await supabase.rpc('get_stream_link_messages', { p_stream_id: streamId, p_key: linkKey, p_limit: limit });
         if (error) throw new Error('Не удалось загрузить чат по ссылке.');
@@ -353,15 +354,8 @@ export async function listStreamMessages(supabase, streamId, { limit = 200, link
         // and moderation actions through server-derived booleans, not client claims.
         return (data || []).map(m => ({ ...m, authorUser: { Name: m.is_mine ? 'Вы' : 'Участник' } }));
     }
-    const { data, error } = await supabase
-        .from('stream_chat')
-        .select('*')
-        .eq('stream', streamId)
-        .neq('deleted', true)
-        .order('created_at', { ascending: true })
-        .limit(limit);
-    if (error) throw new Error(`Не удалось загрузить чат: ${error.message}`);
-    return attachMessageAuthors(supabase, data || []);
+    const rows = await fetchStreamChatRows(supabase, streamId, { limit, history });
+    return attachMessageAuthors(supabase, rows);
 }
 
 /** Post a message to a stream's chat. `img` is an optional array of image URLs (UI: phase 2). */

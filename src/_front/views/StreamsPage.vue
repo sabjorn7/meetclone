@@ -111,9 +111,10 @@
                 <!-- Viewer chat — same access gate as the stream itself -->
                 <section v-if="hasAccess" class="sp-chat">
                     <h3 class="sp-chat-title">Чат эфира</h3>
+                    <p v-if="chatRefreshError" class="sp-muted" role="status">Не удалось обновить чат. Повторяем автоматически.</p>
                     <div ref="feedEl" class="sp-chat-feed">
                         <div v-if="chatLoading" class="sp-muted">Загрузка чата…</div>
-                        <div v-else-if="!messages.length" class="sp-muted">Сообщений пока нет. Будьте первым!</div>
+                        <div v-else-if="!messages.length && !chatRefreshError" class="sp-muted">Сообщений пока нет. Будьте первым!</div>
                         <div
                             v-for="m in messages"
                             :key="m.id"
@@ -460,6 +461,7 @@
 </template>
 
 <script setup>
+import { countNewChatMessages } from '@/_front/streams/streamChat.js';
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { validateVisibility, isPublicStream, streamLinkKey, streamShareUrl, visibilityCapabilities, requireUnlistedSupport } from '@/_front/streams/visibility.js';
@@ -587,9 +589,13 @@ const removingId = ref(null);
 const messages = ref([]);
 const chatText = ref('');
 const chatLoading = ref(false);
+const chatRefreshError = ref(false);
 const sending = ref(false);
 const feedEl = ref(null);
 let chatTimer = null;
+let chatRequest = null;
+let chatEpoch = 0;
+let chatRefreshQueued = false;
 
 const isStreamer = computed(() => canStream(me.value));
 const activeStreamId = computed(() => route.query.stream || null);
@@ -813,8 +819,8 @@ async function loadDetail(id) {
         // 1) Chat feed FIRST — independent of auth + video metadata, so messages arrive in ~40ms.
         //    Visibility is still gated by hasAccess in the template; here we only populate the data.
         chatLoading.value = true;
-        loadChat(id, { scroll: true }).finally(() => { chatLoading.value = false; });
         startChatPoll(id);
+        loadChat(id, { scroll: true }).finally(() => { chatLoading.value = false; });
 
         // 2) Auth (fast uid, no getSession stall) → access + the paid-purchase check, in the
         //    background. Resolving it off the critical path is what keeps the feed instant.
@@ -1015,19 +1021,31 @@ function scrollFeed() {
     });
 }
 async function loadChat(id, { scroll = false } = {}) {
-    try {
-        const prevLen = messages.value.length;
-        const rows = await listStreamMessages(supa(), id, { linkKey: detail.value?.visibility === 'unlisted' ? streamLinkKey(route.hash) : null });
-        // Guard against in-flight races: while this request was out, access may have resolved to
-        // "no access" (the privacy watch cleared the feed) or the viewer may have switched streams.
-        // In either case don't write the (stale/denied) messages back into the UI.
-        if (detail.value?.id !== id) return;
-        if (accessResolved.value && !hasAccess.value) return;
-        messages.value = rows;
-        if (scroll || messages.value.length !== prevLen) scrollFeed();
-    } catch (_) {
-        // keep the current messages on a transient refresh failure
-    }
+    if (detail.value?.id !== id || (accessResolved.value && !hasAccess.value)) return;
+    if (chatRequest) { chatRefreshQueued = true; return chatRequest; }
+    const epoch = chatEpoch;
+    const history = detail.value.status === 'ended' || displayState.value === 'ended';
+    const linkKey = detail.value.visibility === 'unlisted' ? streamLinkKey(route.hash) : null;
+    chatRequest = (async () => {
+        try {
+            const rows = await listStreamMessages(supa(), id, { linkKey, history });
+            if (epoch !== chatEpoch || detail.value?.id !== id) return;
+            if (accessResolved.value && !hasAccess.value) return;
+            const added = countNewChatMessages(messages.value, rows);
+            const changed = rows.length !== messages.value.length || added > 0;
+            messages.value = rows;
+            chatRefreshError.value = false;
+            if (scroll || changed) scrollFeed();
+        } catch {
+            if (epoch === chatEpoch && detail.value?.id === id) chatRefreshError.value = true;
+        } finally {
+            if (epoch === chatEpoch) {
+                chatRequest = null;
+                if (chatRefreshQueued) { chatRefreshQueued = false; loadChat(id); }
+            }
+        }
+    })();
+    return chatRequest;
 }
 async function sendChat() {
     const text = chatText.value.trim();
@@ -1056,12 +1074,20 @@ function startChatPoll(id) {
     chatTimer = setInterval(() => loadChat(id), 7000);
 }
 function stopChatPoll() {
+    chatEpoch += 1;
+    chatRequest = null;
+    chatRefreshQueued = false;
+    chatRefreshError.value = false;
     if (chatTimer) {
         clearInterval(chatTimer);
         chatTimer = null;
     }
     messages.value = [];
     chatText.value = '';
+}
+
+function onChatVisibility() {
+    if (document.visibilityState === 'visible' && chatTimer && detail.value?.id) loadChat(detail.value.id);
 }
 
 // React to ?stream= changes (list ↔ detail without a full reload).
@@ -1306,6 +1332,7 @@ async function removeStream(s) {
 }
 
 onMounted(() => {
+    document.addEventListener('visibilitychange', onChatVisibility);
     fullHdAvailable(supa()).then(enabled => { fullHdEnabled.value = enabled; });
     visibilityCapabilities(supa()).then(c => { unlistedEnabled.value = c.unlisted_enabled === true; }).catch(() => {});
     // Open the detail + chat immediately; don't block them behind the stream-list load.
@@ -1313,6 +1340,7 @@ onMounted(() => {
     load();
 });
 onBeforeUnmount(() => {
+    document.removeEventListener('visibilitychange', onChatVisibility);
     stopPoll();
     stopChatPoll();
 });

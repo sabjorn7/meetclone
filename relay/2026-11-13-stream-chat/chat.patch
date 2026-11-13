@@ -1,20 +1,22 @@
 diff --git a/src/_front/streams/streamChat.js b/src/_front/streams/streamChat.js
 new file mode 100644
-index 0000000..d20d92b
+index 0000000..1e2193a
 --- /dev/null
 +++ b/src/_front/streams/streamChat.js
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,29 @@
 +// Shared HTTP read only; authorization remains in the existing Supabase client/RLS.
-+export async function fetchStreamChatRows(supabase, streamId, { history = false, limit = 200 } = {}) {
++export async function fetchStreamChatRows(supabase, streamId, { history = false, limit = 200, after = null } = {}) {
 +    const rows = [];
-+    let cursor = null;
++    let cursor = after;
++    const ascending = after !== null;
 +    do {
 +        let query = supabase.from('stream_chat').select('*')
 +            .eq('stream', streamId).neq('deleted', true)
-+            .order('created_at', { ascending: false }).order('id', { ascending: false });
++            .order('created_at', { ascending }).order('id', { ascending });
 +        if (cursor) {
 +            // Keep the original timestamp string: Date would discard PostgreSQL microseconds.
-+            query = query.or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`);
++            const comparison = ascending ? 'gt' : 'lt';
++            query = query.or(`created_at.${comparison}.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.${comparison}.${cursor.id})`);
 +        }
 +        const { data, error } = await query.limit(limit);
 +        if (error) throw new Error(`Не удалось загрузить чат: ${error.message}`);
@@ -24,7 +26,7 @@ index 0000000..d20d92b
 +        cursor = page[page.length - 1];
 +        // Continue until empty, including when the server caps a page below the requested size.
 +    } while (history);
-+    return rows.reverse();
++    return ascending ? rows : rows.reverse();
 +}
 +
 +export function countNewChatMessages(previous, next) {
@@ -32,7 +34,7 @@ index 0000000..d20d92b
 +    return next.reduce((count, message) => count + (ids.has(message.id) ? 0 : 1), 0);
 +}
 diff --git a/src/_front/streams/streamsApi.js b/src/_front/streams/streamsApi.js
-index b4e77ec..4083c20 100644
+index b4e77ec..95ad5ec 100644
 --- a/src/_front/streams/streamsApi.js
 +++ b/src/_front/streams/streamsApi.js
 @@ -1,5 +1,6 @@
@@ -47,7 +49,7 @@ index b4e77ec..4083c20 100644
 
  /** Messages of a stream's chat (oldest first), with authors attached. */
 -export async function listStreamMessages(supabase, streamId, { limit = 200, linkKey = null } = {}) {
-+export async function listStreamMessages(supabase, streamId, { limit = 200, linkKey = null, history = false } = {}) {
++export async function listStreamMessages(supabase, streamId, { limit = 200, linkKey = null, history = false, after = null } = {}) {
      if (linkKey) {
          const { data, error } = await supabase.rpc('get_stream_link_messages', { p_stream_id: streamId, p_key: linkKey, p_limit: limit });
          if (error) throw new Error('Не удалось загрузить чат по ссылке.');
@@ -64,7 +66,7 @@ index b4e77ec..4083c20 100644
 -        .limit(limit);
 -    if (error) throw new Error(`Не удалось загрузить чат: ${error.message}`);
 -    return attachMessageAuthors(supabase, data || []);
-+    const rows = await fetchStreamChatRows(supabase, streamId, { limit, history });
++    const rows = await fetchStreamChatRows(supabase, streamId, { limit, history, after });
 +    return attachMessageAuthors(supabase, rows);
  }
 
@@ -219,7 +221,7 @@ index 76ac022..5fc9e09 100644
      flex: 1;
      min-height: 0;
 diff --git a/src/_front/views/StreamsPage.vue b/src/_front/views/StreamsPage.vue
-index ccf4a94..a482ca5 100644
+index ccf4a94..e50be9d 100644
 --- a/src/_front/views/StreamsPage.vue
 +++ b/src/_front/views/StreamsPage.vue
 @@ -111,9 +111,10 @@
@@ -242,7 +244,7 @@ index ccf4a94..a482ca5 100644
  import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
  import { useRoute, useRouter } from 'vue-router';
  import { validateVisibility, isPublicStream, streamLinkKey, streamShareUrl, visibilityCapabilities, requireUnlistedSupport } from '@/_front/streams/visibility.js';
-@@ -587,9 +589,13 @@ const removingId = ref(null);
+@@ -587,9 +589,15 @@ const removingId = ref(null);
  const messages = ref([]);
  const chatText = ref('');
  const chatLoading = ref(false);
@@ -253,10 +255,12 @@ index ccf4a94..a482ca5 100644
 +let chatRequest = null;
 +let chatEpoch = 0;
 +let chatRefreshQueued = false;
++let chatHistoryLoaded = false;
++let chatHistoryCursor = null;
 
  const isStreamer = computed(() => canStream(me.value));
  const activeStreamId = computed(() => route.query.stream || null);
-@@ -813,8 +819,8 @@ async function loadDetail(id) {
+@@ -813,8 +821,8 @@ async function loadDetail(id) {
          // 1) Chat feed FIRST — independent of auth + video metadata, so messages arrive in ~40ms.
          //    Visibility is still gated by hasAccess in the template; here we only populate the data.
          chatLoading.value = true;
@@ -266,7 +270,7 @@ index ccf4a94..a482ca5 100644
 
          // 2) Auth (fast uid, no getSession stall) → access + the paid-purchase check, in the
          //    background. Resolving it off the critical path is what keeps the feed instant.
-@@ -1015,19 +1021,31 @@ function scrollFeed() {
+@@ -1015,19 +1023,47 @@ function scrollFeed() {
      });
  }
  async function loadChat(id, { scroll = false } = {}) {
@@ -288,14 +292,30 @@ index ccf4a94..a482ca5 100644
 +    const epoch = chatEpoch;
 +    const history = detail.value.status === 'ended' || displayState.value === 'ended';
 +    const linkKey = detail.value.visibility === 'unlisted' ? streamLinkKey(route.hash) : null;
++    const incremental = history && !linkKey && chatHistoryLoaded;
++    const after = incremental ? chatHistoryCursor : null;
 +    chatRequest = (async () => {
 +        try {
-+            const rows = await listStreamMessages(supa(), id, { linkKey, history });
++            const rows = await listStreamMessages(supa(), id, { linkKey, history, after });
 +            if (epoch !== chatEpoch || detail.value?.id !== id) return;
 +            if (accessResolved.value && !hasAccess.value) return;
 +            const added = countNewChatMessages(messages.value, rows);
-+            const changed = rows.length !== messages.value.length || added > 0;
-+            messages.value = rows;
++            const changed = (!incremental && rows.length !== messages.value.length) || added > 0;
++            if (incremental) {
++                if (rows.length) messages.value = [...messages.value, ...rows];
++            } else {
++                messages.value = rows;
++            }
++            if (history && !linkKey) {
++                chatHistoryLoaded = true;
++                if (rows.length) {
++                    const last = rows[rows.length - 1];
++                    chatHistoryCursor = { created_at: last.created_at, id: last.id };
++                }
++            } else {
++                chatHistoryLoaded = false;
++                chatHistoryCursor = null;
++            }
 +            chatRefreshError.value = false;
 +            if (scroll || changed) scrollFeed();
 +        } catch {
@@ -311,18 +331,20 @@ index ccf4a94..a482ca5 100644
  }
  async function sendChat() {
      const text = chatText.value.trim();
-@@ -1056,6 +1074,10 @@ function startChatPoll(id) {
+@@ -1056,6 +1092,12 @@ function startChatPoll(id) {
      chatTimer = setInterval(() => loadChat(id), 7000);
  }
  function stopChatPoll() {
 +    chatEpoch += 1;
++    chatHistoryLoaded = false;
++    chatHistoryCursor = null;
 +    chatRequest = null;
 +    chatRefreshQueued = false;
 +    chatRefreshError.value = false;
      if (chatTimer) {
          clearInterval(chatTimer);
          chatTimer = null;
-@@ -1064,6 +1086,10 @@ function stopChatPoll() {
+@@ -1064,6 +1106,10 @@ function stopChatPoll() {
      chatText.value = '';
  }
 
@@ -333,7 +355,7 @@ index ccf4a94..a482ca5 100644
  // React to ?stream= changes (list ↔ detail without a full reload).
  watch(
      () => [activeStreamId.value, route.hash],
-@@ -1306,6 +1332,7 @@ async function removeStream(s) {
+@@ -1306,6 +1352,7 @@ async function removeStream(s) {
  }
 
  onMounted(() => {
@@ -341,7 +363,7 @@ index ccf4a94..a482ca5 100644
      fullHdAvailable(supa()).then(enabled => { fullHdEnabled.value = enabled; });
      visibilityCapabilities(supa()).then(c => { unlistedEnabled.value = c.unlisted_enabled === true; }).catch(() => {});
      // Open the detail + chat immediately; don't block them behind the stream-list load.
-@@ -1313,6 +1340,7 @@ onMounted(() => {
+@@ -1313,6 +1360,7 @@ onMounted(() => {
      load();
  });
  onBeforeUnmount(() => {
@@ -351,10 +373,10 @@ index ccf4a94..a482ca5 100644
  });
 diff --git a/tests/stream-chat.browser.mjs b/tests/stream-chat.browser.mjs
 new file mode 100644
-index 0000000..1e0327f
+index 0000000..6ec86b1
 --- /dev/null
 +++ b/tests/stream-chat.browser.mjs
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,143 @@
 +// Actual chat templates/styles/functions extracted from both Vue pages; no video/auth/API startup.
 +import fs from 'node:fs';
 +import path from 'node:path';
@@ -388,7 +410,7 @@ index 0000000..1e0327f
 +    if (kind === 'speaker') {
 +        template = source.slice(source.indexOf('<div v-if="chatOpen" class="lkc-chat">'), source.indexOf('<!-- Presenter-only slide navigation -->'));
 +        script = `const myUid='fixture-owner';const chatOpen=ref(true),chatMessages=ref([]),chatText=ref(''),chatSending=ref(false),chatLoading=ref(false),chatRefreshError=ref(false),chatSendError=ref(false),chatUnread=ref(0),chatFeedEl=ref(null);
-+let chatTimer=null,chatRequest=null,chatEpoch=0,chatRefreshQueued=false;
++let chatTimer=null,chatRequest=null,chatEpoch=0,chatRefreshQueued=false,chatHistoryLoaded=false,chatHistoryCursor=null;
 +${functionsFrom(file, ['fetchChatAuthors', 'fetchChatMessages', 'postChatMessage', 'msgTime', 'scrollChat', 'loadStreamChat', 'sendStreamChat', 'startChatPoll', 'stopChatPoll', 'onChatVisibility'])}
 +onMounted(()=>{document.addEventListener('visibilitychange',onChatVisibility);startChatPoll()});
 +onBeforeUnmount(()=>{document.removeEventListener('visibilitychange',onChatVisibility);stopChatPoll()});
@@ -398,7 +420,7 @@ index 0000000..1e0327f
 +        script = `const messages=ref([]),chatText=ref(''),chatLoading=ref(false),chatRefreshError=ref(false),sending=ref(false),feedEl=ref(null),error=ref('');
 +const detail=ref({id:streamId,status:'live',visibility:'public'}),displayState=ref('live'),accessResolved=ref(true),hasAccess=ref(true),me=ref({id:'fixture-owner'}),isAuthor=ref(false);
 +const route={hash:''};const streamLinkKey=()=>null;const deleteStreamMessage=async()=>{};const sendStreamMessage=async()=>{if(db.state.failSend)throw Error('Не удалось отправить сообщение. Попробуйте ещё раз.')};
-+let chatTimer=null,chatRequest=null,chatEpoch=0,chatRefreshQueued=false;
++let chatTimer=null,chatRequest=null,chatEpoch=0,chatRefreshQueued=false,chatHistoryLoaded=false,chatHistoryCursor=null;
 +${functionsFrom(api, ['attachMessageAuthors', 'listStreamMessages'])}
 +${functionsFrom(file, ['msgTime', 'canDeleteMsg', 'scrollFeed', 'loadChat', 'sendChat', 'removeMessage', 'startChatPoll', 'stopChatPoll', 'onChatVisibility'])}
 +onMounted(()=>{document.addEventListener('visibilitychange',onChatVisibility);startChatPoll(streamId);loadChat(streamId)});
@@ -477,6 +499,17 @@ index 0000000..1e0327f
 +        if (kind === 'viewer') {
 +            await ev('db.state.rows=makeMessages(1000);chat.ended();chat.load()'); await until('chat.state().count===1000');
 +            assert.equal(await ev('document.querySelectorAll(".sp-chat-row").length'), 1000); results.push('viewer: ended history renders all 1000');
++            const calls = await ev('db.state.calls.length');
++            await ev('chat.load()');
++            const polls = await ev(`db.state.calls.slice(${calls}).filter(q=>q.order)`);
++            assert.equal(polls.length, 1); assert.equal(polls[0].order, 'created_at.asc,id.asc');
++            assert.ok(polls[0].or.includes('id.gt.')); results.push('viewer: empty replay poll requests only newer rows');
++            await ev('db.state.rows=makeMessages(1003);tick()'); await until('chat.state().count===1003');
++            assert.equal(await ev('document.querySelectorAll(".sp-chat-row").length'), 1003); results.push('viewer: post-end messages appended');
++            await ev('db.state.fail=true;chat.load()'); await until('chat.state().refreshError');
++            assert.equal(await ev('chat.state().count'), 1003);
++            await ev('db.state.fail=false;db.state.rows=makeMessages(1004);chat.load()'); await until('chat.state().count===1004');
++            assert.equal(await ev('chat.state().refreshError'), false); results.push('viewer: incremental failure preserves history and recovers');
 +        }
 +        await ev('unmountChat();undefined');
 +        const calls = await ev('db.state.calls.length'); await ev('tick();document.dispatchEvent(new Event("visibilitychange"))');
@@ -489,10 +522,10 @@ index 0000000..1e0327f
 +}
 diff --git a/tests/stream-chat.fixture.mjs b/tests/stream-chat.fixture.mjs
 new file mode 100644
-index 0000000..7480d1f
+index 0000000..8debf73
 --- /dev/null
 +++ b/tests/stream-chat.fixture.mjs
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,57 @@
 +import fs from 'node:fs';
 +import { parse } from 'acorn';
 +import { createClient } from '@supabase/supabase-js';
@@ -521,12 +554,17 @@ index 0000000..7480d1f
 +            let rows = state.rows.filter(row => row.stream === q.get('stream')?.slice(3) && row.deleted === false);
 +            const cursor = q.get('or');
 +            if (cursor) {
-+                const match = /^\(created_at\.lt\.(.*),and\(created_at\.eq\.(.*),id\.lt\.(.*)\)\)$/.exec(cursor);
-+                if (!match || match[1] !== match[2]) throw Error('Unexpected cursor: ' + cursor);
-+                rows = rows.filter(row => row.created_at < match[1] || (row.created_at === match[1] && row.id < match[3]));
++                const match = /^\(created_at\.(lt|gt)\.(.*),and\(created_at\.eq\.(.*),id\.(lt|gt)\.(.*)\)\)$/.exec(cursor);
++                if (!match || match[2] !== match[3] || match[1] !== match[4]) throw Error('Unexpected cursor: ' + cursor);
++                const ascending = match[1] === 'gt';
++                rows = rows.filter(row => ascending
++                    ? row.created_at > match[2] || (row.created_at === match[2] && row.id > match[5])
++                    : row.created_at < match[2] || (row.created_at === match[2] && row.id < match[5]));
 +            }
-+            if (q.get('order') !== 'created_at.desc,id.desc') throw Error('Expected stable descending order');
-+            rows.sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
++            const order = q.get('order');
++            if (!['created_at.desc,id.desc', 'created_at.asc,id.asc'].includes(order)) throw Error('Expected stable order');
++            const direction = order.includes('.asc') ? 1 : -1;
++            rows.sort((a, b) => direction * (a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)));
 +            return new Response(JSON.stringify(rows.slice(0, Math.min(Number(q.get('limit')), cap))), { status: 200 });
 +        } finally { state.active--; }
 +    };
@@ -547,10 +585,10 @@ index 0000000..7480d1f
 +}
 diff --git a/tests/stream-chat.unit.mjs b/tests/stream-chat.unit.mjs
 new file mode 100644
-index 0000000..cc1b4ae
+index 0000000..0dd4ce8
 --- /dev/null
 +++ b/tests/stream-chat.unit.mjs
-@@ -0,0 +1,148 @@
+@@ -0,0 +1,206 @@
 +import assert from 'node:assert/strict';
 +import vm from 'node:vm';
 +import fs from 'node:fs';
@@ -633,7 +671,7 @@ index 0000000..cc1b4ae
 +    const supa = ctx.supa;
 +    ctx.supa = () => ({ from(table) { const query = supa().from(table); query.insert = async () => ({ error: db.state.failSend ? { message: 'fixture send failed' } : null }); return query; } });
 +    vm.createContext(ctx);
-+    vm.runInContext('let chatTimer=null, chatRequest=null, chatEpoch=0, chatRefreshQueued=false;\n' + functionsFrom(kind === 'speaker' ? speaker : viewer, fns) + `\nglobalThis.actions={load:()=>${kind === 'speaker' ? 'loadStreamChat()' : 'loadChat(streamId)'},send:${kind === 'speaker' ? 'sendStreamChat' : 'sendChat'},start:()=>startChatPoll(streamId),stop:stopChatPoll,focus:onChatVisibility};`, ctx);
++    vm.runInContext('let chatTimer=null, chatRequest=null, chatEpoch=0, chatRefreshQueued=false, chatHistoryLoaded=false, chatHistoryCursor=null;\n' + functionsFrom(kind === 'speaker' ? speaker : viewer, fns) + `\nglobalThis.actions={load:()=>${kind === 'speaker' ? 'loadStreamChat()' : 'loadChat(streamId)'},send:${kind === 'speaker' ? 'sendStreamChat' : 'sendChat'},start:()=>startChatPoll(streamId),stop:stopChatPoll,focus:onChatVisibility};`, ctx);
 +    return { ctx, actions: ctx.actions, rows: kind === 'speaker' ? ctx.chatMessages : ctx.messages, scrolls: () => scrolls, intervals };
 +}
 +const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setImmediate(r)); };
@@ -682,7 +720,7 @@ index 0000000..cc1b4ae
 +});
 +await check('viewer history page error keeps entire previous feed and recovers', async () => {
 +    const db = mockDatabase(messages(245)); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended';
-+    await c.actions.load(); db.state.failOn = db.state.calls.length + 2; await c.actions.load();
++    await c.actions.load(); db.state.rows = messages(500); db.state.failOn = db.state.calls.length + 2; await c.actions.load();
 +    assert.equal(c.rows.value.length, 245); assert.equal(c.ctx.chatRefreshError.value, true);
 +    db.state.failOn = 0; await c.actions.load(); assert.equal(c.ctx.chatRefreshError.value, false);
 +});
@@ -690,6 +728,64 @@ index 0000000..cc1b4ae
 +    const db = mockDatabase(messages(50)); const c = controller('viewer', db);
 +    let release; db.state.hold = new Promise(r => { release = r; }); const pending = c.actions.load();
 +    c.ctx.hasAccess.value = false; release(); await pending; assert.equal(c.rows.value.length, 0);
++});
++for (const count of [245, 1000]) {
++    await check(`replay ${count}: empty poll reads only newer cursor and preserves array`, async () => {
++        const db = mockDatabase(messages(count)); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended';
++        await c.actions.load(); const previous = c.rows.value; const calls = db.state.calls.length; const scrolls = c.scrolls();
++        await c.actions.load();
++        assert.equal(c.rows.value, previous); assert.equal(c.scrolls(), scrolls);
++        const queries = db.state.calls.slice(calls).filter(q => q.order);
++        assert.equal(queries.length, 1); assert.equal(queries[0].order, 'created_at.asc,id.asc');
++        assert.ok(queries[0].or.includes(`id.gt.${previous.at(-1).id}`));
++    });
++    await check(`replay ${count}: several newer messages appended chronologically with timestamp ties`, async () => {
++        const db = mockDatabase(messages(count)); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended';
++        await c.actions.load();
++        const previous = c.rows.value;
++        const newer = messages(count + 4).slice(count).map(row => ({ ...row, created_at: previous.at(-1).created_at }));
++        db.state.rows.push(...newer, { ...messages(count + 5).at(-1), deleted: true });
++        await c.actions.load();
++        assert.deepEqual(Array.from(c.rows.value, x => x.id), [...previous, ...newer].map(x => x.id));
++        assert.equal(new Set(Array.from(c.rows.value, x => x.id)).size, count + 4);
++        const after = c.rows.value; await c.actions.load(); assert.equal(c.rows.value, after);
++    });
++    await check(`replay ${count}: transient incremental failure preserves cursor and catches up`, async () => {
++        const db = mockDatabase(messages(count)); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended';
++        await c.actions.load(); const previous = c.rows.value; db.state.rows = messages(count + 3);
++        db.state.fail = true; await c.actions.load(); assert.equal(c.rows.value, previous); assert.equal(c.ctx.chatRefreshError.value, true);
++        db.state.fail = false; await c.actions.load();
++        assert.equal(c.rows.value.length, count + 3); assert.equal(c.ctx.chatRefreshError.value, false);
++    });
++}
++await check('incremental backlog >200 is read fully with a stable ascending cursor', async () => {
++    const db = mockDatabase(messages(245), { cap: 73 }); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended';
++    await c.actions.load(); const calls = db.state.calls.length; db.state.rows = messages(1000); await c.actions.load();
++    assert.deepEqual(Array.from(c.rows.value, x => x.id), messages(1000).map(x => x.id));
++    assert.ok(db.state.calls.slice(calls).filter(q => q.order).every(q => q.order === 'created_at.asc,id.asc'));
++});
++await check('empty replay can receive its first messages after ending', async () => {
++    const db = mockDatabase([]); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended';
++    await c.actions.load(); const empty = c.rows.value; await c.actions.load(); assert.equal(c.rows.value, empty);
++    db.state.rows = messages(245); await c.actions.load(); assert.equal(c.rows.value.length, 245);
++    await c.actions.load(); assert.equal(c.rows.value.length, 245);
++});
++await check('switching ended streams resets history/cursor; reopening refreshes deletions', async () => {
++    const other = '00000000-0000-4000-8000-000000000002';
++    const db = mockDatabase([...messages(245), ...messages(1000).map(row => ({ ...row, stream: other }))]);
++    const c = controller('viewer', db); c.ctx.detail.value.status = 'ended'; await c.actions.load(); assert.equal(c.rows.value.length, 245);
++    c.actions.stop(); c.ctx.streamId = other; c.ctx.detail.value = { id: other, status: 'ended', visibility: 'public' };
++    const calls = db.state.calls.length; await c.actions.load(); assert.equal(c.rows.value.length, 1000);
++    const firstQuery = db.state.calls.slice(calls).find(q => q.order); assert.equal(firstQuery.or, undefined);
++    assert.equal(firstQuery.order, 'created_at.desc,id.desc');
++    db.state.rows.find(row => row.stream === streamId).deleted = true;
++    c.actions.stop(); c.ctx.streamId = streamId; c.ctx.detail.value.id = streamId; await c.actions.load();
++    assert.equal(c.rows.value.length, 244); assert.ok(c.rows.value.every(row => row.stream === streamId));
++});
++await check('late incremental response after stream switch cannot append to another history', async () => {
++    const db = mockDatabase(messages(245)); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended'; await c.actions.load();
++    db.state.rows = messages(250); let release; db.state.hold = new Promise(r => { release = r; }); const pending = c.actions.load();
++    c.actions.stop(); c.ctx.detail.value.id = 'other'; release(); await pending; assert.equal(c.rows.value.length, 0);
 +});
 +await check('visibility listeners registered and removed in both components', async () => {
 +    for (const file of [speaker, viewer]) {

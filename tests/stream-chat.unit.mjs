@@ -80,7 +80,7 @@ function controller(kind, db) {
     const supa = ctx.supa;
     ctx.supa = () => ({ from(table) { const query = supa().from(table); query.insert = async () => ({ error: db.state.failSend ? { message: 'fixture send failed' } : null }); return query; } });
     vm.createContext(ctx);
-    vm.runInContext('let chatTimer=null, chatRequest=null, chatEpoch=0, chatRefreshQueued=false;\n' + functionsFrom(kind === 'speaker' ? speaker : viewer, fns) + `\nglobalThis.actions={load:()=>${kind === 'speaker' ? 'loadStreamChat()' : 'loadChat(streamId)'},send:${kind === 'speaker' ? 'sendStreamChat' : 'sendChat'},start:()=>startChatPoll(streamId),stop:stopChatPoll,focus:onChatVisibility};`, ctx);
+    vm.runInContext('let chatTimer=null, chatRequest=null, chatEpoch=0, chatRefreshQueued=false, chatHistoryLoaded=false, chatHistoryCursor=null;\n' + functionsFrom(kind === 'speaker' ? speaker : viewer, fns) + `\nglobalThis.actions={load:()=>${kind === 'speaker' ? 'loadStreamChat()' : 'loadChat(streamId)'},send:${kind === 'speaker' ? 'sendStreamChat' : 'sendChat'},start:()=>startChatPoll(streamId),stop:stopChatPoll,focus:onChatVisibility};`, ctx);
     return { ctx, actions: ctx.actions, rows: kind === 'speaker' ? ctx.chatMessages : ctx.messages, scrolls: () => scrolls, intervals };
 }
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setImmediate(r)); };
@@ -129,7 +129,7 @@ await check('viewer ended mode fetches complete history and live→ended transit
 });
 await check('viewer history page error keeps entire previous feed and recovers', async () => {
     const db = mockDatabase(messages(245)); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended';
-    await c.actions.load(); db.state.failOn = db.state.calls.length + 2; await c.actions.load();
+    await c.actions.load(); db.state.rows = messages(500); db.state.failOn = db.state.calls.length + 2; await c.actions.load();
     assert.equal(c.rows.value.length, 245); assert.equal(c.ctx.chatRefreshError.value, true);
     db.state.failOn = 0; await c.actions.load(); assert.equal(c.ctx.chatRefreshError.value, false);
 });
@@ -137,6 +137,64 @@ await check('viewer privacy guard discards result after access revoked', async (
     const db = mockDatabase(messages(50)); const c = controller('viewer', db);
     let release; db.state.hold = new Promise(r => { release = r; }); const pending = c.actions.load();
     c.ctx.hasAccess.value = false; release(); await pending; assert.equal(c.rows.value.length, 0);
+});
+for (const count of [245, 1000]) {
+    await check(`replay ${count}: empty poll reads only newer cursor and preserves array`, async () => {
+        const db = mockDatabase(messages(count)); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended';
+        await c.actions.load(); const previous = c.rows.value; const calls = db.state.calls.length; const scrolls = c.scrolls();
+        await c.actions.load();
+        assert.equal(c.rows.value, previous); assert.equal(c.scrolls(), scrolls);
+        const queries = db.state.calls.slice(calls).filter(q => q.order);
+        assert.equal(queries.length, 1); assert.equal(queries[0].order, 'created_at.asc,id.asc');
+        assert.ok(queries[0].or.includes(`id.gt.${previous.at(-1).id}`));
+    });
+    await check(`replay ${count}: several newer messages appended chronologically with timestamp ties`, async () => {
+        const db = mockDatabase(messages(count)); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended';
+        await c.actions.load();
+        const previous = c.rows.value;
+        const newer = messages(count + 4).slice(count).map(row => ({ ...row, created_at: previous.at(-1).created_at }));
+        db.state.rows.push(...newer, { ...messages(count + 5).at(-1), deleted: true });
+        await c.actions.load();
+        assert.deepEqual(Array.from(c.rows.value, x => x.id), [...previous, ...newer].map(x => x.id));
+        assert.equal(new Set(Array.from(c.rows.value, x => x.id)).size, count + 4);
+        const after = c.rows.value; await c.actions.load(); assert.equal(c.rows.value, after);
+    });
+    await check(`replay ${count}: transient incremental failure preserves cursor and catches up`, async () => {
+        const db = mockDatabase(messages(count)); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended';
+        await c.actions.load(); const previous = c.rows.value; db.state.rows = messages(count + 3);
+        db.state.fail = true; await c.actions.load(); assert.equal(c.rows.value, previous); assert.equal(c.ctx.chatRefreshError.value, true);
+        db.state.fail = false; await c.actions.load();
+        assert.equal(c.rows.value.length, count + 3); assert.equal(c.ctx.chatRefreshError.value, false);
+    });
+}
+await check('incremental backlog >200 is read fully with a stable ascending cursor', async () => {
+    const db = mockDatabase(messages(245), { cap: 73 }); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended';
+    await c.actions.load(); const calls = db.state.calls.length; db.state.rows = messages(1000); await c.actions.load();
+    assert.deepEqual(Array.from(c.rows.value, x => x.id), messages(1000).map(x => x.id));
+    assert.ok(db.state.calls.slice(calls).filter(q => q.order).every(q => q.order === 'created_at.asc,id.asc'));
+});
+await check('empty replay can receive its first messages after ending', async () => {
+    const db = mockDatabase([]); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended';
+    await c.actions.load(); const empty = c.rows.value; await c.actions.load(); assert.equal(c.rows.value, empty);
+    db.state.rows = messages(245); await c.actions.load(); assert.equal(c.rows.value.length, 245);
+    await c.actions.load(); assert.equal(c.rows.value.length, 245);
+});
+await check('switching ended streams resets history/cursor; reopening refreshes deletions', async () => {
+    const other = '00000000-0000-4000-8000-000000000002';
+    const db = mockDatabase([...messages(245), ...messages(1000).map(row => ({ ...row, stream: other }))]);
+    const c = controller('viewer', db); c.ctx.detail.value.status = 'ended'; await c.actions.load(); assert.equal(c.rows.value.length, 245);
+    c.actions.stop(); c.ctx.streamId = other; c.ctx.detail.value = { id: other, status: 'ended', visibility: 'public' };
+    const calls = db.state.calls.length; await c.actions.load(); assert.equal(c.rows.value.length, 1000);
+    const firstQuery = db.state.calls.slice(calls).find(q => q.order); assert.equal(firstQuery.or, undefined);
+    assert.equal(firstQuery.order, 'created_at.desc,id.desc');
+    db.state.rows.find(row => row.stream === streamId).deleted = true;
+    c.actions.stop(); c.ctx.streamId = streamId; c.ctx.detail.value.id = streamId; await c.actions.load();
+    assert.equal(c.rows.value.length, 244); assert.ok(c.rows.value.every(row => row.stream === streamId));
+});
+await check('late incremental response after stream switch cannot append to another history', async () => {
+    const db = mockDatabase(messages(245)); const c = controller('viewer', db); c.ctx.detail.value.status = 'ended'; await c.actions.load();
+    db.state.rows = messages(250); let release; db.state.hold = new Promise(r => { release = r; }); const pending = c.actions.load();
+    c.actions.stop(); c.ctx.detail.value.id = 'other'; release(); await pending; assert.equal(c.rows.value.length, 0);
 });
 await check('visibility listeners registered and removed in both components', async () => {
     for (const file of [speaker, viewer]) {

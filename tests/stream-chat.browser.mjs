@@ -31,7 +31,7 @@ for (const kind of ['speaker', 'viewer']) {
     if (kind === 'speaker') {
         template = source.slice(source.indexOf('<div v-if="chatOpen" class="lkc-chat">'), source.indexOf('<!-- Presenter-only slide navigation -->'));
         script = `const myUid='fixture-owner';const chatOpen=ref(true),chatMessages=ref([]),chatText=ref(''),chatSending=ref(false),chatLoading=ref(false),chatRefreshError=ref(false),chatSendError=ref(false),chatUnread=ref(0),chatFeedEl=ref(null);
-let chatTimer=null,chatRequest=null,chatEpoch=0,chatRefreshQueued=false;
+let chatTimer=null,chatRequest=null,chatEpoch=0,chatRefreshQueued=false,chatHistoryLoaded=false,chatHistoryCursor=null;
 ${functionsFrom(file, ['fetchChatAuthors', 'fetchChatMessages', 'postChatMessage', 'msgTime', 'scrollChat', 'loadStreamChat', 'sendStreamChat', 'startChatPoll', 'stopChatPoll', 'onChatVisibility'])}
 onMounted(()=>{document.addEventListener('visibilitychange',onChatVisibility);startChatPoll()});
 onBeforeUnmount(()=>{document.removeEventListener('visibilitychange',onChatVisibility);stopChatPoll()});
@@ -41,7 +41,7 @@ window.chat={load:loadStreamChat,send:sendStreamChat,setText:v=>chatText.value=v
         script = `const messages=ref([]),chatText=ref(''),chatLoading=ref(false),chatRefreshError=ref(false),sending=ref(false),feedEl=ref(null),error=ref('');
 const detail=ref({id:streamId,status:'live',visibility:'public'}),displayState=ref('live'),accessResolved=ref(true),hasAccess=ref(true),me=ref({id:'fixture-owner'}),isAuthor=ref(false);
 const route={hash:''};const streamLinkKey=()=>null;const deleteStreamMessage=async()=>{};const sendStreamMessage=async()=>{if(db.state.failSend)throw Error('Не удалось отправить сообщение. Попробуйте ещё раз.')};
-let chatTimer=null,chatRequest=null,chatEpoch=0,chatRefreshQueued=false;
+let chatTimer=null,chatRequest=null,chatEpoch=0,chatRefreshQueued=false,chatHistoryLoaded=false,chatHistoryCursor=null;
 ${functionsFrom(api, ['attachMessageAuthors', 'listStreamMessages'])}
 ${functionsFrom(file, ['msgTime', 'canDeleteMsg', 'scrollFeed', 'loadChat', 'sendChat', 'removeMessage', 'startChatPoll', 'stopChatPoll', 'onChatVisibility'])}
 onMounted(()=>{document.addEventListener('visibilitychange',onChatVisibility);startChatPoll(streamId);loadChat(streamId)});
@@ -120,6 +120,17 @@ try {
         if (kind === 'viewer') {
             await ev('db.state.rows=makeMessages(1000);chat.ended();chat.load()'); await until('chat.state().count===1000');
             assert.equal(await ev('document.querySelectorAll(".sp-chat-row").length'), 1000); results.push('viewer: ended history renders all 1000');
+            const calls = await ev('db.state.calls.length');
+            await ev('chat.load()');
+            const polls = await ev(`db.state.calls.slice(${calls}).filter(q=>q.order)`);
+            assert.equal(polls.length, 1); assert.equal(polls[0].order, 'created_at.asc,id.asc');
+            assert.ok(polls[0].or.includes('id.gt.')); results.push('viewer: empty replay poll requests only newer rows');
+            await ev('db.state.rows=makeMessages(1003);tick()'); await until('chat.state().count===1003');
+            assert.equal(await ev('document.querySelectorAll(".sp-chat-row").length'), 1003); results.push('viewer: post-end messages appended');
+            await ev('db.state.fail=true;chat.load()'); await until('chat.state().refreshError');
+            assert.equal(await ev('chat.state().count'), 1003);
+            await ev('db.state.fail=false;db.state.rows=makeMessages(1004);chat.load()'); await until('chat.state().count===1004');
+            assert.equal(await ev('chat.state().refreshError'), false); results.push('viewer: incremental failure preserves history and recovers');
         }
         await ev('unmountChat();undefined');
         const calls = await ev('db.state.calls.length'); await ev('tick();document.dispatchEvent(new Event("visibilitychange"))');

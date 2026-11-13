@@ -26,12 +26,17 @@ export function mockDatabase(initial, { cap = Infinity } = {}) {
             let rows = state.rows.filter(row => row.stream === q.get('stream')?.slice(3) && row.deleted === false);
             const cursor = q.get('or');
             if (cursor) {
-                const match = /^\(created_at\.lt\.(.*),and\(created_at\.eq\.(.*),id\.lt\.(.*)\)\)$/.exec(cursor);
-                if (!match || match[1] !== match[2]) throw Error('Unexpected cursor: ' + cursor);
-                rows = rows.filter(row => row.created_at < match[1] || (row.created_at === match[1] && row.id < match[3]));
+                const match = /^\(created_at\.(lt|gt)\.(.*),and\(created_at\.eq\.(.*),id\.(lt|gt)\.(.*)\)\)$/.exec(cursor);
+                if (!match || match[2] !== match[3] || match[1] !== match[4]) throw Error('Unexpected cursor: ' + cursor);
+                const ascending = match[1] === 'gt';
+                rows = rows.filter(row => ascending
+                    ? row.created_at > match[2] || (row.created_at === match[2] && row.id > match[5])
+                    : row.created_at < match[2] || (row.created_at === match[2] && row.id < match[5]));
             }
-            if (q.get('order') !== 'created_at.desc,id.desc') throw Error('Expected stable descending order');
-            rows.sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+            const order = q.get('order');
+            if (!['created_at.desc,id.desc', 'created_at.asc,id.asc'].includes(order)) throw Error('Expected stable order');
+            const direction = order.includes('.asc') ? 1 : -1;
+            rows.sort((a, b) => direction * (a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)));
             return new Response(JSON.stringify(rows.slice(0, Math.min(Number(q.get('limit')), cap))), { status: 200 });
         } finally { state.active--; }
     };

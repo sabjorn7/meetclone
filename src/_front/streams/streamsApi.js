@@ -346,7 +346,7 @@ async function attachMessageAuthors(supabase, rows) {
 }
 
 /** Messages of a stream's chat (oldest first), with authors attached. */
-export async function listStreamMessages(supabase, streamId, { limit = 200, linkKey = null, history = false } = {}) {
+export async function listStreamMessages(supabase, streamId, { limit = 200, linkKey = null, history = false, after = null } = {}) {
     if (linkKey) {
         const { data, error } = await supabase.rpc('get_stream_link_messages', { p_stream_id: streamId, p_key: linkKey, p_limit: limit });
         if (error) throw new Error('Не удалось загрузить чат по ссылке.');
@@ -354,7 +354,7 @@ export async function listStreamMessages(supabase, streamId, { limit = 200, link
         // and moderation actions through server-derived booleans, not client claims.
         return (data || []).map(m => ({ ...m, authorUser: { Name: m.is_mine ? 'Вы' : 'Участник' } }));
     }
-    const rows = await fetchStreamChatRows(supabase, streamId, { limit, history });
+    const rows = await fetchStreamChatRows(supabase, streamId, { limit, history, after });
     return attachMessageAuthors(supabase, rows);
 }
 

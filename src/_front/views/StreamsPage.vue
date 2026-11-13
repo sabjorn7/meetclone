@@ -596,6 +596,8 @@ let chatTimer = null;
 let chatRequest = null;
 let chatEpoch = 0;
 let chatRefreshQueued = false;
+let chatHistoryLoaded = false;
+let chatHistoryCursor = null;
 
 const isStreamer = computed(() => canStream(me.value));
 const activeStreamId = computed(() => route.query.stream || null);
@@ -1026,14 +1028,30 @@ async function loadChat(id, { scroll = false } = {}) {
     const epoch = chatEpoch;
     const history = detail.value.status === 'ended' || displayState.value === 'ended';
     const linkKey = detail.value.visibility === 'unlisted' ? streamLinkKey(route.hash) : null;
+    const incremental = history && !linkKey && chatHistoryLoaded;
+    const after = incremental ? chatHistoryCursor : null;
     chatRequest = (async () => {
         try {
-            const rows = await listStreamMessages(supa(), id, { linkKey, history });
+            const rows = await listStreamMessages(supa(), id, { linkKey, history, after });
             if (epoch !== chatEpoch || detail.value?.id !== id) return;
             if (accessResolved.value && !hasAccess.value) return;
             const added = countNewChatMessages(messages.value, rows);
-            const changed = rows.length !== messages.value.length || added > 0;
-            messages.value = rows;
+            const changed = (!incremental && rows.length !== messages.value.length) || added > 0;
+            if (incremental) {
+                if (rows.length) messages.value = [...messages.value, ...rows];
+            } else {
+                messages.value = rows;
+            }
+            if (history && !linkKey) {
+                chatHistoryLoaded = true;
+                if (rows.length) {
+                    const last = rows[rows.length - 1];
+                    chatHistoryCursor = { created_at: last.created_at, id: last.id };
+                }
+            } else {
+                chatHistoryLoaded = false;
+                chatHistoryCursor = null;
+            }
             chatRefreshError.value = false;
             if (scroll || changed) scrollFeed();
         } catch {
@@ -1075,6 +1093,8 @@ function startChatPoll(id) {
 }
 function stopChatPoll() {
     chatEpoch += 1;
+    chatHistoryLoaded = false;
+    chatHistoryCursor = null;
     chatRequest = null;
     chatRefreshQueued = false;
     chatRefreshError.value = false;

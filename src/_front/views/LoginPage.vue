@@ -128,6 +128,8 @@
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { getSupabase, readStoredSession, isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
+import { confirmationSession } from '@/_front/auth/registration.js';
+import { readVkResponse } from '@/_front/auth/vkResponse.js';
 
 const route = useRoute();
 
@@ -249,10 +251,11 @@ async function onVkSuccess(code, deviceId) {
         await wait(1500);
         const codeVerifier = readCookie('vkid_sdk:codeVerifier');
         await wait(1500);
-        const res = await fetch(N8N_VK, {
+        const response = await fetch(N8N_VK, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ authCode: code, DeviceId: deviceId, codeVerifier }),
-        }).then((r) => r.json());
+        });
+        const res = await readVkResponse(response);
         await window.wwLib.wwPlugins.supabaseAuth.verifyOTP({ type: 'email', email: res.email, token: res.otp });
         window.location.href = HOME;
     } catch (err) {
@@ -260,8 +263,21 @@ async function onVkSuccess(code, deviceId) {
     }
 }
 
-onMounted(() => {
+onMounted(async () => {
     ensureFonts();
+    if (route.query.email_confirmation === '1') {
+        loading.value = true;
+        try {
+            await confirmationSession(window.wwLib?.wwPlugins?.supabaseAuth?.publicInstance?.auth, window.location.hash);
+            window.location.replace('/welcome');
+            return;
+        } catch {
+            authError.value = 'Не удалось подтвердить почту. Ссылка могла истечь. Попробуйте войти по почте или запросите новое письмо.';
+        } finally { loading.value = false; }
+        loadVkSdk();
+        nextTick(() => { ready.value = true; });
+        return;
+    }
     // already-logged-in guard (the WeWeb page redirects home onload). ?preview=1 stays for previewing.
     if (route.query.preview !== '1' && isLikelyLoggedIn()) { window.location.replace(HOME); return; }
     loadVkSdk();

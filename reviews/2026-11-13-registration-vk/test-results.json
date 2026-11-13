@@ -1,0 +1,111 @@
+{
+  "unitTests": {
+    "command": "node tests/registration-vk.unit.mjs",
+    "passed": 18,
+    "failed": 0
+  },
+  "browser": {
+    "checks": [
+      {
+        "name": "no-session registration: user@mail.ru",
+        "status": "PASS"
+      },
+      {
+        "name": "no-session registration: user@mail.ruy",
+        "status": "PASS"
+      },
+      {
+        "name": "no-session registration: user@unknown-company.education",
+        "status": "PASS"
+      },
+      {
+        "name": "suggestion changes email only on explicit click",
+        "status": "PASS"
+      },
+      {
+        "name": "autoconfirm/session preserves welcome hook, role metadata and redirect",
+        "status": "PASS"
+      },
+      {
+        "name": "invalid email does not submit",
+        "status": "PASS"
+      },
+      {
+        "name": "real Supabase SDK processes confirmation fragment before welcome redirect",
+        "status": "PASS"
+      },
+      {
+        "name": "expired confirmation stays on login with error",
+        "status": "PASS"
+      },
+      {
+        "name": "/login VK http response validation",
+        "status": "PASS"
+      },
+      {
+        "name": "/login VK html response validation",
+        "status": "PASS"
+      },
+      {
+        "name": "/login VK missing response validation",
+        "status": "PASS"
+      },
+      {
+        "name": "/login VK good response validation",
+        "status": "PASS"
+      },
+      {
+        "name": "/registration VK http response validation",
+        "status": "PASS"
+      },
+      {
+        "name": "/registration VK html response validation",
+        "status": "PASS"
+      },
+      {
+        "name": "/registration VK missing response validation",
+        "status": "PASS"
+      },
+      {
+        "name": "/registration VK good response validation",
+        "status": "PASS"
+      },
+      {
+        "name": "mobile/desktop suggestion layout, no horizontal overflow",
+        "status": "PASS"
+      }
+    ],
+    "network": [
+      {
+        "method": "GET",
+        "path": "/mock-sb/auth/v1/user"
+      }
+    ],
+    "errors": []
+  },
+  "build": {
+    "command": "./node_modules/.bin/vite build -l warn --outDir /private/tmp/meetguru-registration-vk-build-20261113",
+    "result": "PASS",
+    "postbuildRun": false
+  },
+  "productionMutations": false,
+  "publicationVerification": {
+    "baseMain": "5b575627124c1c6c5492fc69e6625bf2da29415b",
+    "unitPassed": 18,
+    "browserPassed": 17,
+    "browserArtifacts": "/private/var/folders/cw/swgj93gd6tb9gm_2cnmccf280000gn/T/meetguru-registration-vk-QJOsKL",
+    "build": "PASS: vite build without postbuild on clean main snapshot",
+    "secretsScan": {
+      "files": 15,
+      "findings": 0,
+      "rules": [
+        "jwt",
+        "private-key",
+        "github-token",
+        "aws-key",
+        "secret-value"
+      ],
+      "n8nLiteralAuthHeaders": "all redacted"
+    }
+  }
+}

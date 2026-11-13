@@ -1,0 +1,70 @@
+MeetGuru — регистрация/email и VK_Auth. Подготовлено локально 13.11.2026.
+
+Production, n8n, Supabase Auth, SQL и данные не изменены. Frontend не опубликован. Этот пакет опубликован только в отдельной review-ветке fix/registration-vk-20261113; merge в main и deploy не выполнялись.
+
+FRONTEND (5 файлов)
+1. src/_front/views/RegistrationPage.vue
+   Подсказка известных опечаток рядом с email. Коррекция только по явному нажатию; подозрительный и неизвестный домены можно отправлять без изменения.
+   Базовая проверка формата в обработчике. При отсутствии data.session — «Проверьте почту», без welcome-перехода и без старого setup-webhook.
+   При наличии сессии существующий webhook, metadata.nickname и переход /welcome сохранены.
+   Проверка HTTP/JSON/email/OTP ответа VK до verifyOTP().
+2. src/_front/views/LoginPage.vue
+   Проверка ответа VK до verifyOTP(). Обработка существующего маршрута /login?email_confirmation=1:
+   ожидание штатного getSession() того же supabaseAuth.publicInstance.auth, затем /welcome; ошибка/истёкшая ссылка остаётся на login.
+3. src/_front/auth/registration.js
+   Небольшой словарь доменных опечаток, проверка формата и функции email-confirmation callback.
+4. src/_front/auth/vkResponse.js
+   Общая проверка ответа существующего VK webhook. Ошибочные/пустые/HTML-ответы не передаются в verifyOTP().
+5. src/components/plugins/plugin-1fa0dd68-5069-436c-9a7d-3b54c340f1fa/src/wwPlugin.js
+   Только 3 заменённые строки: необязательный явный emailRedirectTo; старый redirectPage работает как прежде.
+   Это WeWeb plugin-файл: при повторном экспорте ручную правку необходимо сохранить/перенести.
+
+VK_Auth — локальная трансформация существующего workflow, не запускался и не обновлялся
+Исходный workflow fmdgagExCONpVxja, updatedAt 2026-10-06T12:46:05.080Z. Генератор отказывает при другом updatedAt/неожиданной структуре.
+Файлы: scripts/lib/vk-auth-workflow-patch.mjs; scripts/prepare-vk-auth-patch.mjs.
+
+Изменённые узлы/связи:
+- Code: один vkId/email из ответа VK; проверка совпадения subject; прежний fallback vk<id>@vk.meetgu.ru и прежняя генерация пароля сохранены.
+- HTTP Request: создание с тем же вычисленным email; успешный выход сначала в Update a row, затем необязательная фотография.
+- Update a row: связь нового UUID/vk_id до скачивания аватара; Photo перенесено в отдельную необязательную запись.
+- Ошибка создания направляется через новые Require email conflict → Find existing VK email → Validate existing VK account.
+  Продолжение только для явного email_exists/user_already_exists. Должна найтись ровно одна запись с тем же email и без конфликтующего vk_id.
+- Update a row1: фильтр по проверенному id вместо отсутствующего user.email; изменяется только vk_id. UUID/email/роль/имя не переписываются.
+- HTTP Request4/5 (скачивание) и HTTP Request6/7 (Storage): timeout 5 сек, отдельная error-ветка сразу к существующей генерации OTP.
+- Новые Save new VK avatar / Save existing VK avatar: только Photo, проверка Storage Key, ошибка тоже не препятствует OTP.
+- HTTP Request2/8: OTP для того же вычисленного email.
+- Edit Fields/1/2: верхнеуровневый email ответа GoTrue вместо зависимости от identities[0].
+- Ветка найденного vk_id → HTTP Request3 сохранена: используется email существующего аккаунта без создания нового и без обновления профиля.
+Итого 22 → 27 узлов (+5 небольших узлов в существующем workflow).
+
+Не изменяются: webhook URL, VK client_id/redirect_uri, обмен VK-кода, учётные данные, режим генерации/проверки OTP, Auth-конфигурация, платежи/покупки/доступы.
+Существующие UUID не заменяются и аккаунты не объединяются. Конфликтующие/неоднозначные записи требуют отдельного разбора и завершаются ошибкой.
+
+ПРОВЕРКИ
+18/18 Node tests: email, callback, JSON/HTTP/VK-ответы; выполнение реальных узлов/выражений кандидата в локальном mock-runner;
+новый VK, повторный вход, отсутствие email, прежний vk_id с отсутствующим/изменившимся email, повтор после незавершённой старой регистрации;
+404/пустой аватар, сбой Storage/неверный Key/ошибка записи Photo; конфликт vk_id/неверный subject/несколько совпадений/ошибка создания не-email_exists.
+Синтетические покупки, UUID и роли сохраняются; у workflow нет записей в таблицы покупок/доступов.
+17/17 Chrome-сценариев: реальные Vue-компоненты и исходный Auth plugin, корректный email, mail.ruy, неизвестный домен,
+нажатие подсказки/отправка без исправления, no-session/session ветки, роль metadata, реальный Supabase SDK callback с локальным Auth API,
+просроченная ссылка, HTTP/HTML/пустой/правильный VK-ответ на обеих страницах, layout 390/1366px.
+Внешняя сеть браузера запрещена. Live VK OAuth и SMTP-доставка не тестировались; production-покупки не трогались.
+Сборка Vite без production postbuild — PASS; SEO/postbuild не запускался.
+git diff --check — PASS.
+
+ДЛЯ СОГЛАСОВАНИЯ
+frontend.diff — только пять frontend-файлов этой задачи.
+vk-auth.diff и before/after.review.json — очищенные от секретов конфигурации для ревью, НЕ для импорта в production.
+prepare-vk-auth-patch.mjs — только локальная генерация из защищённого актуального экспорта; redacted review JSON как вход запрещён.
+Пример: node scripts/prepare-vk-auth-patch.mjs <защищённый-текущий-export.json> <защищённый-кандидат.json>
+Скрипт не обращается к API и ничего не публикует. Секреты берутся исключительно из защищённого экспорта и сохраняются без изменений.
+
+Для будущего включения подтверждения email отдельно согласовать mailer_autoconfirm=false, проверить SMTP и allow-list
+https://app.meetgu.ru/login?email_confirmation=1. В этом пакете Auth settings НЕ меняются.
+Старый setup-webhook вызывается только при возвращённой сессии, как проверено в текущем autoconfirm-сценарии;
+при включении подтверждения до клика по письму он не вызывается, пароль не сохраняется для отложенной отправки.
+
+ПЕРЕД ПУБЛИКАЦИЕЙ ВЕТКИ
+Основа: актуальный main 5b575627124c1c6c5492fc69e6625bf2da29415b.
+Повторно на чистой копии main: 18/18 unit, 17/17 browser, Vite build без postbuild — PASS.
+Проверены все 15 публикуемых файлов: JWT/ключи/пароли и literal n8n auth headers — секретов не обнаружено; placeholders [REDACTED] сохранены.

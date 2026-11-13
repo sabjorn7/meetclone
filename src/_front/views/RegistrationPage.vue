@@ -12,10 +12,11 @@
       role = raw_user_meta_data->>'nickname') — so this key/mapping is a hard contract (wrong → null role).
     - Then POST the n8n webhook 64277b75 { email, password } (query params) — server-side welcome/setup,
       preserved verbatim as a black box.
-    - On success → /welcome (change-page 280224c6 in the WeWeb flow).
+    - With a session → /welcome; without a session → confirmation notice on this form.
+      Email confirmation returns through /login?email_confirmation=1 using the existing Auth client.
     - Errors mapped to the same Russian copy («User already registered» → «Данный аккаунт уже
       зарегистрирован»). Onload: already logged in → / (bypass with ?preview=1 for previewing).
-  Nothing about the auth/trigger/webhook wiring is changed — only the presentation.
+  The role metadata/trigger contract and the existing session-only setup hook are preserved.
 -->
 <template>
     <main class="pd" :class="{ 'is-ready': ready }">
@@ -45,11 +46,20 @@
                     <h2 class="pd-auth__title">Создать аккаунт</h2>
                     <p class="pd-auth__sub">Регистрация займёт меньше минуты</p>
 
-                    <form class="pd-auth__form" @submit.prevent="submitRegister">
+                    <p v-if="confirmationSent" class="pd-auth__confirmation" role="status">
+                        Проверьте почту: мы отправили письмо на <strong>{{ confirmationEmail }}</strong>.
+                        Перейдите по ссылке в письме, чтобы подтвердить адрес.
+                    </p>
+                    <form v-else class="pd-auth__form" @submit.prevent="submitRegister">
                         <label class="pd-field">
                             <span class="pd-field__label">Email</span>
-                            <input v-model="email" type="email" autocomplete="email" placeholder="you@example.com" :disabled="loading" required />
+                            <input v-model="email" type="email" autocomplete="email" placeholder="you@example.com" :disabled="loading" :aria-describedby="emailSuggestion ? 'registration-email-suggestion' : undefined" required />
                         </label>
+                        <p v-if="emailSuggestion" id="registration-email-suggestion" class="pd-auth__hint" role="status">
+                            Возможно, вы имели в виду
+                            <button type="button" class="pd-link" :disabled="loading" @click="email = emailSuggestion">{{ emailSuggestion }}</button>?
+                            Можно оставить введённый адрес.
+                        </p>
 
                         <label class="pd-field">
                             <span class="pd-field__label">Кто вы?</span>
@@ -118,7 +128,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue';
+import { computed, ref, onMounted, nextTick } from 'vue';
+import { confirmationRedirect, isRegistrationEmail, suggestRegistrationEmail } from '@/_front/auth/registration.js';
+import { readVkResponse } from '@/_front/auth/vkResponse.js';
 import { useRoute } from 'vue-router';
 import { isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
 
@@ -127,6 +139,9 @@ const route = useRoute();
 const ROLES = ['Специалист', 'Спикер', 'Учебное заведение'];
 
 const email = ref('');
+const emailSuggestion = computed(() => suggestRegistrationEmail(email.value));
+const confirmationSent = ref(false);
+const confirmationEmail = ref('');
 const role = ref('');
 const password = ref('');
 const password2 = ref('');
@@ -144,10 +159,7 @@ const year = new Date().getFullYear();
 
 const HOME = '/';
 const WELCOME = '/welcome';
-// NB: the WeWeb signUp passed `redirectPage: <Home UUID>`, which the auth plugin runs through
-// wwLib.wwPageHelper.getPagePath(uuid) to build emailRedirectTo — that throws in this hand-written
-// runtime and broke signUp. We deliberately DROP it: email confirmation is OFF (autoconfirm ON →
-// signUp returns a session, no confirmation email is ever sent), so emailRedirectTo is dead anyway.
+// Explicit callback avoids WeWeb page-UUID resolution and works with either Auth confirmation setting.
 const N8N_SIGNUP_HOOK = 'https://n8n.meetgu.ru/webhook/64277b75-849f-45c6-81bc-64da11a7d530';
 const N8N_VK = 'https://n8n.meetgu.ru/webhook/auth_vk';
 
@@ -169,6 +181,7 @@ async function submitRegister() {
     const p = password.value;
     const p2 = password2.value;
     if (!e || !p) { authError.value = 'Введите почту и пароль'; return; }
+    if (!isRegistrationEmail(e)) { authError.value = 'Неверный формат почты'; return; }
     if (!role.value) { authError.value = 'Выберите, кто вы'; return; }
     if (p.length < 6) { authError.value = 'Пароль должен быть не короче 6 символов'; return; }
     if (p !== p2) { authError.value = 'Пароли не совпадают'; return; }
@@ -178,12 +191,19 @@ async function submitRegister() {
     try {
         // Специалист is the UI label for the «Ученик» role — the DB trigger reads `nickname` verbatim.
         const nickname = role.value === 'Специалист' ? 'Ученик' : role.value;
-        await window.wwLib.wwPlugins.supabaseAuth.signUp({
+        const result = await window.wwLib.wwPlugins.supabaseAuth.signUp({
             type: 'email',
             email: e,
             password: p,
             metadata: [{ key: 'nickname', value: nickname }],
+            emailRedirectTo: confirmationRedirect(window.location.origin),
         });
+        if (!result?.session) {
+            confirmationEmail.value = e;
+            confirmationSent.value = true;
+            loading.value = false;
+            return;
+        }
         // Server-side welcome/setup — preserved verbatim (POST with email+password as query params,
         // exactly like the WeWeb apiRequest step). Best-effort: a failure here must not strand a user
         // whose account (auth + public.users via trigger) already exists — proceed to /welcome anyway.
@@ -245,10 +265,11 @@ async function onVkSuccess(code, deviceId) {
         await wait(1500);
         const codeVerifier = readCookie('vkid_sdk:codeVerifier');
         await wait(1500);
-        const res = await fetch(N8N_VK, {
+        const response = await fetch(N8N_VK, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ authCode: code, DeviceId: deviceId, codeVerifier }),
-        }).then((r) => r.json());
+        });
+        const res = await readVkResponse(response);
         await window.wwLib.wwPlugins.supabaseAuth.verifyOTP({ type: 'email', email: res.email, token: res.otp });
         window.location.href = HOME;
     } catch (err) {
@@ -324,6 +345,9 @@ function ensureFonts() {
 .pd-auth__sub { margin: 8px 0 0; color: var(--ink-2); font-size: 0.98rem; }
 
 .pd-auth__form { display: flex; flex-direction: column; gap: 16px; margin-top: 26px; }
+.pd-auth__hint, .pd-auth__confirmation { margin: 0; color: var(--ink-2); font-size: 0.92rem; line-height: 1.5; overflow-wrap: anywhere; }
+.pd-auth__confirmation { margin-top: 26px; }
+.pd-auth__hint .pd-link { overflow-wrap: anywhere; text-align: start; }
 .pd-field { display: flex; flex-direction: column; gap: 7px; }
 .pd-field__label { font-size: 0.85rem; font-weight: 600; color: var(--ink-2); }
 .pd-field__wrap { position: relative; display: flex; }

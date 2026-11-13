@@ -1,0 +1,623 @@
+--- vk-auth.before.review.json
++++ vk-auth.after.review.json
+@@ -111,7 +111,7 @@
+         },
+         "sendBody": true,
+         "specifyBody": "json",
+-        "jsonBody": "={\n  \"email\": \"{{ $('HTTP Request1').item.json.user.email || ('vk' + $('HTTP Request1').item.json.user.user_id + '@vk.meetgu.ru') }}\",\n  \"password\": \"{{ $('Code').item.json.password }}\"\n}",
++        "jsonBody": "={{ {email:$('Code').item.json.email,password:$('Code').item.json.password} }}",
+         "options": {}
+       },
+       "type": "n8n-nodes-base.httpRequest",
+@@ -210,7 +210,7 @@
+     },
+     {
+       "parameters": {
+-        "jsCode": "const password = Array(10).fill(0).map(() => Math.floor(Math.random()*16).toString(16)).join('');\nreturn [{\n  json: {\n    password\n  }\n}];"
++        "jsCode": "function vkIdentity(token, profile) {\n    const vkId = String(token?.user_id || '');\n    const user = profile?.user;\n    if (!/^\\d+$/.test(vkId) || String(user?.user_id || '') !== vkId) throw new Error('VK identity mismatch');\n    const supplied = typeof user.email === 'string' ? user.email.trim().toLowerCase() : '';\n    if (supplied && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(supplied)) throw new Error('Invalid VK email');\n    return { vkId, email: supplied || `vk${vkId}@vk.meetgu.ru` };\n}\nconst identity = vkIdentity($('VK Get Access Token').item.json, $('HTTP Request1').item.json);\nconst password = Array(10).fill(0).map(() => Math.floor(Math.random()*16).toString(16)).join('');\nreturn [{json:{...identity,password},pairedItem:{item:0}}];"
+       },
+       "type": "n8n-nodes-base.code",
+       "typeVersion": 2,
+@@ -247,11 +247,7 @@
+             },
+             {
+               "fieldId": "vk_id",
+-              "fieldValue": "={{ $('HTTP Request1').item.json.user.user_id }}"
+-            },
+-            {
+-              "fieldId": "Photo",
+-              "fieldValue": "=https://sb.meetgu.ru/storage/v1/object/public/{{ $json.Key }}"
++              "fieldValue": "={{ $('Code').item.json.vkId }}"
+             }
+           ]
+         }
+@@ -280,7 +276,7 @@
+         "jsonHeaders": "={\"apikey\":\"[REDACTED]\",\"Authorization\":\"Bearer [REDACTED]\"}",
+         "sendBody": true,
+         "specifyBody": "json",
+-        "jsonBody": "={\n  \"type\":\"recovery\",\n  \"email\":\"{{ $('HTTP Request1').item.json.user.email || ('vk' + $('HTTP Request1').item.json.user.user_id + '@vk.meetgu.ru') }}\",\n  \"redirect_to\":\"https://app.meetgu.ru/reset_pw\"\n}",
++        "jsonBody": "={{ {type:'recovery',email:$('Code').item.json.email,redirect_to:'https://app.meetgu.ru/reset_pw'} }}",
+         "options": {}
+       },
+       "type": "n8n-nodes-base.httpRequest",
+@@ -299,7 +295,7 @@
+             {
+               "id": "3034a70e-b7c1-4a97-afe5-a73a94489d63",
+               "name": "email",
+-              "value": "={{ $json.identities[0].identity_data.email }}",
++              "value": "={{ $json.email }}",
+               "type": "string"
+             },
+             {
+@@ -355,7 +351,7 @@
+             {
+               "id": "3034a70e-b7c1-4a97-afe5-a73a94489d63",
+               "name": "email",
+-              "value": "={{ $json.identities[0].identity_data.email }}",
++              "value": "={{ $json.email }}",
+               "type": "string"
+             },
+             {
+@@ -412,7 +408,9 @@
+     {
+       "parameters": {
+         "url": "={{ $('HTTP Request1').item.json.user.avatar }}",
+-        "options": {}
++        "options": {
++          "timeout": 5000
++        }
+       },
+       "type": "n8n-nodes-base.httpRequest",
+       "typeVersion": 4.2,
+@@ -421,7 +419,8 @@
+         140
+       ],
+       "id": "5360ba15-cc93-4c6b-9956-cdd78c81929f",
+-      "name": "HTTP Request4"
++      "name": "HTTP Request4",
++      "onError": "continueErrorOutput"
+     },
+     {
+       "parameters": {
+@@ -443,7 +442,9 @@
+         "sendBody": true,
+         "contentType": "binaryData",
+         "inputDataFieldName": "data",
+-        "options": {}
++        "options": {
++          "timeout": 5000
++        }
+       },
+       "type": "n8n-nodes-base.httpRequest",
+       "typeVersion": 4.2,
+@@ -452,7 +453,8 @@
+         140
+       ],
+       "id": "f10bb82b-b14b-4528-86ad-fbe6cc50815a",
+-      "name": "HTTP Request6"
++      "name": "HTTP Request6",
++      "onError": "continueErrorOutput"
+     },
+     {
+       "parameters": {
+@@ -462,9 +464,9 @@
+         "filters": {
+           "conditions": [
+             {
+-              "keyName": "email",
++              "keyName": "id",
+               "condition": "eq",
+-              "keyValue": "={{ $('HTTP Request1').item.json.user.email }}"
++              "keyValue": "={{ $('Validate existing VK account').item.json.id }}"
+             }
+           ]
+         },
+@@ -472,15 +474,7 @@
+           "fieldValues": [
+             {
+               "fieldId": "vk_id",
+-              "fieldValue": "={{ $('HTTP Request1').item.json.user.user_id }}"
+-            },
+-            {
+-              "fieldId": "Photo",
+-              "fieldValue": "=https://sb.meetgu.ru/storage/v1/object/public/{{ $json.Key }}"
+-            },
+-            {
+-              "fieldId": "Name",
+-              "fieldValue": "={{ $('HTTP Request1').item.json.user.first_name }} {{ $('HTTP Request1').item.json.user.last_name }}"
++              "fieldValue": "={{ $('Code').item.json.vkId }}"
+             }
+           ]
+         }
+@@ -503,7 +497,9 @@
+     {
+       "parameters": {
+         "url": "={{ $('HTTP Request1').item.json.user.avatar }}",
+-        "options": {}
++        "options": {
++          "timeout": 5000
++        }
+       },
+       "type": "n8n-nodes-base.httpRequest",
+       "typeVersion": 4.2,
+@@ -512,7 +508,8 @@
+         340
+       ],
+       "id": "a7224a1d-4aa0-4464-ac77-376863dc276c",
+-      "name": "HTTP Request5"
++      "name": "HTTP Request5",
++      "onError": "continueErrorOutput"
+     },
+     {
+       "parameters": {
+@@ -534,7 +531,9 @@
+         "sendBody": true,
+         "contentType": "binaryData",
+         "inputDataFieldName": "data",
+-        "options": {}
++        "options": {
++          "timeout": 5000
++        }
+       },
+       "type": "n8n-nodes-base.httpRequest",
+       "typeVersion": 4.2,
+@@ -543,7 +542,8 @@
+         340
+       ],
+       "id": "62d54bd0-7517-4c8c-ad4a-ab396c974a27",
+-      "name": "HTTP Request7"
++      "name": "HTTP Request7",
++      "onError": "continueErrorOutput"
+     },
+     {
+       "parameters": {
+@@ -554,7 +554,7 @@
+         "jsonHeaders": "={\"apikey\":\"[REDACTED]\",\"Authorization\":\"Bearer [REDACTED]\"}",
+         "sendBody": true,
+         "specifyBody": "json",
+-        "jsonBody": "={\n  \"type\":\"recovery\",\n  \"email\":\"{{ $json.email }}\",\n  \"redirect_to\":\"https://app.meetgu.ru/reset_pw\"\n}",
++        "jsonBody": "={{ {type:'recovery',email:$('Code').item.json.email,redirect_to:'https://app.meetgu.ru/reset_pw'} }}",
+         "options": {}
+       },
+       "type": "n8n-nodes-base.httpRequest",
+@@ -573,7 +573,7 @@
+             {
+               "id": "3034a70e-b7c1-4a97-afe5-a73a94489d63",
+               "name": "email",
+-              "value": "={{ $json.identities[0].identity_data.email }}",
++              "value": "={{ $json.email }}",
+               "type": "string"
+             },
+             {
+@@ -600,6 +600,140 @@
+       ],
+       "id": "fb6cf606-a1d1-469e-9d4f-8f95ad111450",
+       "name": "Edit Fields2"
++    },
++    {
++      "id": "vk-require-email-conflict",
++      "name": "Require email conflict",
++      "type": "n8n-nodes-base.code",
++      "typeVersion": 2,
++      "position": [
++        1040,
++        640
++      ],
++      "parameters": {
++        "jsCode": "function requireEmailConflict(error) {\n    const status = Number(error?.status || error?.httpCode || error?.statusCode);\n    const detail = `${error?.code || ''} ${error?.message || ''}`;\n    if (![400, 409, 422].includes(status) || !/\\b(email_exists|user_already_exists)\\b/.test(detail)) {\n        throw new Error('VK account creation failed; not an email conflict');\n    }\n}\nrequireEmailConflict($input.first().json.error);\nreturn [{json:{},pairedItem:{item:0}}];"
++      }
++    },
++    {
++      "parameters": {
++        "operation": "get",
++        "tableId": "users",
++        "filters": {
++          "conditions": [
++            {
++              "keyName": "email",
++              "condition": "eq",
++              "keyValue": "={{ $('Code').item.json.email }}"
++            }
++          ]
++        }
++      },
++      "type": "n8n-nodes-base.supabase",
++      "typeVersion": 1,
++      "position": [
++        1260,
++        640
++      ],
++      "id": "vk-find-existing-email",
++      "name": "Find existing VK email",
++      "alwaysOutputData": true,
++      "credentials": {
++        "supabaseApi": {
++          "id": "A84wclCRDmr3uzKM",
++          "name": "MeetGuru"
++        }
++      }
++    },
++    {
++      "id": "vk-validate-existing-account",
++      "name": "Validate existing VK account",
++      "type": "n8n-nodes-base.code",
++      "typeVersion": 2,
++      "position": [
++        1480,
++        640
++      ],
++      "parameters": {
++        "jsCode": "function existingVkAccount(rows, identity) {\n    if (rows.length !== 1) throw new Error('Existing VK account is missing or ambiguous');\n    const row = rows[0];\n    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(row.id || '')\n        || typeof row.email !== 'string' || row.email.trim().toLowerCase() !== identity.email\n        || (row.vk_id != null && row.vk_id !== '' && String(row.vk_id) !== identity.vkId)) {\n        throw new Error('Existing account does not match VK identity');\n    }\n    return { id: row.id, email: row.email, vk_id: identity.vkId };\n}\nconst account=existingVkAccount($input.all().map(i=>i.json), $('Code').item.json);\nreturn [{json:account,pairedItem:{item:0}}];"
++      }
++    },
++    {
++      "parameters": {
++        "operation": "update",
++        "tableId": "users",
++        "matchType": "allFilters",
++        "filters": {
++          "conditions": [
++            {
++              "keyName": "id",
++              "condition": "eq",
++              "keyValue": "={{ $('HTTP Request').item.json.id }}"
++            }
++          ]
++        },
++        "fieldsUi": {
++          "fieldValues": [
++            {
++              "fieldId": "Photo",
++              "fieldValue": "={{ (() => { const key=$json.Key; if(typeof key!=='string'||!key.startsWith('profile/')) throw new Error('Avatar upload returned no key'); return 'https://sb.meetgu.ru/storage/v1/object/public/'+key; })() }}"
++            }
++          ]
++        }
++      },
++      "type": "n8n-nodes-base.supabase",
++      "typeVersion": 1,
++      "position": [
++        1340,
++        140
++      ],
++      "id": "vk-new-avatar",
++      "name": "Save new VK avatar",
++      "credentials": {
++        "supabaseApi": {
++          "id": "A84wclCRDmr3uzKM",
++          "name": "MeetGuru"
++        }
++      },
++      "onError": "continueRegularOutput"
++    },
++    {
++      "parameters": {
++        "operation": "update",
++        "tableId": "users",
++        "matchType": "allFilters",
++        "filters": {
++          "conditions": [
++            {
++              "keyName": "id",
++              "condition": "eq",
++              "keyValue": "={{ $('Validate existing VK account').item.json.id }}"
++            }
++          ]
++        },
++        "fieldsUi": {
++          "fieldValues": [
++            {
++              "fieldId": "Photo",
++              "fieldValue": "={{ (() => { const key=$json.Key; if(typeof key!=='string'||!key.startsWith('profile/')) throw new Error('Avatar upload returned no key'); return 'https://sb.meetgu.ru/storage/v1/object/public/'+key; })() }}"
++            }
++          ]
++        }
++      },
++      "type": "n8n-nodes-base.supabase",
++      "typeVersion": 1,
++      "position": [
++        1340,
++        340
++      ],
++      "id": "vk-existing-avatar",
++      "name": "Save existing VK avatar",
++      "credentials": {
++        "supabaseApi": {
++          "id": "A84wclCRDmr3uzKM",
++          "name": "MeetGuru"
++        }
++      },
++      "onError": "continueRegularOutput"
+     }
+   ],
+   "connections": {
+@@ -669,13 +803,151 @@
+       "main": [
+         [
+           {
++            "node": "Update a row",
++            "type": "main",
++            "index": 0
++          }
++        ],
++        [
++          {
++            "node": "Require email conflict",
++            "type": "main",
++            "index": 0
++          }
++        ]
++      ]
++    },
++    "Update a row": {
++      "main": [
++        [
++          {
+             "node": "HTTP Request4",
+             "type": "main",
+             "index": 0
+           }
++        ]
++      ]
++    },
++    "HTTP Request2": {
++      "main": [
++        [
++          {
++            "node": "Edit Fields",
++            "type": "main",
++            "index": 0
++          }
++        ]
++      ]
++    },
++    "HTTP Request3": {
++      "main": [
++        [
++          {
++            "node": "Edit Fields1",
++            "type": "main",
++            "index": 0
++          }
++        ]
++      ]
++    },
++    "HTTP Request1": {
++      "main": [
++        [
++          {
++            "node": "Code",
++            "type": "main",
++            "index": 0
++          }
++        ]
++      ]
++    },
++    "HTTP Request4": {
++      "main": [
++        [
++          {
++            "node": "HTTP Request6",
++            "type": "main",
++            "index": 0
++          }
+         ],
+         [
+           {
++            "node": "HTTP Request2",
++            "type": "main",
++            "index": 0
++          }
++        ]
++      ]
++    },
++    "HTTP Request6": {
++      "main": [
++        [
++          {
++            "node": "Save new VK avatar",
++            "type": "main",
++            "index": 0
++          }
++        ],
++        [
++          {
++            "node": "HTTP Request2",
++            "type": "main",
++            "index": 0
++          }
++        ]
++      ]
++    },
++    "HTTP Request5": {
++      "main": [
++        [
++          {
++            "node": "HTTP Request7",
++            "type": "main",
++            "index": 0
++          }
++        ],
++        [
++          {
++            "node": "HTTP Request8",
++            "type": "main",
++            "index": 0
++          }
++        ]
++      ]
++    },
++    "HTTP Request7": {
++      "main": [
++        [
++          {
++            "node": "Save existing VK avatar",
++            "type": "main",
++            "index": 0
++          }
++        ],
++        [
++          {
++            "node": "HTTP Request8",
++            "type": "main",
++            "index": 0
++          }
++        ]
++      ]
++    },
++    "HTTP Request8": {
++      "main": [
++        [
++          {
++            "node": "Edit Fields2",
++            "type": "main",
++            "index": 0
++          }
++        ]
++      ]
++    },
++    "Update a row1": {
++      "main": [
++        [
++          {
+             "node": "HTTP Request5",
+             "type": "main",
+             "index": 0
+@@ -683,7 +955,40 @@
+         ]
+       ]
+     },
+-    "Update a row": {
++    "Require email conflict": {
++      "main": [
++        [
++          {
++            "node": "Find existing VK email",
++            "type": "main",
++            "index": 0
++          }
++        ]
++      ]
++    },
++    "Find existing VK email": {
++      "main": [
++        [
++          {
++            "node": "Validate existing VK account",
++            "type": "main",
++            "index": 0
++          }
++        ]
++      ]
++    },
++    "Validate existing VK account": {
++      "main": [
++        [
++          {
++            "node": "Update a row1",
++            "type": "main",
++            "index": 0
++          }
++        ]
++      ]
++    },
++    "Save new VK avatar": {
+       "main": [
+         [
+           {
+@@ -694,95 +999,7 @@
+         ]
+       ]
+     },
+-    "HTTP Request2": {
+-      "main": [
+-        [
+-          {
+-            "node": "Edit Fields",
+-            "type": "main",
+-            "index": 0
+-          }
+-        ]
+-      ]
+-    },
+-    "HTTP Request3": {
+-      "main": [
+-        [
+-          {
+-            "node": "Edit Fields1",
+-            "type": "main",
+-            "index": 0
+-          }
+-        ]
+-      ]
+-    },
+-    "HTTP Request1": {
+-      "main": [
+-        [
+-          {
+-            "node": "Code",
+-            "type": "main",
+-            "index": 0
+-          }
+-        ]
+-      ]
+-    },
+-    "HTTP Request4": {
+-      "main": [
+-        [
+-          {
+-            "node": "HTTP Request6",
+-            "type": "main",
+-            "index": 0
+-          }
+-        ]
+-      ]
+-    },
+-    "HTTP Request6": {
+-      "main": [
+-        [
+-          {
+-            "node": "Update a row",
+-            "type": "main",
+-            "index": 0
+-          }
+-        ]
+-      ]
+-    },
+-    "HTTP Request5": {
+-      "main": [
+-        [
+-          {
+-            "node": "HTTP Request7",
+-            "type": "main",
+-            "index": 0
+-          }
+-        ]
+-      ]
+-    },
+-    "HTTP Request7": {
+-      "main": [
+-        [
+-          {
+-            "node": "Update a row1",
+-            "type": "main",
+-            "index": 0
+-          }
+-        ]
+-      ]
+-    },
+-    "HTTP Request8": {
+-      "main": [
+-        [
+-          {
+-            "node": "Edit Fields2",
+-            "type": "main",
+-            "index": 0
+-          }
+-        ]
+-      ]
+-    },
+-    "Update a row1": {
++    "Save existing VK avatar": {
+       "main": [
+         [
+           {

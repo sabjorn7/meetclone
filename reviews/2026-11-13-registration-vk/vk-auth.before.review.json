@@ -1,0 +1,798 @@
+{
+  "id": "fmdgagExCONpVxja",
+  "name": "VK_Auth",
+  "active": true,
+  "tags": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "createdAt": "2025-09-26T06:26:40.900Z",
+  "updatedAt": "2026-10-06T12:46:05.080Z",
+  "activeVersionId": null,
+  "versionCreatedAt": null,
+  "versionName": null,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "auth_vk",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        140
+      ],
+      "id": "ba1b9339-9144-4dcf-882e-923062769305",
+      "name": "Webhook1",
+      "webhookId": "e1ff0d57-ff92-446d-ba56-936f64d241d4"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "users",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "vk_id",
+              "keyValue": "={{ $json.user_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -180,
+        140
+      ],
+      "id": "13c8c3a6-d48f-492b-a37a-892b8e4b78a0",
+      "name": "Check Public.users.vk.id",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "A84wclCRDmr3uzKM",
+          "name": "MeetGuru"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7f12274a-455d-4d0a-8369-b1774ba6b96c",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        40,
+        140
+      ],
+      "id": "1e20480d-7a65-4375-a9fb-a9794d1575bd",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sb.meetgu.ru/auth/v1/admin/users",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "[REDACTED]"
+            },
+            {
+              "name": "apikey",
+              "value": "[REDACTED]"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"email\": \"{{ $('HTTP Request1').item.json.user.email || ('vk' + $('HTTP Request1').item.json.user.user_id + '@vk.meetgu.ru') }}\",\n  \"password\": \"{{ $('Code').item.json.password }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        240
+      ],
+      "id": "dc1c9886-5c2c-43cd-b1f6-2f79756d5e0b",
+      "name": "HTTP Request",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://id.vk.com/oauth2/auth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "authorization_code"
+            },
+            {
+              "name": "client_id",
+              "value": "52010457"
+            },
+            {
+              "name": "redirect_uri",
+              "value": "https://app.meetgu.ru/login"
+            },
+            {
+              "name": "code",
+              "value": "={{ $json.body.authCode }}"
+            },
+            {
+              "name": "code_verifier",
+              "value": "={{ $json.body.codeVerifier }}"
+            },
+            {
+              "name": "device_id",
+              "value": "={{ $json.body.DeviceId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -400,
+        140
+      ],
+      "id": "0fc3e6a9-4872-4cc1-a786-4fbff8fe08d4",
+      "name": "VK Get Access Token"
+    },
+    {
+      "parameters": {
+        "content": "IF TRUE:\n\nГенерируем OTP для входа\n\nvkID@domain.ru"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        420,
+        20
+      ],
+      "id": "f75ec46b-22d0-4864-bf16-ee8c740cd57b",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "Тут проверяем наличие пользователя по vkId:\n\nНужна функция, которая вернет success: true / false \n"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "aad7ec29-178f-43ab-814f-87aab5c3fb6e",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "1. Получаем данные о пользователе из ВК\n2. Создаем auth.users -> public.users"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        340
+      ],
+      "id": "72fa450c-7712-4fb4-84a5-ad98990920fc",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const password = Array(10).fill(0).map(() => Math.floor(Math.random()*16).toString(16)).join('');\nreturn [{\n  json: {\n    password\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        240
+      ],
+      "id": "b20005b6-5bc5-4d4b-85dd-17c574878588",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "users",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('HTTP Request').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "Name",
+              "fieldValue": "={{ $('HTTP Request1').item.json.user.first_name }} {{ $('HTTP Request1').item.json.user.last_name }}"
+            },
+            {
+              "fieldId": "role",
+              "fieldValue": "Ученик"
+            },
+            {
+              "fieldId": "vk_id",
+              "fieldValue": "={{ $('HTTP Request1').item.json.user.user_id }}"
+            },
+            {
+              "fieldId": "Photo",
+              "fieldValue": "=https://sb.meetgu.ru/storage/v1/object/public/{{ $json.Key }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        140
+      ],
+      "id": "8c9f863b-c386-4d52-9fe0-bca3dca859e5",
+      "name": "Update a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "A84wclCRDmr3uzKM",
+          "name": "MeetGuru"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sb.meetgu.ru/auth/v1/admin/generate_link",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={\"apikey\":\"[REDACTED]\",\"Authorization\":\"Bearer [REDACTED]\"}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\":\"recovery\",\n  \"email\":\"{{ $('HTTP Request1').item.json.user.email || ('vk' + $('HTTP Request1').item.json.user.user_id + '@vk.meetgu.ru') }}\",\n  \"redirect_to\":\"https://app.meetgu.ru/reset_pw\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        140
+      ],
+      "id": "449f7846-7af8-4b7d-b79c-b40b29ad58e3",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3034a70e-b7c1-4a97-afe5-a73a94489d63",
+              "name": "email",
+              "value": "={{ $json.identities[0].identity_data.email }}",
+              "type": "string"
+            },
+            {
+              "id": "e7c109d9-8ebc-4681-ac92-f2ee025269be",
+              "name": "otp",
+              "value": "={{ $json.email_otp }}",
+              "type": "string"
+            },
+            {
+              "id": "e20d593e-4beb-4d90-9a06-0ed3b5eea2d1",
+              "name": "error",
+              "value": "null",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1800,
+        140
+      ],
+      "id": "7032a021-9d43-4b6b-b6fb-32539d43e235",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sb.meetgu.ru/auth/v1/admin/generate_link",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={\"apikey\":\"[REDACTED]\",\"Authorization\":\"Bearer [REDACTED]\"}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\":\"recovery\",\n  \"email\":\"{{ $json.email }}\",\n  \"redirect_to\":\"https://app.meetgu.ru/reset_pw\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        40
+      ],
+      "id": "464a942d-3154-4e75-af4e-6a0740b0ae28",
+      "name": "HTTP Request3"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3034a70e-b7c1-4a97-afe5-a73a94489d63",
+              "name": "email",
+              "value": "={{ $json.identities[0].identity_data.email }}",
+              "type": "string"
+            },
+            {
+              "id": "e7c109d9-8ebc-4681-ac92-f2ee025269be",
+              "name": "otp",
+              "value": "={{ $json.email_otp }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        40
+      ],
+      "id": "cc850029-8c74-4ac5-a429-fc831e3589f4",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "url": "https://id.vk.ru/oauth2/user_info",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "52010457"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('VK Get Access Token').item.json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        240
+      ],
+      "id": "317fdda8-5ff1-4897-b4ac-293e099c24cf",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('HTTP Request1').item.json.user.avatar }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        140
+      ],
+      "id": "5360ba15-cc93-4c6b-9956-cdd78c81929f",
+      "name": "HTTP Request4"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sb.meetgu.ru/storage/v1/object/profile/{{ $now }}.jpg",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "[REDACTED]"
+            },
+            {
+              "name": "authorization",
+              "value": "[REDACTED]"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        140
+      ],
+      "id": "f10bb82b-b14b-4528-86ad-fbe6cc50815a",
+      "name": "HTTP Request6"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "users",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email",
+              "condition": "eq",
+              "keyValue": "={{ $('HTTP Request1').item.json.user.email }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "vk_id",
+              "fieldValue": "={{ $('HTTP Request1').item.json.user.user_id }}"
+            },
+            {
+              "fieldId": "Photo",
+              "fieldValue": "=https://sb.meetgu.ru/storage/v1/object/public/{{ $json.Key }}"
+            },
+            {
+              "fieldId": "Name",
+              "fieldValue": "={{ $('HTTP Request1').item.json.user.first_name }} {{ $('HTTP Request1').item.json.user.last_name }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        340
+      ],
+      "id": "04021302-fbd6-4d38-9bab-b3f85791bad4",
+      "name": "Update a row1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "A84wclCRDmr3uzKM",
+          "name": "MeetGuru"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $('HTTP Request1').item.json.user.avatar }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        340
+      ],
+      "id": "a7224a1d-4aa0-4464-ac77-376863dc276c",
+      "name": "HTTP Request5"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sb.meetgu.ru/storage/v1/object/profile/{{ $now }}.jpg",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "[REDACTED]"
+            },
+            {
+              "name": "authorization",
+              "value": "[REDACTED]"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        340
+      ],
+      "id": "62d54bd0-7517-4c8c-ad4a-ab396c974a27",
+      "name": "HTTP Request7"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sb.meetgu.ru/auth/v1/admin/generate_link",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={\"apikey\":\"[REDACTED]\",\"Authorization\":\"Bearer [REDACTED]\"}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\":\"recovery\",\n  \"email\":\"{{ $json.email }}\",\n  \"redirect_to\":\"https://app.meetgu.ru/reset_pw\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        340
+      ],
+      "id": "72813802-dfe6-4412-8816-b4a13a938f44",
+      "name": "HTTP Request8"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3034a70e-b7c1-4a97-afe5-a73a94489d63",
+              "name": "email",
+              "value": "={{ $json.identities[0].identity_data.email }}",
+              "type": "string"
+            },
+            {
+              "id": "e7c109d9-8ebc-4681-ac92-f2ee025269be",
+              "name": "otp",
+              "value": "={{ $json.email_otp }}",
+              "type": "string"
+            },
+            {
+              "id": "e20d593e-4beb-4d90-9a06-0ed3b5eea2d1",
+              "name": "error",
+              "value": "null",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1800,
+        340
+      ],
+      "id": "fb6cf606-a1d1-469e-9d4f-8f95ad111450",
+      "name": "Edit Fields2"
+    }
+  ],
+  "connections": {
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "VK Get Access Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Public.users.vk.id": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VK Get Access Token": {
+      "main": [
+        [
+          {
+            "node": "Check Public.users.vk.id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a row": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request3": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request4": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request6": {
+      "main": [
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request5": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request7": {
+      "main": [
+        [
+          {
+            "node": "Update a row1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request8": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a row1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "reviewOnly": true
+}

@@ -36,7 +36,7 @@ const realFetch=window.fetch.bind(window);window.fetch=async(url,options={})=>{
 const callbacks={};window.vkCallbacks=callbacks;window.VKIDSDK={Config:{init(){}},ConfigResponseMode:{Callback:1},ConfigSource:{LOWCODE:1},WidgetEvents:{ERROR:'error'},OneTapInternalEvents:{LOGIN_SUCCESS:'success'},OneTap:class{render(){return this;}on(event,callback){callbacks[event]=callback;return this;}}};
 const callbackAuth=location.search.includes('email_confirmation=1')?createClient(location.origin+'/mock-sb','synthetic-anon-key',{auth:{autoRefreshToken:false,persistSession:false,detectSessionInUrl:true},global:{fetch:window.fetch}}).auth:null;
 const auth={...AuthPlugin,publicInstance:{auth:{
- signUp:async credentials=>{record('signup',credentials);if(window.signupError)return {error:{message:window.signupError}};return {data:{user:{id:'11111111-1111-4111-8111-111111111111'},session:mode==='session'?{user:{id:'11111111-1111-4111-8111-111111111111'}}:null},error:null};},
+ signUp:async credentials=>{const {password,...nonSecret}=credentials;record('signup',nonSecret);if(window.signupError)return {error:{message:window.signupError}};return {data:{user:{id:'11111111-1111-4111-8111-111111111111'},session:mode==='session'?{user:{id:'11111111-1111-4111-8111-111111111111'}}:null},error:null};},
  getSession:()=>callbackAuth?callbackAuth.getSession():Promise.resolve({data:{session:null}})
 }},verifyOTP:async value=>{record('verifyOTP',value);}};
 window.wwLib={wwPlugins:{supabaseAuth:auth},wwLog:{error(){}},manager:false};
@@ -86,6 +86,7 @@ try{
         assert.equal(await evaluate('fixtureCalls.find(x=>x.type==="signup").data.email'),email);
         assert.equal(await evaluate('fixtureCalls.find(x=>x.type==="signup").data.options.emailRedirectTo'),origin+'/login?email_confirmation=1');
         assert.equal(await evaluate('fixtureCalls.filter(x=>x.type==="signup-hook").length'),0);
+        assert.equal(await evaluate('JSON.stringify(sessionStorage).includes("synthetic-password")||JSON.stringify(localStorage).includes("synthetic-password")'),false);
         checks.push({name:'no-session registration: '+email,status:'PASS'});
     }
     await open('/registration');await fill('user@mail.ruy');await evaluate('document.querySelector("#registration-email-suggestion button").click()');
@@ -98,6 +99,7 @@ try{
     const tokenPart=o=>Buffer.from(JSON.stringify(o)).toString('base64url');const access=tokenPart({alg:'HS256',typ:'JWT'})+'.'+tokenPart({sub:user.id,aud:'authenticated',role:'authenticated',exp:Math.floor(Date.now()/1000)+3600})+'.synthetic-signature';
     const hash='#access_token='+access+'&refresh_token=synthetic-refresh-token&expires_in=3600&token_type=bearer&type=signup';
     await open('/login?email_confirmation=1'+hash);await until('location.pathname==="/welcome"');assert(network.some(x=>x.path==='/mock-sb/auth/v1/user'));
+    assert.equal(await evaluate('JSON.parse(sessionStorage.getItem("auth-fixture-calls")||"[]").filter(x=>x.type==="signup-hook").length'),0);
     checks.push({name:'real Supabase SDK processes confirmation fragment before welcome redirect',status:'PASS'});
     await open('/login?email_confirmation=1#error=access_denied&error_code=otp_expired');await until('!!document.querySelector("[role=alert]")');assert.equal(await evaluate('location.pathname'),'/login');
     checks.push({name:'expired confirmation stays on login with error',status:'PASS'});

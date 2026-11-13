@@ -10,8 +10,8 @@
       role==='Специалист' ? 'Ученик' : role}], redirectPage: HOME }). The `nickname` is the ONLY place
       the role is carried: the DB trigger handle_new_auth_user() inserts public.users (id, email,
       role = raw_user_meta_data->>'nickname') — so this key/mapping is a hard contract (wrong → null role).
-    - Then POST the n8n webhook 64277b75 { email, password } (query params) — server-side welcome/setup,
-      preserved verbatim as a black box.
+    - With a session, POST the legacy n8n webhook 64277b75: welcome email and registration
+      notifications only. Account setup belongs to the on_auth_user_created DB trigger.
     - With a session → /welcome; without a session → confirmation notice on this form.
       Email confirmation returns through /login?email_confirmation=1 using the existing Auth client.
     - Errors mapped to the same Russian copy («User already registered» → «Данный аккаунт уже
@@ -204,9 +204,9 @@ async function submitRegister() {
             loading.value = false;
             return;
         }
-        // Server-side welcome/setup — preserved verbatim (POST with email+password as query params,
-        // exactly like the WeWeb apiRequest step). Best-effort: a failure here must not strand a user
-        // whose account (auth + public.users via trigger) already exists — proceed to /welcome anyway.
+        // Audited SendEmail branch of BuyCourse: welcome email + Telegram/admin notices only.
+        // No account/access setup. Keep the legacy session path; do not queue this hook or
+        // persist the password for a later confirmation callback. auth/public.users already exist.
         try {
             const url = new URL(N8N_SIGNUP_HOOK);
             url.searchParams.set('email', e);

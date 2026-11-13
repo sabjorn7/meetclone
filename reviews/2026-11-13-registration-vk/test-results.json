@@ -1,7 +1,7 @@
 {
   "unitTests": {
     "command": "node tests/registration-vk.unit.mjs",
-    "passed": 18,
+    "passed": 20,
     "failed": 0
   },
   "browser": {
@@ -106,6 +106,26 @@
         "secret-value"
       ],
       "n8nLiteralAuthHeaders": "all redacted"
+    }
+  },
+  "reviewFollowup": {
+    "parent": "b8a53cd8e18d839b9b2cb6b10b99435d8f33f470",
+    "unitPassed": 20,
+    "browserPassed": 17,
+    "build": "PASS: vite build without postbuild",
+    "productionMutations": false,
+    "checks": [
+      "registration hook notifications only; active account trigger verified read-only",
+      "no delayed registration webhook or password storage",
+      "unlinked email collisions denied before writes/OTP",
+      "claimed email_verified ignored for account linking",
+      "concurrent vk_id changes fail closed"
+    ],
+    "secretsScan": {
+      "changedFiles": 10,
+      "findings": 0,
+      "n8nAuthHeaders": "redacted",
+      "credentialURLs": "not included"
     }
   }
 }

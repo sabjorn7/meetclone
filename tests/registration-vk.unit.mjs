@@ -75,17 +75,18 @@ function runWorkflow(options={}) {
             try {
                 if(n.type.endsWith('.webhook'))output=[{json:{body:{authCode:'synthetic',DeviceId:'synthetic',codeVerifier:'synthetic'}}}];
                 else if(name==='VK Get Access Token')output=[{json:{user_id:42}}];
-                else if(name==='HTTP Request1')output=[{json:{user:{user_id:options.wrongSubject?99:42,...(!options.noEmail?{email}:{}),first_name:'VK',last_name:'User',avatar:options.avatarMissing?'':'https://avatar.example.test/image.jpg'}}}];
+                else if(name==='HTTP Request1')output=[{json:{user:{user_id:options.wrongSubject?99:42,...(!options.noEmail?{email}:{}),...(options.claimedVerified?{email_verified:true,verified:true}:{}),first_name:'VK',last_name:'User',avatar:options.avatarMissing?'':'https://avatar.example.test/image.jpg'}}}];
                 else if(n.type.endsWith('.code'))output=execute('(function(){'+n.parameters.jsCode+'})()',input);
                 else if(n.type.endsWith('.if')){branch=input[0]?.json.id?0:1;output=input;}
                 else if(n.type.endsWith('.supabase')) {
                     const p=n.parameters;assert.equal(p.tableId,'users');
-                    const filter=p.filters.conditions[0];const key=value(filter.keyValue,input);
-                    if(key===undefined||key===null||key==='')throw Error('Unsafe empty filter');
-                    const found=publicRows.filter(r=>String(r[filter.keyName])===String(key));
+                    const filters=p.filters.conditions.map(f=>({name:f.keyName,value:value(f.keyValue,input)}));
+                    if(filters.some(f=>f.value===undefined||f.value===null||f.value===''))throw Error('Unsafe empty filter');
+                    if(name==='Update a row1'&&options.changeLinkAfterGuard)publicRows[0].vk_id='99';
+                    const found=name==='Check Public.users.vk.id'&&options.initialVkMiss?[]:publicRows.filter(r=>filters.every(f=>String(r[f.name])===String(f.value)));
                     if(p.operation==='get')output=found.map(json=>({json:{...json}}));
                     else {
-                        assert.equal(p.operation,'update');assert.equal(filter.keyName,'id');
+                        assert.equal(p.operation,'update');assert.equal(filters[0].name,'id');
                         if(n.name.startsWith('Save ')&&options.photoWriteError)throw Error('Avatar write failed');
                         for(const r of found)for(const f of p.fieldsUi.fieldValues)r[f.fieldId]=value(f.fieldValue,input);
                         output=found.map(json=>({json:{...json}}));
@@ -123,7 +124,7 @@ function runWorkflow(options={}) {
         assert(!name,'workflow cycle');
         assert.equal(JSON.stringify(purchases),snapshot);
         return {result:structuredClone(result),publicRows,authRows,purchases,calls};
-    } catch(error) {error.workflowCalls=calls;throw error;}
+    } catch(error) {error.workflowCalls=calls;error.workflowState={publicRows,authRows,purchases};throw error;}
 }
 
 test('new VK registration: linked UUID and OTP with healthy avatar',()=>{
@@ -152,11 +153,13 @@ test('linked purchased account: stored email wins when VK email is absent/change
     }
 });
 
-for(const noEmail of [false,true])test('retry after legacy partial registration preserves purchased UUID, role and photo; noEmail='+noEmail,()=>{
+for(const noEmail of [false,true])test('email collision with unlinked account refuses OTP and preserves purchases; noEmail='+noEmail,()=>{
     const row={id:uuid,email:noEmail?'vk42@vk.meetgu.ru':'learner@example.test',vk_id:null,role:'Спикер',Name:'Original',Photo:'existing.jpg'};
-    const r=runWorkflow({noEmail,rows:[row],avatar404:true});assert.equal(r.authRows.length,1);assert.equal(r.publicRows.length,1);
-    assert.deepEqual(r.publicRows,[{...row,vk_id:'42'}]);assert.equal(r.result.email,row.email);assert.equal(r.result.otp,'123456');
-    assert.equal(r.purchases[0].owner,uuid);
+    assert.throws(()=>runWorkflow({noEmail,rows:[row],avatar404:true}),e=>{
+        assert.equal(e.code,'VK_ACCOUNT_LINK_REQUIRED');assert.deepEqual(e.workflowState.publicRows,[row]);
+        assert.equal(e.workflowState.authRows.length,1);assert.equal(e.workflowState.purchases[0].owner,uuid);
+        for(const name of ['Update a row1','HTTP Request8','HTTP Request5'])assert(!e.workflowCalls.includes(name));return true;
+    });
 });
 
 test('conflicting vk_id and mismatched VK subject fail closed',()=>{
@@ -165,9 +168,20 @@ test('conflicting vk_id and mismatched VK subject fail closed',()=>{
 });
 
 test('healthy avatar on retry preserves purchased UUID, role and name',()=>{
-    const row={id:uuid,email:'learner@example.test',vk_id:null,role:'Спикер',Name:'Original',Photo:'old.jpg'};
-    const r=runWorkflow({rows:[row]});assert.equal(r.publicRows[0].id,uuid);assert.equal(r.publicRows[0].role,'Спикер');
+    const row={id:uuid,email:'learner@example.test',vk_id:'42',role:'Спикер',Name:'Original',Photo:'old.jpg'};
+    const r=runWorkflow({rows:[row],initialVkMiss:true});assert.equal(r.publicRows[0].id,uuid);assert.equal(r.publicRows[0].role,'Спикер');
     assert.equal(r.publicRows[0].Name,'Original');assert.equal(r.publicRows[0].vk_id,'42');assert.equal(r.purchases[0].owner,uuid);
+});
+
+test('claimed VK email_verified/verified never authorizes a new link',()=>{
+    const row={id:uuid,email:'learner@example.test',vk_id:null,role:'Спикер'};
+    assert.throws(()=>runWorkflow({rows:[row],claimedVerified:true}),e=>e.code==='VK_ACCOUNT_LINK_REQUIRED'&&!e.workflowCalls.includes('HTTP Request8'));
+});
+
+test('a vk_id changed after validation cannot be overwritten or issue OTP',()=>{
+    const row={id:uuid,email:'learner@example.test',vk_id:'42',role:'Спикер'};
+    const r=runWorkflow({rows:[row],initialVkMiss:true,changeLinkAfterGuard:true});
+    assert.equal(r.publicRows[0].vk_id,'99');assert.equal(r.publicRows[0].id,uuid);assert(!r.calls.includes('HTTP Request8'));
 });
 
 test('ambiguous public email match is rejected instead of linking multiple UUIDs',()=>{

@@ -1,62 +1,15 @@
-diff --git a/src/_front/views/LoginPage.vue b/src/_front/views/LoginPage.vue
-index a9c8691..375c5e4 100644
---- a/src/_front/views/LoginPage.vue
-+++ b/src/_front/views/LoginPage.vue
-@@ -128,6 +128,8 @@
- import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
- import { useRoute } from 'vue-router';
- import { getSupabase, readStoredSession, isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
-+import { confirmationSession } from '@/_front/auth/registration.js';
-+import { readVkResponse } from '@/_front/auth/vkResponse.js';
- 
- const route = useRoute();
- 
-@@ -249,10 +251,11 @@ async function onVkSuccess(code, deviceId) {
-         await wait(1500);
-         const codeVerifier = readCookie('vkid_sdk:codeVerifier');
-         await wait(1500);
--        const res = await fetch(N8N_VK, {
-+        const response = await fetch(N8N_VK, {
-             method: 'POST', headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ authCode: code, DeviceId: deviceId, codeVerifier }),
--        }).then((r) => r.json());
-+        });
-+        const res = await readVkResponse(response);
-         await window.wwLib.wwPlugins.supabaseAuth.verifyOTP({ type: 'email', email: res.email, token: res.otp });
-         window.location.href = HOME;
-     } catch (err) {
-@@ -260,8 +263,21 @@ async function onVkSuccess(code, deviceId) {
-     }
- }
- 
--onMounted(() => {
-+onMounted(async () => {
-     ensureFonts();
-+    if (route.query.email_confirmation === '1') {
-+        loading.value = true;
-+        try {
-+            await confirmationSession(window.wwLib?.wwPlugins?.supabaseAuth?.publicInstance?.auth, window.location.hash);
-+            window.location.replace('/welcome');
-+            return;
-+        } catch {
-+            authError.value = 'Не удалось подтвердить почту. Ссылка могла истечь. Попробуйте войти по почте или запросите новое письмо.';
-+        } finally { loading.value = false; }
-+        loadVkSdk();
-+        nextTick(() => { ready.value = true; });
-+        return;
-+    }
-     // already-logged-in guard (the WeWeb page redirects home onload). ?preview=1 stays for previewing.
-     if (route.query.preview !== '1' && isLikelyLoggedIn()) { window.location.replace(HOME); return; }
-     loadVkSdk();
 diff --git a/src/_front/views/RegistrationPage.vue b/src/_front/views/RegistrationPage.vue
-index b61fa98..b188ac1 100644
 --- a/src/_front/views/RegistrationPage.vue
 +++ b/src/_front/views/RegistrationPage.vue
-@@ -12,10 +12,11 @@
+@@ -10,12 +10,13 @@
+       role==='Специалист' ? 'Ученик' : role}], redirectPage: HOME }). The `nickname` is the ONLY place
+       the role is carried: the DB trigger handle_new_auth_user() inserts public.users (id, email,
        role = raw_user_meta_data->>'nickname') — so this key/mapping is a hard contract (wrong → null role).
-     - Then POST the n8n webhook 64277b75 { email, password } (query params) — server-side welcome/setup,
-       preserved verbatim as a black box.
+-    - Then POST the n8n webhook 64277b75 { email, password } (query params) — server-side welcome/setup,
+-      preserved verbatim as a black box.
 -    - On success → /welcome (change-page 280224c6 in the WeWeb flow).
++    - With a session, POST the legacy n8n webhook 64277b75: welcome email and registration
++      notifications only. Account setup belongs to the on_auth_user_created DB trigger.
 +    - With a session → /welcome; without a session → confirmation notice on this form.
 +      Email confirmation returns through /login?email_confirmation=1 using the existing Auth client.
      - Errors mapped to the same Russian copy («User already registered» → «Данный аккаунт уже
@@ -100,7 +53,7 @@ index b61fa98..b188ac1 100644
  import { useRoute } from 'vue-router';
  import { isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
  
-@@ -127,6 +139,9 @@ const route = useRoute();
+@@ -127,6 +139,9 @@
  const ROLES = ['Специалист', 'Спикер', 'Учебное заведение'];
  
  const email = ref('');
@@ -110,7 +63,7 @@ index b61fa98..b188ac1 100644
  const role = ref('');
  const password = ref('');
  const password2 = ref('');
-@@ -144,10 +159,7 @@ const year = new Date().getFullYear();
+@@ -144,10 +159,7 @@
  
  const HOME = '/';
  const WELCOME = '/welcome';
@@ -122,7 +75,7 @@ index b61fa98..b188ac1 100644
  const N8N_SIGNUP_HOOK = 'https://n8n.meetgu.ru/webhook/64277b75-849f-45c6-81bc-64da11a7d530';
  const N8N_VK = 'https://n8n.meetgu.ru/webhook/auth_vk';
  
-@@ -169,6 +181,7 @@ async function submitRegister() {
+@@ -169,6 +181,7 @@
      const p = password.value;
      const p2 = password2.value;
      if (!e || !p) { authError.value = 'Введите почту и пароль'; return; }
@@ -130,7 +83,7 @@ index b61fa98..b188ac1 100644
      if (!role.value) { authError.value = 'Выберите, кто вы'; return; }
      if (p.length < 6) { authError.value = 'Пароль должен быть не короче 6 символов'; return; }
      if (p !== p2) { authError.value = 'Пароли не совпадают'; return; }
-@@ -178,12 +191,19 @@ async function submitRegister() {
+@@ -178,15 +191,22 @@
      try {
          // Специалист is the UI label for the «Ученик» role — the DB trigger reads `nickname` verbatim.
          const nickname = role.value === 'Специалист' ? 'Ученик' : role.value;
@@ -142,16 +95,22 @@ index b61fa98..b188ac1 100644
              metadata: [{ key: 'nickname', value: nickname }],
 +            emailRedirectTo: confirmationRedirect(window.location.origin),
          });
+-        // Server-side welcome/setup — preserved verbatim (POST with email+password as query params,
+-        // exactly like the WeWeb apiRequest step). Best-effort: a failure here must not strand a user
+-        // whose account (auth + public.users via trigger) already exists — proceed to /welcome anyway.
 +        if (!result?.session) {
 +            confirmationEmail.value = e;
 +            confirmationSent.value = true;
 +            loading.value = false;
 +            return;
 +        }
-         // Server-side welcome/setup — preserved verbatim (POST with email+password as query params,
-         // exactly like the WeWeb apiRequest step). Best-effort: a failure here must not strand a user
-         // whose account (auth + public.users via trigger) already exists — proceed to /welcome anyway.
-@@ -245,10 +265,11 @@ async function onVkSuccess(code, deviceId) {
++        // Audited SendEmail branch of BuyCourse: welcome email + Telegram/admin notices only.
++        // No account/access setup. Keep the legacy session path; do not queue this hook or
++        // persist the password for a later confirmation callback. auth/public.users already exist.
+         try {
+             const url = new URL(N8N_SIGNUP_HOOK);
+             url.searchParams.set('email', e);
+@@ -245,10 +265,11 @@
          await wait(1500);
          const codeVerifier = readCookie('vkid_sdk:codeVerifier');
          await wait(1500);
@@ -165,7 +124,7 @@ index b61fa98..b188ac1 100644
          await window.wwLib.wwPlugins.supabaseAuth.verifyOTP({ type: 'email', email: res.email, token: res.otp });
          window.location.href = HOME;
      } catch (err) {
-@@ -324,6 +345,9 @@ function ensureFonts() {
+@@ -324,6 +345,9 @@
  .pd-auth__sub { margin: 8px 0 0; color: var(--ink-2); font-size: 0.98rem; }
  
  .pd-auth__form { display: flex; flex-direction: column; gap: 16px; margin-top: 26px; }
@@ -175,11 +134,59 @@ index b61fa98..b188ac1 100644
  .pd-field { display: flex; flex-direction: column; gap: 7px; }
  .pd-field__label { font-size: 0.85rem; font-weight: 600; color: var(--ink-2); }
  .pd-field__wrap { position: relative; display: flex; }
+diff --git a/src/_front/views/LoginPage.vue b/src/_front/views/LoginPage.vue
+--- a/src/_front/views/LoginPage.vue
++++ b/src/_front/views/LoginPage.vue
+@@ -128,6 +128,8 @@
+ import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
+ import { useRoute } from 'vue-router';
+ import { getSupabase, readStoredSession, isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
++import { confirmationSession } from '@/_front/auth/registration.js';
++import { readVkResponse } from '@/_front/auth/vkResponse.js';
+ 
+ const route = useRoute();
+ 
+@@ -249,10 +251,11 @@
+         await wait(1500);
+         const codeVerifier = readCookie('vkid_sdk:codeVerifier');
+         await wait(1500);
+-        const res = await fetch(N8N_VK, {
++        const response = await fetch(N8N_VK, {
+             method: 'POST', headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ authCode: code, DeviceId: deviceId, codeVerifier }),
+-        }).then((r) => r.json());
++        });
++        const res = await readVkResponse(response);
+         await window.wwLib.wwPlugins.supabaseAuth.verifyOTP({ type: 'email', email: res.email, token: res.otp });
+         window.location.href = HOME;
+     } catch (err) {
+@@ -260,8 +263,21 @@
+     }
+ }
+ 
+-onMounted(() => {
++onMounted(async () => {
+     ensureFonts();
++    if (route.query.email_confirmation === '1') {
++        loading.value = true;
++        try {
++            await confirmationSession(window.wwLib?.wwPlugins?.supabaseAuth?.publicInstance?.auth, window.location.hash);
++            window.location.replace('/welcome');
++            return;
++        } catch {
++            authError.value = 'Не удалось подтвердить почту. Ссылка могла истечь. Попробуйте войти по почте или запросите новое письмо.';
++        } finally { loading.value = false; }
++        loadVkSdk();
++        nextTick(() => { ready.value = true; });
++        return;
++    }
+     // already-logged-in guard (the WeWeb page redirects home onload). ?preview=1 stays for previewing.
+     if (route.query.preview !== '1' && isLikelyLoggedIn()) { window.location.replace(HOME); return; }
+     loadVkSdk();
 diff --git a/src/components/plugins/plugin-1fa0dd68-5069-436c-9a7d-3b54c340f1fa/src/wwPlugin.js b/src/components/plugins/plugin-1fa0dd68-5069-436c-9a7d-3b54c340f1fa/src/wwPlugin.js
-index 3b9c744..7d4c92d 100644
 --- a/src/components/plugins/plugin-1fa0dd68-5069-436c-9a7d-3b54c340f1fa/src/wwPlugin.js
 +++ b/src/components/plugins/plugin-1fa0dd68-5069-436c-9a7d-3b54c340f1fa/src/wwPlugin.js
-@@ -158,17 +158,17 @@ export default {
+@@ -158,17 +158,17 @@
              wwLib.wwLog.error(err);
          }
      },
@@ -201,8 +208,6 @@ index 3b9c744..7d4c92d 100644
              const { data, error } = await this.publicInstance.auth.signUp(
                  type === 'email'
 diff --git a/src/_front/auth/registration.js b/src/_front/auth/registration.js
-new file mode 100644
-index 0000000..62fae53
 --- /dev/null
 +++ b/src/_front/auth/registration.js
 @@ -0,0 +1,37 @@
@@ -244,8 +249,6 @@ index 0000000..62fae53
 +    return data.session;
 +}
 diff --git a/src/_front/auth/vkResponse.js b/src/_front/auth/vkResponse.js
-new file mode 100644
-index 0000000..cfce806
 --- /dev/null
 +++ b/src/_front/auth/vkResponse.js
 @@ -0,0 +1,12 @@

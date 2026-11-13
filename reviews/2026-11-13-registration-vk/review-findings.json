@@ -1,0 +1,47 @@
+{
+  "workflowId": "6rEQ42XwaLMFcvbB",
+  "updatedAt": "2026-11-11T09:11:31.899Z",
+  "entry": "SendEmail",
+  "path": "64277b75-849f-45c6-81bc-64da11a7d530",
+  "nodes": [
+    {
+      "name": "SendEmail",
+      "operation": "POST webhook"
+    },
+    {
+      "name": "HTTP Request",
+      "operation": "Unisender welcome email",
+      "usesPassword": true
+    },
+    {
+      "name": "HTTP Request4",
+      "operation": "Telegram registration notification",
+      "usesPassword": false
+    },
+    {
+      "name": "AlertEmail_NewUser",
+      "operation": "Unisender administrator registration notification",
+      "usesPassword": false
+    }
+  ],
+  "accountWrites": false,
+  "paymentWrites": false,
+  "accountSetupFunction": "public.handle_new_auth_user",
+  "accountSetupVerified": true,
+  "trigger": {
+    "name": "on_auth_user_created",
+    "enabled": "O",
+    "event": "AFTER INSERT ON auth.users",
+    "function": "public.handle_new_auth_user",
+    "writes": "public.users(id,email,role)",
+    "roleSource": "NEW.raw_user_meta_data->>'nickname'"
+  },
+  "implication": "The hook is notifications only; no-session signup and confirmation callback must not queue it or persist a password. Welcome/admin/Telegram notifications from this legacy branch are omitted for confirmation-required signup.",
+  "vk": {
+    "source": "https://raw.githubusercontent.com/VKCOM/vkid-web-sdk/v2.6.0/src/auth/types.ts",
+    "observedContract": "UserInfoResult.user is Partial<UserData>; email string, no email_verified ownership assertion in the declared contract",
+    "conclusion": "Email ownership guarantees not established; email equality is not permission to bind an existing account",
+    "policy": "Only an existing matching public.users.vk_id permits existing-account OTP; unlinked/conflicting accounts fail closed",
+    "legacyPartialAccounts": "No automatic repair based on email or fallback address; existing email login or separately verified recovery required"
+  }
+}

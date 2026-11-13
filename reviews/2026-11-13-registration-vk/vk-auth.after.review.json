@@ -467,6 +467,11 @@
               "keyName": "id",
               "condition": "eq",
               "keyValue": "={{ $('Validate existing VK account').item.json.id }}"
+            },
+            {
+              "keyName": "vk_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Code').item.json.vkId }}"
             }
           ]
         },
@@ -654,7 +659,7 @@
         640
       ],
       "parameters": {
-        "jsCode": "function existingVkAccount(rows, identity) {\n    if (rows.length !== 1) throw new Error('Existing VK account is missing or ambiguous');\n    const row = rows[0];\n    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(row.id || '')\n        || typeof row.email !== 'string' || row.email.trim().toLowerCase() !== identity.email\n        || (row.vk_id != null && row.vk_id !== '' && String(row.vk_id) !== identity.vkId)) {\n        throw new Error('Existing account does not match VK identity');\n    }\n    return { id: row.id, email: row.email, vk_id: identity.vkId };\n}\nconst account=existingVkAccount($input.all().map(i=>i.json), $('Code').item.json);\nreturn [{json:account,pairedItem:{item:0}}];"
+        "jsCode": "function existingVkAccount(rows, identity) {\n    if (rows.length !== 1) throw new Error('Existing VK account is missing or ambiguous');\n    const row = rows[0];\n    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(row.id || '')\n        || typeof row.email !== 'string' || row.email.trim().toLowerCase() !== identity.email\n        || (row.vk_id != null && row.vk_id !== '' && String(row.vk_id) !== identity.vkId)) {\n        throw new Error('Existing account does not match VK identity');\n    }\n    // Matching email (including our fallback address) is not proof of account ownership.\n    // A legacy partial registration must be recovered through the existing email login,\n    // not silently linked using an unverified VK email claim.\n    if (String(row.vk_id || '') !== identity.vkId) {\n        const error = new Error('VK_ACCOUNT_LINK_REQUIRED: sign in to the existing account by email');\n        error.code = 'VK_ACCOUNT_LINK_REQUIRED';\n        throw error;\n    }\n    return { id: row.id, email: row.email, vk_id: identity.vkId };\n}\nconst account=existingVkAccount($input.all().map(i=>i.json), $('Code').item.json);\nreturn [{json:account,pairedItem:{item:0}}];"
       }
     },
     {
@@ -707,6 +712,11 @@
               "keyName": "id",
               "condition": "eq",
               "keyValue": "={{ $('Validate existing VK account').item.json.id }}"
+            },
+            {
+              "keyName": "vk_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Code').item.json.vkId }}"
             }
           ]
         },

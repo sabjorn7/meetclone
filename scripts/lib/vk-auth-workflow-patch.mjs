@@ -24,6 +24,14 @@ export function existingVkAccount(rows, identity) {
         || (row.vk_id != null && row.vk_id !== '' && String(row.vk_id) !== identity.vkId)) {
         throw new Error('Existing account does not match VK identity');
     }
+    // Matching email (including our fallback address) is not proof of account ownership.
+    // A legacy partial registration must be recovered through the existing email login,
+    // not silently linked using an unverified VK email claim.
+    if (String(row.vk_id || '') !== identity.vkId) {
+        const error = new Error('VK_ACCOUNT_LINK_REQUIRED: sign in to the existing account by email');
+        error.code = 'VK_ACCOUNT_LINK_REQUIRED';
+        throw error;
+    }
     return { id: row.id, email: row.email, vk_id: identity.vkId };
 }
 
@@ -79,8 +87,12 @@ export function patchVkAuth(workflow) {
     w.connections[lookup.name] = edge([guard.name]);
     w.connections[guard.name] = edge(['Update a row1']);
     const retry = node('Update a row1');
-    retry.parameters.filters = { conditions: [{ keyName: 'id', condition: 'eq', keyValue: "={{ $('Validate existing VK account').item.json.id }}" }] };
-    // A retry must not overwrite the existing role, name, photo, email or UUID.
+    retry.parameters.filters = { conditions: [
+        { keyName: 'id', condition: 'eq', keyValue: "={{ $('Validate existing VK account').item.json.id }}" },
+        { keyName: 'vk_id', condition: 'eq', keyValue: `={{ ${identity}.vkId }}` },
+    ] };
+    // Only an already linked identity may continue, including concurrent/retried runs.
+    // The vk_id predicate also prevents replacing a link changed after validation.
     retry.parameters.fieldsUi.fieldValues = [{ fieldId: 'vk_id', fieldValue: `={{ ${identity}.vkId }}` }];
     w.connections['Update a row1'] = edge(['HTTP Request5']);
 

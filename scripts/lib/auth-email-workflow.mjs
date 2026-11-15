@@ -66,7 +66,8 @@ return [{json: result}];`),
     add('auth-mail-result', 'Sanitized result', 'code', 2, {
         jsCode: code([hookFailure, finishAuthEmail], "return [{json:finishAuthEmail($input.first().json, $('Assess delivery').first().json)}];"),
     }, 2160, -200);
-    add('auth-mail-response', 'Reply to GoTrue', 'respondToWebhook', 1.4, {
+    // Installed n8n 1.90.2 supports responder versions through 1.2 (not 1.4).
+    add('auth-mail-response', 'Reply to GoTrue', 'respondToWebhook', 1.2, {
         respondWith: 'json', responseBody: '={{ JSON.stringify($json.body) }}',
         options: { responseCode: '={{ $json.status }}', responseHeaders: { entries: [
             { name: 'Content-Type', value: 'application/json' }, { name: 'Cache-Control', value: 'no-store' },

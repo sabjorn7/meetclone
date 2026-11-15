@@ -10,9 +10,9 @@ const password = 'Fixture-only-Password-123!';
 const checks = [];
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 function check(condition, label) { if (!condition) throw Error(label); }
-async function request(url, { method = 'GET', data, headers = {}, raw } = {}) {
+async function request(url, { method = 'GET', data, headers = {}, raw, timeout = 15000 } = {}) {
     const response = await fetch(url, { method, headers: { ...(data || raw ? { 'content-type': 'application/json' } : {}), ...headers },
-        body: raw || (data ? JSON.stringify(data) : undefined), redirect: 'manual', signal: AbortSignal.timeout(15000) });
+        body: raw || (data ? JSON.stringify(data) : undefined), redirect: 'manual', signal: AbortSignal.timeout(timeout) });
     const text = await response.text(); let json; try { json = JSON.parse(text); } catch {}
     return { status: response.status, headers: response.headers, json, text };
 }
@@ -24,15 +24,18 @@ async function ready() {
     const deadline = Date.now() + 150000;
     let attempts = 0;
     while (Date.now() < deadline) {
+        const state = { auth: 0, n8n: 0, hook: 0 };
+        let authReady = false;
         try {
-            const r = await request(auth + '/health');
-            const n = await fetch('http://n8n:5678/healthz', { signal: AbortSignal.timeout(2000) });
-            if (r.status === 200 && r.json?.version === 'v2.171.0' && n.status === 200) {
-                const hook = await request(hookUrl, { method: 'POST', data: {} });
-                if (hook.status === 401) return; // warm, configured real Code node; no sending/DB access
-                if (++attempts % 20 === 0) console.log('Waiting for fixture webhook; HTTP status ' + hook.status);
-            }
+            const r = await request(auth + '/health', { timeout: 2000 }); state.auth = r.status;
+            authReady = r.status === 200 && r.json?.version === 'v2.171.0';
         } catch {}
+        try { state.n8n = (await fetch('http://n8n:5678/healthz', { signal: AbortSignal.timeout(2000) })).status; } catch {}
+        if (authReady && state.n8n === 200) {
+            try { state.hook = (await request(hookUrl, { method: 'POST', data: {}, timeout: 2000 })).status; } catch {}
+            if (state.hook === 401) return; // warm configured Code node; no sending/DB access
+        }
+        if (++attempts % 20 === 0) console.log(JSON.stringify({ fixtureReadinessHttpStatus: state }));
         await sleep(1000);
     }
     throw Error('fixture_runtime_not_ready');

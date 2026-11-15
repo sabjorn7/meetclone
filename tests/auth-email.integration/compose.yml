@@ -86,6 +86,7 @@ services:
       - ${MG_AUTH_IT_FIXTURE_DIR}/workflow.json:/fixture-workflow.json:ro
       - ${MG_AUTH_IT_FIXTURE_DIR}/ca.crt:/fixture-ca.crt:ro
       - ./start-n8n.sh:/fixture-start.sh:ro
+      - ./diagnostics.mjs:/fixture-diagnostics.mjs:ro
   fixture:
     image: node:20-alpine
     command: [node, /tests/proxy.mjs]

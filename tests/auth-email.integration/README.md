@@ -1,10 +1,11 @@
 This is a disposable integration stack, not a production deployment.
 
-Run `bash tests/auth-email.integration/run.sh` on a local/disposable Docker Engine
+Run `MG_AUTH_IT_ALLOW_LOCAL=1 bash tests/auth-email.integration/run.sh` on a local/disposable Docker Engine
 with Compose, Node 20+ and OpenSSL. Nothing is installed by the script. The same
 test runs in GitHub Actions only for pushes to `feat/auth-email-hook-20261113`
 affecting the integration/transport files; it has read-only repository permission
 and does not reference any GitHub repository secrets or deployment credentials.
+Remote Docker hosts/contexts are rejected; CI uses the runner's local Unix-socket engine.
 
 The stack runs real `supabase/gotrue:v2.171.0`, real n8n `1.90.2` (the version
 reported by the production read-only health check), PostgreSQL 15 and PostgREST.

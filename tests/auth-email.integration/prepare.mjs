@@ -32,9 +32,8 @@ create schema auth authorization supabase_auth_admin;
 create extension if not exists pgcrypto with schema public;
 create extension if not exists "uuid-ossp" with schema public;
 grant usage,create on schema public to supabase_auth_admin;
-create function auth.role() returns text language sql stable as $$
-select coalesce(nullif(current_setting('request.jwt.claim.role',true),''), nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role')
-$$;
+-- Native GoTrue migrations must create/own auth.role()/auth.uid(); do not pre-create
+-- conflicting stand-ins under the postgres owner before the Auth migration runner.
 create table public.fixture_profiles(user_id uuid primary key,email text,role text);
 alter table public.fixture_profiles enable row level security;
 revoke all on public.fixture_profiles from public,anon,authenticated;

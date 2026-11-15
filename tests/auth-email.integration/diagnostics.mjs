@@ -17,4 +17,6 @@ const rules = {
     bind_permission_failure: /EACCES|EPERM/i,
 };
 const labels = Object.entries(rules).filter(([, pattern]) => pattern.test(text)).map(([label]) => label);
-console.log(JSON.stringify({ fixtureDiagnosticLabels: labels, errorLines: text.split('\n').filter(l => /error|fatal|failed/i.test(l)).length }));
+const normalized = text.replaceAll('\\"', '"');
+const missingObjects = [...normalized.matchAll(/(?:function|relation|schema) ["']?([a-zA-Z_][a-zA-Z0-9_.]{0,80})(?:\([a-zA-Z0-9_,. ]*\))?["']? does not exist/g)].map(m => m[1]);
+console.log(JSON.stringify({ fixtureDiagnosticLabels: labels, missingDatabaseObjects: [...new Set(missingObjects)], errorLines: text.split('\n').filter(l => /error|fatal|failed/i.test(l)).length }));

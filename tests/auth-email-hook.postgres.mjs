@@ -20,8 +20,10 @@ try {
     // Unix socket only: listen_addresses is empty; no external database can be contacted.
     execFileSync(path.join(binaries, 'pg_ctl'), ['-D', db, '-l', path.join(work, 'postgres.log'), '-o', `-k ${work} -p ${port} -c listen_addresses='' -c fsync=off`, '-w', 'start'], { stdio: 'pipe' });
     started = true;
-    sql("create role anon; create role authenticated; create role service_role; create schema auth; create function auth.role() returns text language sql as $$select current_setting('request.jwt.claim.role',true)$$;");
+    sql("create role anon; create role authenticated; create role service_role; create schema auth;");
     execFileSync(path.join(binaries, 'psql'), [...args, '-f', new URL('../supabase/migrations/pending_auth_email_hook_dedup.sql', import.meta.url).pathname], { stdio: 'pipe' });
+    // Like the integration bootstrap: native Auth helpers can be installed after the ledger RPCs.
+    sql("create function auth.role() returns text language sql as $$select current_setting('request.jwt.claim.role',true)$$;");
     const key = 'a'.repeat(64), owner = crypto.randomUUID();
     const results = await Promise.all(Array.from({ length: 16 }, () => exec(path.join(binaries, 'psql'), [...args, '-c', service(`select decision from public.claim_auth_email_delivery('${key}','${owner}');`)], { encoding: 'utf8' })));
     const decisions = results.map(r => r.stdout.trim().split('\n').at(-1));

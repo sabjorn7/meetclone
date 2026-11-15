@@ -6,6 +6,19 @@ if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; t
   echo 'Docker Engine + Compose are required. No tools were installed.' >&2
   exit 2
 fi
+if [[ "${GITHUB_ACTIONS:-false}" != true && "${MG_AUTH_IT_ALLOW_LOCAL:-0}" != 1 ]]; then
+  echo 'Set MG_AUTH_IT_ALLOW_LOCAL=1 only for an explicitly disposable local Docker engine.' >&2
+  exit 2
+fi
+if [[ -n "${DOCKER_HOST:-}" && "$DOCKER_HOST" != unix://* ]]; then
+  echo 'Refusing a remote Docker host for this isolated fixture.' >&2
+  exit 2
+fi
+engine_endpoint="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
+if [[ "$engine_endpoint" != unix://* ]]; then
+  echo 'Refusing a remote Docker context for this isolated fixture.' >&2
+  exit 2
+fi
 task_root="$(mktemp -d "${TMPDIR:-/tmp}/mg-auth-mail-it.XXXXXX")"
 fixture_dir="$task_root/fixture"
 project="mg-auth-mail-it-${GITHUB_RUN_ID:-local}-$$"

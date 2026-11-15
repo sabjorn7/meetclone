@@ -51,7 +51,7 @@ export function verifyAuthEmail(raw, headers, config, crypto, now = Date.now()) 
         const url = 'https://sb.meetgu.ru/auth/v1/verify?token=' + encodeURIComponent(data.token_hash)
             + '&type=signup&redirect_to=' + encodeURIComponent(redirect);
         const mail = confirmationEmail(url);
-        // An opaque high-entropy token hash is hashed again; no token/URL/email is persisted in the ledger.
+        // Hash native token material with identity again; no token/URL/email is persisted in the ledger.
         // Do not key on webhook-id: GoTrue v2.171.0 regenerates it for transport retries.
         const deliveryKey = crypto.createHash('sha256').update(`signup\n${event.user.id}\n${event.user.email}\n${data.token_hash}`).digest('hex');
         const deadline = Math.min(now + 3600, Number(timestamp) * 1000 + 4400);

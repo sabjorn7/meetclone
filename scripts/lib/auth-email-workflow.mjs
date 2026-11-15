@@ -9,7 +9,7 @@ export function authEmailWorkflow() {
     const code = (functions, body) => functions.map(f => f.toString()).join('\n') + '\n' + body;
     add('auth-mail-webhook', 'GoTrue Auth email', 'webhook', 2, {
         httpMethod: 'POST', path: 'supabase-auth-email-meetguru', responseMode: 'responseNode', options: { rawBody: true },
-    }, 0);
+    }, 0, 0, { webhookId: '2dce2590-313f-42d8-92ee-b26a8ad38822' });
     add('auth-mail-verify', 'Verify signature', 'code', 2, {
         jsCode: code([hookFailure, confirmationEmail, verifyAuthEmail], `
 let result;

@@ -179,6 +179,8 @@ for (const fault of ['ledgerDown', 'providerError', 'providerTimeout', 'finishDo
 });
 test('workflow secrets and payload retention are disabled; SQL is private and unprivileged roles cannot execute RPCs', () => {
     const w = authEmailWorkflow(); const serialized = JSON.stringify(w);
+    assert.match(w.nodes.find(n => n.type.endsWith('.webhook')).webhookId, /^[0-9a-f-]{36}$/);
+    assert.equal(w.nodes.find(n => n.type.endsWith('.respondToWebhook')).typeVersion, 1.2);
     assert.equal(w.settings.saveDataErrorExecution, 'none'); assert.equal(w.settings.saveDataSuccessExecution, 'none');
     assert.equal(w.settings.saveManualExecutions, false); assert.equal(w.settings.saveExecutionProgress, false);
     assert.equal(w.settings.executionTimeout, 5); assert(!serialized.includes(config.unisenderKey)); assert(!serialized.includes(secret));

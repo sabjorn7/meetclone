@@ -158,17 +158,17 @@ export default {
             wwLib.wwLog.error(err);
         }
     },
-    async signUp({ type = 'email', email, phone, channel, password, metadata, redirectPage, captchaToken }) {
+    async signUp({ type = 'email', email, phone, channel, password, metadata, redirectPage, emailRedirectTo: explicitEmailRedirectTo, captchaToken }) {
         if (!this.publicInstance) throw new Error('Invalid Supabase Auth configuration.');
         try {
             const user_metadata = Array.isArray(metadata)
                 ? metadata.reduce((obj, item) => ({ ...obj, [item.key]: item.value }), {})
                 : metadata;
             const emailRedirectTo =
-                redirectPage &&
+                explicitEmailRedirectTo || (redirectPage &&
                 (wwLib.manager
                     ? `${window.location.origin}/${redirectPage}`
-                    : `${window.location.origin}${wwLib.wwPageHelper.getPagePath(redirectPage)}`);
+                    : `${window.location.origin}${wwLib.wwPageHelper.getPagePath(redirectPage)}`));
 
             const { data, error } = await this.publicInstance.auth.signUp(
                 type === 'email'

@@ -1,0 +1,60 @@
+MeetGuru Auth mail follow-up — 2026-11-15
+
+Branch: feat/auth-email-hook-20261113; no merge or production deployment.
+Tested code SHA: a3b627f00c7a4c078445ec7ff9934d099a014587
+Successful isolated CI: https://github.com/sabjorn7/meetclone/actions/runs/43721076494
+Job: 132832979710; artifact auth-email-redacted-results, ID 14164951008.
+
+Actual usage audit
+See AUTH_EMAIL_INVENTORY.txt. All 15 active workflows and 34 published WeWeb JSON
+files were read, plus native routes/SDK call sites. Only signup/resend requires
+this transport. VK and ResetPw use admin generate_link recovery, which bypasses
+Send Email Hook. Purchases/course/subscription messages use separate API nodes.
+No unused templates or new Auth features were added. Unsupported signed actions
+still fail explicitly. Auth audit-log permission was denied: external/manual API
+clients remain an operator verification gate before enabling the GLOBAL hook.
+
+Minimal compatibility corrections since d73431c
+- Native GoTrue v2.171.0 token_hash is SHA-224 (56 hex, optional pkce_), not 64 hex.
+  The separate ledger SHA-256 key and pending SQL are unchanged.
+- Accept the actual successful Unisender legacy result.email_id response observed
+  read-only in historical BuyCourse execution 42426, alongside the documented
+  error_checking=1 array. HTTP 200/error/unknown replies alone are never success.
+- RespondToWebhook uses version 1.2 supported by installed n8n 1.90.2.
+- Explicit webhookId ensures the configured short webhook path is registered.
+- Fixture-only native Auth migration ownership/search_path corrections.
+
+Checks
+- Backend/unit/generated-workflow: 20/20 PASS. Frontend helper: 6/6 PASS.
+- Local disposable PostgreSQL: PASS, 16 simultaneous claims, exactly one sender;
+  authorization/owner/RLS/GRANT/reconnect/uncertain-state checks passed.
+- Real GoTrue v2.171.0 + real n8n 1.90.2 + real PostgREST + PostgreSQL in a closed
+  internal Docker network: 14/14 PASS. No published ports/production credentials
+  or application egress. Unisender is a contract mock; zero real emails.
+- Actual native signup, original-body HMAC, tampered body rejection, exact JSON {}
+  content-type/reply, native verification session, profile UUID/role preservation.
+- Native resend/rate limit/token rotation/old-link invalidation and expired link.
+- Both provider success formats; JSON/recipient/HTML errors; provider timeout;
+  claim/finish RPC outage, uncertain retries blocked, no duplicate sending.
+- Empty hook response is rejected by real GoTrue. Delayed successful reply fails
+  at the real GoTrue five-second deadline (observed scenario approximately 5.08s).
+- Admin recovery generate_link + OTP verify for VK/reset compatibility passed
+  with confirmation enabled and zero hook calls. No existing workflow imported.
+- Frontend and pending SQL diff since d73431c is empty. Prior 26 browser cases and
+  Vite build remain historical checks of that unchanged frontend; not rerun here.
+- Read-only final n8n metadata comparison: all 22 workflows have unchanged active
+  flags and updatedAt values, including the old inactive candidate.
+
+Readiness
+The isolated runtime contract is verified. No production SQL/Auth/frontend/workflow
+changes were made and no email or real OAuth test was performed.
+The inactive production candidate is still the old version and must NOT be enabled
+as-is. On separate approval, import the tested Git export, bind server-only secrets
+and crypto access on the actual runner, follow AUTH_EMAIL_SETUP.txt, and apply the
+previously prepared SQL manually. Do not enable autoconfirm=false beforehand.
+Confirm absence of external/manual unsupported Auth mail clients. Actual Unisender
+quota, sender/list permissions, latency and inbox delivery still need a separately
+approved test account/send; the isolated contract mock cannot establish these.
+Exactly-once external delivery across provider response loss/GoTrue rollback is
+not guaranteed; uncertain same-token attempts remain blocked and native resend
+creates a new token under the existing rate limit.

@@ -1,14 +1,53 @@
 {
-  "backend_tests": { "passed": 18, "failed": 0, "transport": "mocked" },
-  "frontend_helper_tests": { "passed": 6, "failed": 0 },
-  "postgres": { "environment": "disposable local Unix-socket PostgreSQL", "concurrent_claims": 16, "senders": 1, "authorization_checks": "PASS" },
-  "browser": { "passed": 26, "failed": 0, "external_network": "blocked", "accounts": "synthetic", "viewport_widths": [390, 1366] },
+  "backend_tests": {
+    "passed": 20,
+    "failed": 0,
+    "transport": "mocked"
+  },
+  "frontend_helper_tests": {
+    "passed": 6,
+    "failed": 0
+  },
+  "postgres": {
+    "environment": "disposable local Unix-socket PostgreSQL",
+    "concurrent_claims": 16,
+    "senders": 1,
+    "authorization_checks": "PASS"
+  },
+  "browser": {
+    "passed": 26,
+    "failed": 0,
+    "external_network": "blocked",
+    "accounts": "synthetic",
+    "viewport_widths": [
+      390,
+      1366
+    ]
+  },
   "vite_without_postbuild": "PASS",
-  "n8n_validation": { "workflow_id": "05JlvBCVZFnbrx9u", "active": false, "errors": 0, "warnings": 0 },
+  "n8n_validation": {
+    "workflow_id": "05JlvBCVZFnbrx9u",
+    "active": false,
+    "errors": 0,
+    "warnings": 0,
+    "revision": "historical inactive d73431c candidate; NOT updated in follow-up"
+  },
   "existing_workflows_changed": 0,
   "production_sql_applied": false,
   "production_auth_configuration_changed": false,
   "production_frontend_deployed": false,
   "real_emails_sent": 0,
-  "live_gotrue_n8n_unisender_integration": "NOT RUN"
+  "live_gotrue_n8n_unisender_integration": "No live provider send; real GoTrue/n8n with closed-network Unisender contract mock PASS",
+  "historical_frontend_checks_commit": "d73431c",
+  "isolated_runtime_integration": {
+    "gotrue": "v2.171.0",
+    "n8n": "1.90.2",
+    "passed": 14,
+    "failed": 0,
+    "provider": "contract mock; historical real success format checked read-only",
+    "tested_sha": "a3b627f00c7a4c078445ec7ff9934d099a014587",
+    "run_url": "https://github.com/sabjorn7/meetclone/actions/runs/43721076494",
+    "production_requests": 0
+  },
+  "followup_production_workflows_unchanged": 22
 }

@@ -28,6 +28,12 @@ Only email_action_type=signup is supported. Other signed Auth email actions retu
 The Send Email Hook is global: before activation, inventory all direct Auth send-email
 flows. If recovery, invite, magiclink, email_change or reauthentication is used directly,
 provide equivalent transport coverage and tests first, or do not enable this hook.
+The 2026-11-15 follow-up audited 15 active workflows, all 34 published WeWeb JSON
+files, native routes and SDK call sites. Only signup/resend needs this new transport;
+see reviews/2026-11-13-auth-email-hook/AUTH_EMAIL_INVENTORY.txt for evidence and scope.
+Auth audit-log access was denied, so out-of-repository/manual clients still require
+operator confirmation. The existing inactive server candidate has not been updated
+by this follow-up: import the tested Git revision only after separate approval.
 The currently inspected VK_Auth and ResetPw use admin generate_link recovery and
 send through their own paths, so they do not invoke Send Email Hook. Those workflows
 and BuyCourse/subscription/course mail workflows must remain unchanged.
@@ -86,13 +92,17 @@ Transport deadline, failures and duplicate protection
 - Verify HMAC-SHA256 Standard Webhooks signature on ORIGINAL body bytes, not reserialized JSON.
 - Reject missing/malformed/stale/tampered signatures, unknown actions and external redirects.
 - Only the fixed MeetGuru sender, subject, recipient from signed user.email and callback are used.
+- GoTrue v2.171.0 generates SHA-224 token hashes: 56 hex characters, optionally pkce_.
+  Do not confuse this with the separate 64-hex SHA-256 deduplication key.
 - Claim RPC timeout <=600ms; Unisender <=2000ms; finish RPC <=600ms. Each timeout is shortened
   by the remaining hook budget. No per-node retries and no Wait/queue/email batch in the hook.
 - n8n needs a warm execution path and synchronized clocks. These budgets are not a guarantee
   of delivery under a slow provider/queue; slow/unavailable infrastructure fails closed.
 - Unisender uses HTTPS POST form body, never API key/body/token in query parameters.
-  error_checking=1 is required. Only the one expected recipient with a valid message id and
-  no reported errors counts as accepted. HTTP 200 alone does not count as success.
+  error_checking=1 requests the per-recipient response array. Only the expected recipient
+  with a valid message id and no errors counts as accepted. The observed successful legacy
+  {result:{email_id:string}} shape is accepted too for this single-recipient/no-CC request.
+  HTTP 200 alone does not count as success; unknown/empty/error replies are rejected.
 - Only accepted AND durably recorded delivery returns 200 application/json {}.
   This is necessary in v2.171.0, whose hook decoder does not accept an empty response body.
 - Atomic unique delivery key = SHA256(signup + user UUID + email + GoTrue token hash).
@@ -133,10 +143,14 @@ node tests/auth-email-frontend.unit.mjs
 node tests/auth-email-hook.postgres.mjs  # disposable local PostgreSQL, Unix socket only
 node tests/auth-email.browser.mjs        # Chrome fixture, outbound network blocked
 ./node_modules/.bin/vite build -l warn    # no production SEO postbuild
+bash tests/auth-email.integration/run.sh # real pinned GoTrue/n8n + isolated provider mock; needs Docker
 
-These are not a real GoTrue+n8n+Unisender integration test. Before enabling, test the exact
-GoTrue v2.171.0 container and n8n runner in an explicitly isolated environment, with synthetic
-events/provider mocks first; live mail and VK OAuth require an approved test account.
+Unit/browser tests use mocks. The Docker integration additionally runs real GoTrue v2.171.0,
+n8n 1.90.2 and PostgREST, with actual native signup/resend/verify requests and a closed-network
+Unisender contract mock. See tests/auth-email.integration/README.md for isolation and cases.
+This does not prove real Unisender latency, sender/list authorization or inbox delivery.
+Before enabling, bind the actual n8n runner's approved secrets/modules and verify its
+configuration; live mail and VK OAuth still require an approved test account.
 
 Rollback, if future activation fails
 Restore the previously backed-up GoTrue settings and frontend, deactivate ONLY this new

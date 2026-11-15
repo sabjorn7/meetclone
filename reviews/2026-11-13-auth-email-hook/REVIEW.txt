@@ -1,3 +1,7 @@
+Historical report for d73431c (2026-11-13).
+Superseded for enablement readiness by FOLLOWUP_2026-11-15.txt and AUTH_EMAIL_INVENTORY.txt.
+The inactive server candidate still has the historical revision; it was NOT updated.
+
 MeetGuru — email confirmation preparation, 2026-11-13
 
 Branch: feat/auth-email-hook-20261113

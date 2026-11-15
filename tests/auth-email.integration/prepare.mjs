@@ -29,6 +29,7 @@ grant anon,authenticated,service_role to authenticator;
 create role supabase_auth_admin login createrole password '${env.MG_AUTH_IT_AUTH_DB_PASSWORD}';
 grant create on database postgres to supabase_auth_admin;
 create schema auth authorization supabase_auth_admin;
+alter role supabase_auth_admin set search_path=auth,public;
 create extension if not exists pgcrypto with schema public;
 create extension if not exists "uuid-ossp" with schema public;
 grant usage,create on schema public to supabase_auth_admin;

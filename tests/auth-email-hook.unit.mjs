@@ -10,7 +10,7 @@ const secret = 'v1,whsec_' + Buffer.alloc(32, 7).toString('base64');
 const config = { hookSecrets: secret, unisenderKey: 'synthetic-provider', supabaseKey: 'synthetic-server', listId: '123' };
 const now = 1800000000123;
 const event = () => ({ user: { id: '11111111-1111-4111-8111-111111111111', email: 'learner@example.test' }, email_data: {
-    token: '123456', token_hash: 'a'.repeat(64), email_action_type: 'signup',
+    token: '123456', token_hash: 'a'.repeat(56), email_action_type: 'signup',
     site_url: 'https://sb.meetgu.ru', redirect_to: 'https://app.meetgu.ru/login?email_confirmation=1',
 } });
 function signed(value = event(), id = '11111111-1111-4111-8111-111111111112', timestamp = String(Math.floor(now / 1000)), rawOverride) {
@@ -67,8 +67,14 @@ test('unsupported Auth events cannot be silently acknowledged or converted into 
 test('GoTrue retries with different webhook IDs share a delivery key; resend gets a new key', () => {
     const first = verify(); const retry = verify(signed(event(), '11111111-1111-4111-8111-111111111113'));
     assert.equal(first.deliveryKey, retry.deliveryKey); assert.notEqual(first.owner, retry.owner);
-    const resent = event(); resent.email_data.token_hash = 'b'.repeat(64);
+    const resent = event(); resent.email_data.token_hash = 'b'.repeat(56);
     assert.notEqual(first.deliveryKey, verify(signed(resent)).deliveryKey);
+});
+test('GoTrue v2.171.0 native SHA-224 token hashes and PKCE prefix are accepted; SHA-256 is not substituted', () => {
+    const native = event(); native.email_data.token_hash = crypto.createHash('sha224').update(native.user.email + native.email_data.token).digest('hex');
+    assert.equal(native.email_data.token_hash.length, 56); assert.equal(verify(signed(native)).send, true);
+    native.email_data.token_hash = 'pkce_' + native.email_data.token_hash; assert.equal(verify(signed(native)).send, true);
+    native.email_data.token_hash = 'a'.repeat(64); assert.equal(verify(signed(native)).send, false);
 });
 test('deadlines and claims gate sending; only a committed accepted tombstone is a duplicate success', () => {
     const verified = verify();
@@ -86,9 +92,15 @@ test('Unisender acceptance is explicit; JSON errors, HTML, timeouts and wrong re
     for (const r of [response({ error: 'rejected' }), response({ result: [{ errors: [{ code: 'unchecked_sender_email' }] }] })]) {
         assert.equal(classifyUnisender(r, email).state, 'failed');
     }
-    for (const r of [response('<html>error</html>'), { error: 'timeout with sensitive data' }, response({}, 503), response({ result: { email_id: 12 } }), accepted('other@example.test')]) {
+    for (const r of [response('<html>error</html>'), { error: 'timeout with sensitive data' }, response({}, 503), response({ result: { email_id: '' } }), accepted('other@example.test')]) {
         assert.equal(classifyUnisender(r, email).state, 'uncertain');
     }
+});
+test('observed successful Unisender legacy response is accepted without exposing message IDs', () => {
+    const email = event().user.email;
+    assert.equal(classifyUnisender(response({ result: { email_id: 'fixture1234' } }), email).state, 'accepted');
+    assert.equal(classifyUnisender(response({ result: { email_id: 1234 } }), email).state, 'accepted');
+    assert.equal(classifyUnisender(response({ result: { email_id: 'fixture1234', errors: ['rejected'] } }), email).state, 'uncertain');
 });
 test('only accepted delivery persisted under the claimed owner produces 200 empty JSON', () => {
     assert.deepEqual(finishAuthEmail(response([{ state: 'accepted' }]), { state: 'accepted' }), { status: 200, body: {} });

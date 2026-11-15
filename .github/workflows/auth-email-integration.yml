@@ -1,0 +1,36 @@
+name: Auth email isolated integration
+on:
+  push:
+    branches: [feat/auth-email-hook-20261113]
+    paths:
+      - tests/auth-email.integration/**
+      - scripts/lib/auth-email-hook.mjs
+      - scripts/lib/auth-email-workflow.mjs
+      - n8n/workflows/supabase-auth-email.json
+      - .github/workflows/auth-email-integration.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-auth-email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Unit contracts
+        run: node tests/auth-email-hook.unit.mjs
+      - name: Real GoTrue and n8n with isolated Unisender contract mock
+        env:
+          MG_AUTH_IT_RESULTS_DIR: ${{ runner.temp }}/auth-email-results
+        run: bash tests/auth-email.integration/run.sh
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: auth-email-redacted-results
+          path: ${{ runner.temp }}/auth-email-results/results.json
+          retention-days: 7

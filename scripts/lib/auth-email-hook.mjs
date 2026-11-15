@@ -43,7 +43,8 @@ export function verifyAuthEmail(raw, headers, config, crypto, now = Date.now()) 
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(event.user?.id || '')
             || typeof event.user.email !== 'string' || event.user.email.length > 254
             || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(event.user.email)
-            || !/^(pkce_)?[0-9a-f]{64}$/i.test(data.token_hash || '')) return hookFailure(400, 'invalid_request');
+            // GoTrue v2.171.0 crypto.GenerateTokenHash uses SHA-224, not SHA-256.
+            || !/^(pkce_)?[0-9a-f]{56}$/i.test(data.token_hash || '')) return hookFailure(400, 'invalid_request');
         const redirect = 'https://app.meetgu.ru/login?email_confirmation=1';
         if (data.redirect_to !== redirect) return hookFailure(400, 'invalid_redirect');
         // No extra generateLink: use the token already generated and stored by GoTrue.
@@ -77,8 +78,16 @@ export function classifyUnisender(response, email) {
     if (response.statusCode < 200 || response.statusCode >= 300) return { state: 'uncertain' };
     if (!body || typeof body !== 'object' || Array.isArray(body)) return { state: 'uncertain' };
     if (body.error || body.code) return { state: 'failed' };
-    // Use the documented error_checking=1 contract, one recipient, no CC.
+    // One recipient, no CC. Existing successful MeetGuru executions return the legacy
+    // {result:{email_id:string}} shape. Also accept documented error_checking=1 replies.
     const result = body.result;
+    if (result && !Array.isArray(result) && typeof result === 'object'
+        && Object.keys(result).length === 1 && Object.hasOwn(result, 'email_id')) {
+        const id = result.email_id;
+        const valid = (typeof id === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(id))
+            || (typeof id === 'number' && Number.isSafeInteger(id) && id > 0);
+        return { state: valid ? 'accepted' : 'uncertain' };
+    }
     if (!Array.isArray(result) || result.length !== 1) return { state: 'uncertain' };
     const item = result[0];
     if (!item || (Array.isArray(item.errors) && item.errors.length)) return { state: 'failed' };

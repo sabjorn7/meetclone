@@ -1,0 +1,61 @@
+Auth email surface inventory — read-only audit, 2026-11-15
+
+Evidence scope
+- Inspected all 15 active n8n workflows, including every node's parameter strings,
+  not only HTTP Request URL fields. No workflows were executed or modified.
+- Inspected native Vue routes, exported WeWeb configuration and Supabase Auth plugin
+  action registrations. An SDK method being available is not evidence it is used.
+- Read all 34 published /data/*.json WeWeb files successfully, extracting only method
+  names and logical page paths. No additional email-generating Auth method was found.
+- Production audit-log aggregation was attempted read-only but auth.audit_log_entries
+  access is denied. No permission bypass or configuration change was attempted.
+  Therefore this report establishes configured application/workflow usage, not the
+  absence of arbitrary external/manual Auth API clients or all historical events.
+
+Currently configured flows
+1. Signup: RegistrationPage -> shared public Supabase Auth SDK signUp, with nickname.
+   After future autoconfirm=false, this emits signup through Send Email Hook.
+2. Resend signup: prepared branch's EmailConfirmationResend -> same public SDK resend.
+   This emits signup again. It does not create an account or call generate_link.
+3. Email/password login: public password grant; no Auth email.
+4. Profile password change: ProfileEditPage.updateUserPassword re-authenticates with
+   the old password before updateUser. No explicit reauthenticate/email OTP call.
+5. Reset password: LoginPage -> existing n8n ResetPw -> admin/generate_link recovery
+   -> existing Unisender mail. Admin generation does not invoke Send Email Hook.
+6. VK: existing VK_Auth admin/users and three admin/generate_link recovery branches;
+   same OTP verification. No Send Email Hook and no new transport dependency.
+7. Purchases, sales, course/subscription/admin notifications: existing direct
+   Unisender API nodes, not GoTrue Auth mail. They remain outside this workflow.
+8. Delete account: Auth GET user and admin DELETE user; no Auth email.
+
+No configured live call site was found for direct signInWithOtp/magiclink,
+inviteUserByEmail, reauthenticate, public recover or Auth email change.
+The live /profile route is overridden by ProfileEditPage, which does not change
+Auth email. The old WeWeb email-change block was a no-op and is not transplanted.
+The Auth plugin defines magiclink/reset/update metadata/resend methods for the
+editor/runtime library; unused definitions do not warrant adding new mail flows.
+
+Decision
+Keep the transport signup-only; do not add unused invite/magiclink/change-email/
+reauthentication templates or alter the existing recovery/VK/purchase workflows.
+Unknown signed actions must still fail explicitly rather than acknowledge a
+message that was not sent. Any future direct Auth email flow needs explicit
+transport coverage before that feature is enabled. Operators must confirm there
+are no out-of-repository/manual Auth clients relying on unsupported email types
+before switching the GLOBAL hook; audit-log access was not available to prove this.
+
+Observed Unisender response (historical successful execution, no new email)
+BuyCourse execution 42426, nodes HTTP Request and AlertEmail_NewUser:
+  success, response keys [result], result is an object, email_id is a string.
+No recipient, message identifier, API key or message body was exported.
+The transport now supports this actual legacy shape as well as the documented
+error_checking=1 per-recipient array. Unisender errors/unknown replies still fail closed.
+
+Compatibility correction
+Official GoTrue v2.171.0 internal/crypto/crypto.go GenerateTokenHash calls
+sha256.Sum224. Native token_hash has 56 hex characters, optionally prefixed pkce_.
+The old candidate's 64-hex input check was wrong and has been corrected in Git only.
+The private ledger key remains a separate SHA-256 digest (64 hex); SQL is unchanged.
+The already-created inactive production n8n candidate is NOT updated in this task.
+Before eventual enablement it must be synchronized with the tested Git revision,
+with separate approval. No production SQL, Auth config, workflow or mail was changed.

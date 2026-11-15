@@ -1,0 +1,119 @@
+x-isolated-env: &isolated-env
+  HTTP_PROXY: ""
+  HTTPS_PROXY: ""
+  ALL_PROXY: ""
+  NO_PROXY: "*"
+services:
+  db:
+    image: postgres:15.8-alpine
+    environment:
+      POSTGRES_PASSWORD: ${MG_AUTH_IT_DB_PASSWORD:?fixture secret required}
+      POSTGRES_DB: postgres
+    volumes:
+      - ${MG_AUTH_IT_FIXTURE_DIR:?fixture directory required}/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -h 127.0.0.1 -U postgres -d postgres]
+      interval: 2s
+      timeout: 2s
+      retries: 40
+  auth:
+    image: supabase/gotrue:v2.171.0
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *isolated-env
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: https://sb.meetgu.ru/auth/v1
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${MG_AUTH_IT_AUTH_DB_PASSWORD:?fixture secret required}@db:5432/postgres
+      GOTRUE_DB_NAMESPACE: auth
+      GOTRUE_SITE_URL: https://app.meetgu.ru
+      GOTRUE_URI_ALLOW_LIST: https://app.meetgu.ru/login?email_confirmation=1,https://app.meetgu.ru/reset_pw
+      GOTRUE_JWT_SECRET: ${MG_AUTH_IT_JWT_SECRET:?fixture secret required}
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_SMS_AUTOCONFIRM: "false"
+      GOTRUE_MAILER_OTP_EXP: 30
+      GOTRUE_SMTP_MAX_FREQUENCY: 5s
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: 1000
+      GOTRUE_HOOK_SEND_EMAIL_ENABLED: "true"
+      GOTRUE_HOOK_SEND_EMAIL_URI: https://n8n.meetgu.ru/webhook/supabase-auth-email-meetguru
+      GOTRUE_HOOK_SEND_EMAIL_SECRETS: ${MG_AUTH_IT_HOOK_SECRET:?fixture secret required}
+      GOTRUE_LOG_LEVEL: error
+      SSL_CERT_FILE: /fixture-ca.crt
+    volumes:
+      - ${MG_AUTH_IT_FIXTURE_DIR}/ca.crt:/fixture-ca.crt:ro
+  rest:
+    image: postgrest/postgrest:v12.2.3
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${MG_AUTH_IT_REST_DB_PASSWORD:?fixture secret required}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${MG_AUTH_IT_JWT_SECRET}
+      PGRST_LOG_LEVEL: error
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:1.90.2
+    entrypoint: [/bin/sh, /fixture-start.sh]
+    environment:
+      <<: *isolated-env
+      N8N_HOST: n8n.meetgu.ru
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: https://n8n.meetgu.ru/
+      N8N_ENCRYPTION_KEY: ${MG_AUTH_IT_N8N_KEY:?fixture secret required}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_TEMPLATES_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_LOG_LEVEL: error
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      NODE_EXTRA_CA_CERTS: /fixture-ca.crt
+      MEETGURU_AUTH_HOOK_SECRETS: ${MG_AUTH_IT_HOOK_SECRET}
+      MEETGURU_UNISENDER_API_KEY: ${MG_AUTH_IT_PROVIDER_KEY:?fixture secret required}
+      MEETGURU_AUTH_SUPABASE_SERVICE_KEY: ${MG_AUTH_IT_SERVICE_JWT:?fixture secret required}
+      MEETGURU_AUTH_UNISENDER_LIST_ID: "123"
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ${MG_AUTH_IT_FIXTURE_DIR}/workflow.json:/fixture-workflow.json:ro
+      - ${MG_AUTH_IT_FIXTURE_DIR}/ca.crt:/fixture-ca.crt:ro
+      - ./start-n8n.sh:/fixture-start.sh:ro
+  fixture:
+    image: node:20-alpine
+    command: [node, /tests/proxy.mjs]
+    environment:
+      <<: *isolated-env
+      MG_AUTH_IT_PROVIDER_KEY: ${MG_AUTH_IT_PROVIDER_KEY}
+      MG_AUTH_IT_HOOK_SECRET: ${MG_AUTH_IT_HOOK_SECRET}
+    volumes:
+      - ./proxy.mjs:/tests/proxy.mjs:ro
+      - ${MG_AUTH_IT_FIXTURE_DIR}/ca.crt:/fixture.crt:ro
+      - ${MG_AUTH_IT_FIXTURE_DIR}/ca.key:/fixture.key:ro
+    networks:
+      default:
+        aliases: [sb.meetgu.ru, n8n.meetgu.ru, api.unisender.com, app.meetgu.ru]
+  driver:
+    image: node:20-alpine
+    command: [node, /tests/driver.mjs]
+    environment:
+      <<: *isolated-env
+      NODE_EXTRA_CA_CERTS: /fixture-ca.crt
+      MG_AUTH_IT_SERVICE_JWT: ${MG_AUTH_IT_SERVICE_JWT}
+      MG_AUTH_IT_HOOK_SECRET: ${MG_AUTH_IT_HOOK_SECRET}
+    volumes:
+      - ./driver.mjs:/tests/driver.mjs:ro
+      - ${MG_AUTH_IT_FIXTURE_DIR}/ca.crt:/fixture-ca.crt:ro
+      - ${MG_AUTH_IT_FIXTURE_DIR}/out:/out
+networks:
+  default:
+    internal: true
+volumes:
+  n8n-data:

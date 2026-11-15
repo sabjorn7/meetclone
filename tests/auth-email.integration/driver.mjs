@@ -45,7 +45,8 @@ async function signup(email) {
 }
 function mailLink(mail) {
     const match = mail?.html?.match(/href="([^"]+)"/); check(match, 'mail_verify_link_missing');
-    const link = new URL(match[1].replaceAll('&amp;', '&'));
+    check(!match[1].includes('&amp;'), 'provider_href_contains_html_amp_entity');
+    const link = new URL(match[1]);
     check(link.origin === 'https://sb.meetgu.ru' && link.pathname === '/auth/v1/verify', 'mail_verify_endpoint_changed');
     check(link.searchParams.get('type') === 'signup' && link.searchParams.get('redirect_to') === callback, 'mail_verify_contract_changed');
     check(/^(pkce_)?[0-9a-f]{56}$/.test(link.searchParams.get('token') || ''), 'native_sha224_token_hash_rejected');

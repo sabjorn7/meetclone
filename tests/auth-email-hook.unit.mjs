@@ -27,7 +27,8 @@ test('signed raw GoTrue event produces the expected Russian email and native ver
     assert.equal(result.mail.subject, 'Подтвердите электронную почту — MeetGuru');
     assert.equal(result.mail.senderName, 'MeetGuru'); assert.equal(result.mail.senderEmail, 'adv@meetgu.ru');
     assert(result.mail.html.includes('Подтвердить почту')); assert(result.mail.html.includes('lang="ru"'));
-    const href = result.mail.html.match(/href="([^"]+)"/)[1].replaceAll('&amp;', '&');
+    const href = result.mail.html.match(/href="([^"]+)"/)[1];
+    assert(!href.includes('&amp;'));
     const url = new URL(href); assert.equal(url.origin, 'https://sb.meetgu.ru'); assert.equal(url.pathname, '/auth/v1/verify');
     assert.equal(url.searchParams.get('token'), event().email_data.token_hash); assert.equal(url.searchParams.get('type'), 'signup');
     assert.equal(url.searchParams.get('redirect_to'), event().email_data.redirect_to);

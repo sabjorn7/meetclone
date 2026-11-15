@@ -5,7 +5,7 @@ export function hookFailure(status = 503, code = 'delivery_unavailable') {
 }
 
 export function confirmationEmail(url) {
-    const href = url.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    const href = url.replace(/"/g, '&quot;');
     return {
         subject: 'Подтвердите электронную почту — MeetGuru',
         senderName: 'MeetGuru',

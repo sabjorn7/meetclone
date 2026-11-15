@@ -55,6 +55,7 @@ return [{json: result}];`),
             { name: 'subject', value: `={{ ${verified}.mail.subject }}` },
             { name: 'body', value: `={{ ${verified}.mail.html }}` },
             { name: 'list_id', value: '={{ $env.MEETGURU_AUTH_UNISENDER_LIST_ID }}' },
+            { name: 'track_links', value: '0' },
         ] }, options: httpOptions(2000),
     }, 1440, -200, { onError: 'continueRegularOutput' });
     add('auth-mail-assess', 'Assess delivery', 'code', 2, {

@@ -142,6 +142,7 @@ async function runGraph(input, ledger, fault, metrics) {
             } else if (name === 'Unisender API') {
                 metrics.sent++;
                 const body = Object.fromEntries(p.bodyParameters.parameters.map(v => [v.name, evalExpression(v.value)]));
+                assert.equal(body.track_links, '0');
                 assert.equal(body.sender_name, 'MeetGuru'); assert.equal(body.sender_email, 'adv@meetgu.ru'); assert(!body.body.includes('password'));
                 item = fault === 'providerError' ? response({ error: 'synthetic API rejection' })
                     : fault === 'providerTimeout' ? { error: 'synthetic transport timeout' } : accepted(body.email);

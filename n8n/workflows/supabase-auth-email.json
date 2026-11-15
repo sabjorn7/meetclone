@@ -205,6 +205,10 @@
             {
               "name": "list_id",
               "value": "={{ $env.MEETGURU_AUTH_UNISENDER_LIST_ID }}"
+            },
+            {
+              "name": "track_links",
+              "value": "0"
             }
           ]
         },

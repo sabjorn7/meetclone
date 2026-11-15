@@ -54,7 +54,7 @@ https.createServer({ cert: fs.readFileSync('/fixture.crt'), key: fs.readFileSync
             stats.providerCalls++;
             const form = new URLSearchParams(raw.toString());
             if (form.get('api_key') !== process.env.MG_AUTH_IT_PROVIDER_KEY) { json(res, 403, { error: 'invalid_api_key' }); return; }
-            if (form.get('sender_email') !== 'adv@meetgu.ru' || form.get('sender_name') !== 'MeetGuru' || !form.get('body') || form.get('list_id') !== '123') { json(res, 400, { error: 'invalid_provider_contract' }); return; }
+            if (form.get('sender_email') !== 'adv@meetgu.ru' || form.get('sender_name') !== 'MeetGuru' || !form.get('body') || form.get('list_id') !== '123' || form.get('track_links') !== '0') { json(res, 400, { error: 'invalid_provider_contract' }); return; }
             lastMail = { html: form.get('body'), email: form.get('email'), subject: form.get('subject') };
             if (mode === 'provider_error') { json(res, 200, { error: 'mock_rejection', code: 'retry_later' }); return; }
             if (mode === 'recipient_error') { json(res, 200, { result: [{ index: 0, email: form.get('email'), errors: [{ code: 'unchecked_sender_email' }] }] }); return; }

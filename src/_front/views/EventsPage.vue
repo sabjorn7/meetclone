@@ -74,6 +74,8 @@
 </template>
 
 <script setup>
+import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
+
 import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { listPublishedEvents } from '@/_front/streams/eventsApi.js';
@@ -128,15 +130,16 @@ function hrefFor(ev) {
 }
 
 onMounted(async () => {
+    return tracePage('EventsPage', () => loading.value, async (__mgTrace) => {
     // In detail mode the child component loads itself; only the calendar needs the list.
-    if (activeEventId.value || activeEventSlug.value) { loading.value = false; return; }
+    if (activeEventId.value || activeEventSlug.value) { loading.value = false; __mgTrace.ready(); return; }
     try {
-        const events = await listPublishedEvents(sb());
+        const events = await __mgTrace.wait(1, () => (listPublishedEvents(sb())));
         // Add future SCHEDULED streams (эфиры) alongside events — same card shape; the time-based
         // upcoming/past split handles placement (they land in "Предстоящие").
         let streamRows = [];
         try {
-            const streams = await listAllStreams(sb());
+            const streams = await __mgTrace.wait(2, () => (listAllStreams(sb())));
             const nowMs = Date.now();
             streamRows = (streams || [])
                 .filter((s) => s.status === 'scheduled' && s.scheduled_at && new Date(s.scheduled_at).getTime() > nowMs)
@@ -146,8 +149,10 @@ onMounted(async () => {
     } catch (e) {
         error.value = e.message || String(e);
     } finally {
-        loading.value = false;
+        loading.value = false; __mgTrace.ready();
     }
+
+    });
 });
 </script>
 

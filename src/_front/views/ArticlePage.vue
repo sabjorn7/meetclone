@@ -187,6 +187,8 @@
 </template>
 
 <script setup>
+import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
+
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { marked } from 'marked';
@@ -292,19 +294,20 @@ async function ensureUsers(ids) {
 
 /* ── load ───────────────────────────────────────────────────────────────── */
 async function load() {
+    return tracePage('ArticlePage', () => loading.value, async (__mgTrace) => {
     sb = getSupabase();
     myId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null;
-    if (!sb) { loading.value = false; return; }
-    if (myId.value) { try { blockedIds.value = new Set(await listBlockedUserIds(myId.value)); } catch (e) { /* non-fatal */ } }
+    if (!sb) { loading.value = false; __mgTrace.ready(); return; }
+    if (myId.value) { try { blockedIds.value = new Set(await __mgTrace.wait(1, () => (listBlockedUserIds(myId.value)))); } catch (e) { /* non-fatal */ } }
 
     const key = route.query.slug || route.params.slug || '';
-    if (!key) { loading.value = false; return; }
+    if (!key) { loading.value = false; __mgTrace.ready(); return; }
 
     let q = sb.from('articles').select(ART_COLS);
     q = UUID_RE.test(key) ? q.eq('id', key) : q.eq('slug', key);
-    const { data } = await q.limit(1);
+    const { data } = await __mgTrace.wait(2, () => (q.limit(1)));
     article.value = data?.[0] || null;
-    if (!article.value) { loading.value = false; return; }
+    if (!article.value) { loading.value = false; __mgTrace.ready(); return; }
 
     applySeo();
 
@@ -319,13 +322,15 @@ async function load() {
         jobs.push(sb.from('users').select('superadmin').eq('id', myId.value).limit(1).then(({ data: u }) => { isSuperadmin.value = !!u?.[0]?.superadmin; }));
         jobs.push(sb.from('articles_rating').select('rating').eq('author', myId.value).eq('article', article.value.id).limit(1).then(({ data: r }) => { myRating.value = r?.[0]?.rating ?? null; }));
     }
-    await Promise.all(jobs);
+    await __mgTrace.wait(3, () => (Promise.all(jobs)));
 
-    loading.value = false;
-    await nextTick();
+    loading.value = false; __mgTrace.ready();
+    await __mgTrace.wait(4, () => (nextTick()));
     ready.value = true;
     // marked → v-html done; wire image zoom + fix relative/lazy images
     nextTick(() => { if (bodyEl.value) { try { mediumZoom(bodyEl.value.querySelectorAll('img'), { background: 'rgba(9,23,71,0.9)' }); } catch (e) { /* noop */ } } });
+
+    });
 }
 
 async function loadComments() {

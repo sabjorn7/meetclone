@@ -84,6 +84,8 @@
 </template>
 
 <script setup>
+import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
+
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 
@@ -133,28 +135,31 @@ function resetFilters() { q.value = ''; cat.value = ''; }
 function onDocClick(e) { if (!e.target.closest('.pd-select')) catOpen.value = false; }
 
 async function load() {
+    return tracePage('ArticlesPage', () => loading.value, async (__mgTrace) => {
     sb = getSupabase();
     myId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null;
-    if (!sb) { loading.value = false; return; }
+    if (!sb) { loading.value = false; __mgTrace.ready(); return; }
 
-    const { data } = await sb.from('articles').select(LIST_COLS).eq('Status', 'Опубликовано').order('created_at', { ascending: false });
+    const { data } = await __mgTrace.wait(1, () => (sb.from('articles').select(LIST_COLS).eq('Status', 'Опубликовано').order('created_at', { ascending: false })));
     const rows = (data || []).map((a) => {
         const { avg, count } = ratingAvgOf(a.Rating);
         return { ...a, excerpt: excerptOf(a.Content), ratingAvg: avg, ratingCount: count, commentCount: Array.isArray(a.Comments) ? a.Comments.length : 0 };
     });
     articles.value = rows;
 
-    await ensureUsers(rows.map((a) => a.Creator));
+    await __mgTrace.wait(2, () => (ensureUsers(rows.map((a) => a.Creator))));
     if (myId.value) {
-        const { data: mine } = await sb.from('articles_rating').select('article, rating').eq('author', myId.value);
+        const { data: mine } = await __mgTrace.wait(3, () => (sb.from('articles_rating').select('article, rating').eq('author', myId.value)));
         const map = {};
         for (const r of mine || []) map[r.article] = r.rating;
         myRatings.value = map;
     }
 
-    loading.value = false;
-    await nextTick();
+    loading.value = false; __mgTrace.ready();
+    await __mgTrace.wait(4, () => (nextTick()));
     ready.value = true;
+
+    });
 }
 
 async function ensureUsers(ids) {

@@ -93,6 +93,8 @@
 </template>
 
 <script setup>
+import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
+
 import { ref, onMounted, nextTick } from 'vue';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 
@@ -132,27 +134,28 @@ function initials(club) {
 function subCount(club) { return subCountById.value[club?.id] || 0; }
 
 async function load() {
+    return tracePage('ClubsPage', () => loading.value, async (__mgTrace) => {
     const sb = getSupabase();
-    if (!sb) { loading.value = false; return; }
+    if (!sb) { loading.value = false; __mgTrace.ready(); return; }
     const uid = readStoredSession()?.user?.id || authCookieUser()?.id;
 
-    const { data: cl } = await sb.from('clubs')
+    const { data: cl } = await __mgTrace.wait(1, () => (sb.from('clubs')
         .select('id, title, short_descr, label, price, subs, owner, active')
         .eq('active', true)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })));
     clubs.value = cl || [];
 
     // subscriptions (money data is read-only here — never written)
     if (uid) {
-        const { data: subs } = await sb.from('club_subs')
+        const { data: subs } = await __mgTrace.wait(2, () => (sb.from('club_subs')
             .select('id, club, active, end_date')
             .eq('suber', uid)
-            .eq('active', true);
+            .eq('active', true)));
         const byId = Object.fromEntries(clubs.value.map((c) => [c.id, c]));
         // pull any subscribed club that isn't in the active-catalog list (e.g. now-inactive club)
         const missing = [...new Set((subs || []).map((s) => s.club).filter((id) => id && !byId[id]))];
         if (missing.length) {
-            const { data: extra } = await sb.from('clubs').select('id, title, short_descr, label, price, subs, owner').in('id', missing);
+            const { data: extra } = await __mgTrace.wait(3, () => (sb.from('clubs').select('id, title, short_descr, label, price, subs, owner').in('id', missing)));
             for (const c of extra || []) byId[c.id] = c;
         }
         mySubs.value = (subs || []).map((s) => ({ id: s.id, end_date: s.end_date, club: byId[s.club] })).filter((s) => s.club);
@@ -161,7 +164,7 @@ async function load() {
     // active subscriber counts per club (read-only). One query over the club column, counted client-side.
     const clubIds = clubs.value.map((c) => c.id);
     if (clubIds.length) {
-        const { data: rows } = await sb.from('club_subs').select('club').eq('active', true).in('club', clubIds);
+        const { data: rows } = await __mgTrace.wait(4, () => (sb.from('club_subs').select('club').eq('active', true).in('club', clubIds)));
         const counts = {};
         for (const r of rows || []) counts[r.club] = (counts[r.club] || 0) + 1;
         subCountById.value = counts;
@@ -170,13 +173,15 @@ async function load() {
     // owner avatars for all referenced clubs
     const ownerIds = [...new Set([...clubs.value, ...mySubs.value.map((s) => s.club)].map((c) => c?.owner).filter(Boolean))];
     if (ownerIds.length) {
-        const { data: us } = await sb.from('users').select('id, "Name", "Photo"').in('id', ownerIds);
+        const { data: us } = await __mgTrace.wait(5, () => (sb.from('users').select('id, "Name", "Photo"').in('id', ownerIds)));
         ownersById.value = Object.fromEntries((us || []).map((u) => [u.id, u]));
     }
 
-    loading.value = false;
-    await nextTick();
+    loading.value = false; __mgTrace.ready();
+    await __mgTrace.wait(6, () => (nextTick()));
     ready.value = true;
+
+    });
 }
 
 onMounted(() => { ensureFonts(); load(); });

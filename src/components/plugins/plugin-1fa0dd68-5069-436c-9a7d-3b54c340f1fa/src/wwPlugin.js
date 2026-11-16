@@ -1,3 +1,4 @@
+import { instrumentAuth } from '@/_front/chrome/sessionDiagnostic.js';
 import { createClient } from '@supabase/supabase-js';
 import { getCurrentSupabaseSettings, resolveRuntimeProjectUrl } from './helpers/environmentConfig';
 import { logClientEvent } from '@/_front/chrome/errorLogger.js';
@@ -134,6 +135,7 @@ export default {
 
 
             this.publicInstance = await buildSupabaseClient(runtimeProjectUrl, effectivePublicKey, wwLib.wwWebsiteData.getInfo().id);
+            instrumentAuth(this.publicInstance);
 
             // The same public instance must be shared between supabase and supabase auth
             if (wwLib.wwPlugins.supabase) wwLib.wwPlugins.supabase.syncInstance();

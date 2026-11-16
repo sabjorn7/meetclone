@@ -1,3 +1,4 @@
+import { instrumentRouter, traceCall } from '@/_front/chrome/sessionDiagnostic.js';
 import { createRouter, createWebHistory } from 'vue-router';
 
 import wwPage from './views/wwPage.vue';
@@ -530,11 +531,13 @@ router = createRouter({
     scrollBehavior,
 });
 
+instrumentRouter(router);
+
 //Trigger on page unload
 let isFirstNavigation = true;
 router.beforeEach(async (to, from) => {
     if (to.name === from.name) return;
-    if (!isFirstNavigation) await onPageUnload();
+    if (!isFirstNavigation) await traceCall('page-unload', '', () => onPageUnload());
     isFirstNavigation = false;
     wwLib.globalVariables._navigationId++;
     return;

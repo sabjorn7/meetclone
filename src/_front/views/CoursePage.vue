@@ -198,6 +198,8 @@
 </template>
 
 <script setup>
+import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
+
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { getCourseDiscount } from '@/_front/course/discount.js';
@@ -375,15 +377,16 @@ function fmtDate(iso) {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function load() {
+    return tracePage('CoursePage', () => loading.value, async (__mgTrace) => {
     // The path/query identifier is a slug OR an id (site convention /course/<slug||id>: a course
     // without a slug is linked by its uuid). Resolve by shape so both forms load.
     const key = route.params.slug || route.query.slug || route.query.id;
     const sb = getSupabase();
-    if (!sb || !key) { loading.value = false; return; }
+    if (!sb || !key) { loading.value = false; __mgTrace.ready(); return; }
     let q = sb.from('course')
         .select('id, "Title", "Decription", "WhatTeach", "For", "Price", "Free", old_price, "Category", video_id, cover, "Less_Id", "DurationLong", "DurationPrice", owner, slug, comment, rating, "ModStatus"');
     q = UUID_RE.test(key) ? q.eq('id', key) : q.eq('slug', key);
-    const { data } = await q.limit(1);
+    const { data } = await __mgTrace.wait(1, () => (q.limit(1)));
     course.value = data?.[0] || null;
     // Unpublished courses (draft / on-moderation — e.g. a paid stream's HIDDEN backing course or its
     // bundle-only recording course) must NOT be publicly viewable or buyable. Only the course author
@@ -396,24 +399,24 @@ async function load() {
     if (course.value) {
         document.title = `${course.value.Title} — МитГуру`;
         if (course.value.owner) {
-            const { data: au } = await sb.from('users').select('id, "Name", "Photo", role').eq('id', course.value.owner).limit(1);
+            const { data: au } = await __mgTrace.wait(2, () => (sb.from('users').select('id, "Name", "Photo", role').eq('id', course.value.owner).limit(1)));
             author.value = au?.[0] || null;
         }
         const lids = course.value.Less_Id || [];
         if (lids.length) {
-            const { data: ls } = await sb.from('lessons').select('id, "Title", "File"').in('id', lids);
+            const { data: ls } = await __mgTrace.wait(3, () => (sb.from('lessons').select('id, "Title", "File"').in('id', lids)));
             const byId = Object.fromEntries((ls || []).map((l) => [l.id, l]));
             lessons.value = lids.map((lid) => byId[lid]).filter(Boolean); // keep the course's lesson order
         }
         // students = how many people own this course (user_course rows).
-        const { count } = await sb.from('user_course').select('id', { count: 'exact', head: true }).eq('course', course.value.id);
+        const { count } = await __mgTrace.wait(4, () => (sb.from('user_course').select('id', { count: 'exact', head: true }).eq('course', course.value.id)));
         students.value = count || 0;
         // purchase state: is the viewer logged in, and do they already own this course?
         buyerId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null;
         if (buyerId.value) {
-            owns.value = await ownsCourse(sb, course.value.id, buyerId.value);
+            owns.value = await __mgTrace.wait(5, () => (ownsCourse(sb, course.value.id, buyerId.value)));
             // for any paid course, note if it's already in the cart (a fresh buy OR an owner's renewal)
-            if (!course.value.Free) inCart.value = await courseInCart(sb, course.value.id, buyerId.value);
+            if (!course.value.Free) inCart.value = await __mgTrace.wait(6, () => (courseInCart(sb, course.value.id, buyerId.value)));
         }
         // Record the last opened course for the homepage «Вы смотрели недавно» block. Logged-in only,
         // published only, once per page open (load runs on mount), fire-and-forget — never blocks the UI.
@@ -423,9 +426,11 @@ async function load() {
                 .then(null, (e) => { try { console.warn('[home] last_open update failed', e); } catch (_) { /* noop */ } });
         }
     }
-    loading.value = false;
-    await nextTick();
+    loading.value = false; __mgTrace.ready();
+    await __mgTrace.wait(7, () => (nextTick()));
     ready.value = true; // reactive reveal gate (see ProfilePage.vue)
+
+    });
 }
 
 onMounted(() => { ensureFonts(); load(); });

@@ -122,6 +122,8 @@
 </template>
 
 <script setup>
+import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
+
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { getSupabase, readStoredSession, authCookieUser, waitForUid } from '@/_front/chrome/headerAccount.js';
 import { loadTimeout } from '@/_front/chrome/errorLogger.js';
@@ -199,6 +201,7 @@ function pl(n, f) {
 }
 
 async function load() {
+    return tracePage('HomePage', () => loading.value, async (__mgTrace) => {
     const sb = getSupabase();
     // uid from localStorage OR the sb-access-token cookie. The cookie is domain-scoped to .meetgu.ru
     // (shared across meetgu.ru + app.meetgu.ru) while localStorage is per-origin, so a user who signed
@@ -206,23 +209,23 @@ async function load() {
     // be null there and «Ваши курсы» would render empty. Same fallback as MyCoursePage/ProfileEditPage.
     // Wait for the auth session to be restored before deciding there's no user — a one-shot read here
     // loses the boot race on slow mobile and renders «Ваши курсы» empty forever until a manual reload.
-    const uid = (!sb) ? null : await waitForUid();
-    if (!sb || !uid) { loading.value = false; return; }
+    const uid = (!sb) ? null : await __mgTrace.wait(1, () => (waitForUid()));
+    if (!sb || !uid) { loading.value = false; __mgTrace.ready(); return; }
     const cancelTimeout = loadTimeout('home_personal_data'); // logs loading_timeout if the personal load hangs >15s
 
     // timeout+retry on the personal queries so a stalled request (flaky/throttled mobile) recovers
     let urows = null;
-    try { ({ data: urows } = await sbWithRetry('home_user', () => sb.from('users').select('"Name", last_open').eq('id', uid).limit(1))); } catch (e) { /* logged */ }
+    try { ({ data: urows } = await __mgTrace.wait(2, () => (sbWithRetry('home_user', () => sb.from('users').select('"Name", last_open').eq('id', uid).limit(1))))); } catch (e) { /* logged */ }
     const user = urows?.[0] || {};
     name.value = (user.Name || '').split(/\s+/)[0] || user.Name || '';
 
     // the user's course enrollments (one row per course access window)
     let ucs = null;
     try {
-        ({ data: ucs } = await sbWithRetry('home_user_course', () => sb.from('user_course')
+        ({ data: ucs } = await __mgTrace.wait(3, () => (sbWithRetry('home_user_course', () => sb.from('user_course')
             .select('id, course, end_period, created_at')
             .eq('user', uid)
-            .order('created_at', { ascending: false })));
+            .order('created_at', { ascending: false })))));
     } catch (e) { /* logged */ }
     const rows = ucs || [];
 
@@ -234,9 +237,9 @@ async function load() {
         // the whole «загрузка» spinner — wrap it so a stalled request aborts and retries instead.
         let cs = null;
         try {
-            ({ data: cs } = await sbWithRetry('home_courses', () => sb.from('course')
+            ({ data: cs } = await __mgTrace.wait(4, () => (sbWithRetry('home_courses', () => sb.from('course')
                 .select('id, "Title", "Category", slug, "DurationLong", video_id, owner, "ModStatus"')
-                .in('id', ids)));
+                .in('id', ids)))));
         } catch (e) { /* logged */ }
         // Exclude hidden backing courses (paid streams 'Трансляции' / events 'Мероприятия', all
         // 'Черновик') so they don't appear as broken "courses" (slug=null) in «Ваши курсы».
@@ -269,8 +272,8 @@ async function load() {
     // Primary personal data (name + «Ваши курсы») is ready — clear the spinner NOW, BEFORE the
     // secondary "upcoming" block below. That block does more network calls; if any of them stalls
     // on flaky mobile the page is already rendered, so it can never hang «загрузка» for the user.
-    loading.value = false;
-    await nextTick();
+    loading.value = false; __mgTrace.ready();
+    await __mgTrace.wait(5, () => (nextTick()));
     ready.value = true;
 
     // "Ближайшие мероприятия и эфиры": nearest FUTURE published events + scheduled streams, merged
@@ -278,14 +281,14 @@ async function load() {
     try {
         const now = Date.now();
         // future published events
-        const evs = await listPublishedEvents(sb);
+        const evs = await __mgTrace.wait(6, () => (listPublishedEvents(sb)));
         const futureEvents = (evs || [])
             .filter((e) => e.starts_at && new Date(e.starts_at).getTime() > now)
             .map((e) => ({ ...e, _kind: 'event' }));
         // future scheduled streams (эфиры) — same card shape; author = "speaker"
         let futureStreams = [];
         try {
-            const streams = await listAllStreams(sb);
+            const streams = await __mgTrace.wait(7, () => (listAllStreams(sb)));
             futureStreams = (streams || [])
                 .filter((s) => s.status === 'scheduled' && s.scheduled_at && new Date(s.scheduled_at).getTime() > now)
                 .map((s) => ({ id: s.id, title: s.title, cover_url: s.cover_url, starts_at: s.scheduled_at, speaker: s.authorUser?.Name || '', location: null, _kind: 'stream' }));
@@ -296,17 +299,19 @@ async function load() {
         // enrich only the EVENT rows with speaker names (streams already carry theirs)
         const eventIds = upcoming.value.filter((x) => x._kind === 'event').map((x) => x.id);
         if (eventIds.length) {
-            const { data: erows } = await sbWithRetry('home_event_speakers', () => sb.from('events').select('id, speaker_id').in('id', eventIds));
+            const { data: erows } = await __mgTrace.wait(8, () => (sbWithRetry('home_event_speakers', () => sb.from('events').select('id, speaker_id').in('id', eventIds))));
             const spkIds = [...new Set((erows || []).map((r) => r.speaker_id).filter(Boolean))];
             let nameById = {};
             if (spkIds.length) {
-                const { data: us } = await sbWithRetry('home_speaker_names', () => sb.from('users').select('id, "Name"').in('id', spkIds));
+                const { data: us } = await __mgTrace.wait(9, () => (sbWithRetry('home_speaker_names', () => sb.from('users').select('id, "Name"').in('id', spkIds))));
                 nameById = Object.fromEntries((us || []).map((u) => [u.id, u.Name]));
             }
             const spkByEvent = Object.fromEntries((erows || []).map((r) => [r.id, nameById[r.speaker_id] || '']));
             upcoming.value = upcoming.value.map((x) => (x._kind === 'event' ? { ...x, speaker: spkByEvent[x.id] || '' } : x));
         }
     } catch (e) { upcoming.value = []; }
+
+    });
 }
 
 onMounted(() => { ensureFonts(); load(); });

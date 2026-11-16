@@ -88,6 +88,8 @@
 </template>
 
 <script setup>
+import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
+
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 
@@ -164,12 +166,13 @@ function buildQuery() {
 // Fetch the WHOLE filtered set (chunked to survive any PostgREST max-rows cap), then sort client-side so
 // "Новый пользователь"/unnamed always land last and pagination stays correct across the full ordering.
 async function fetchUsers() {
+    return tracePage('UsersPage', () => loading.value, async (__mgTrace) => {
     if (!sb) return;
     loading.value = true;
     const all = [];
     let start = 0;
     for (;;) {
-        const { data } = await buildQuery().order('created_at', { ascending: false }).range(start, start + 999);
+        const { data } = await __mgTrace.wait(1, () => (buildQuery().order('created_at', { ascending: false }).range(start, start + 999)));
         if (!data || !data.length) break;
         all.push(...data);
         start += data.length;
@@ -177,7 +180,9 @@ async function fetchUsers() {
     }
     allUsers.value = sortUsers(all);
     page.value = 1;
-    loading.value = false;
+    loading.value = false; __mgTrace.ready();
+
+    });
 }
 
 function pickRole(key) { if (roleKey.value === key) return; roleKey.value = key; fetchUsers(); }

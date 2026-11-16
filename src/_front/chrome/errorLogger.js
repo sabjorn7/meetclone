@@ -1,3 +1,4 @@
+import { sessionDiagnostic } from './sessionDiagnostic.js';
 // Lightweight client error/diagnostics logger → public.client_error_log (insert-only).
 // Purpose: when users report "сайт не грузится", give us real data (what actually failed) instead of
 // only their words — distinguish a deploy-race recurrence (lazy-chunk 404 → resource_error) from a
@@ -69,6 +70,7 @@ function visTag() {
 }
 
 async function send(eventType, message, stack) {
+    sessionDiagnostic?.existingError(eventType);
     try {
         const key = `${eventType}|${(message || '').slice(0, 120)}`;
         const now = Date.now();

@@ -177,6 +177,8 @@
 </template>
 
 <script setup>
+import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
+
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import CoursePrice from '@/_front/components/CoursePrice.vue';
@@ -305,39 +307,42 @@ async function fetchCourses(sb, ids, publishedOnly) {
 }
 
 async function load() {
+    return tracePage('ProfilePage', () => loading.value, async (__mgTrace) => {
     // ?user=<uuid> selects whose profile to show; bare /profile_page falls back to the logged-in user.
     const uid = route.query.user || authCookieUser()?.id;
     const sb = getSupabase();
-    if (!uid || !sb) { loading.value = false; return; }
-    const { data } = await sb.from('users')
+    if (!uid || !sb) { loading.value = false; __mgTrace.ready(); return; }
+    const { data } = await __mgTrace.wait(1, () => (sb.from('users')
         .select('id, "Name", "Photo", role, "Description", email, vk_url, youtube_url, telegram_url, whatsapp_url, website_url, booking_url, courses, articles, hide, city')
-        .eq('id', uid).limit(1);
+        .eq('id', uid).limit(1)));
     user.value = data?.[0] || null;
     if (user.value?.Name) document.title = `${user.value.Name} — МитГуру`;
     // Authored courses (published only) — the speaker/school catalog. Free first, then newest.
-    courses.value = (await fetchCourses(sb, user.value?.courses, true))
+    courses.value = (await __mgTrace.wait(2, () => (fetchCourses(sb, user.value?.courses, true))))
         .sort((a, b) => (Number(!!b.Free) - Number(!!a.Free)) || String(b.created_at).localeCompare(String(a.created_at)));
     // Taken courses — the specialist portfolio. user_course maps a user to the courses they own
     // (users.buied_courses holds user_course row ids, NOT course ids). Read the junction, dedupe,
     // then fetch the course rows. Kept even if a course is no longer on sale. Newest first.
-    const { data: uc } = await sb.from('user_course').select('course').eq('user', uid);
+    const { data: uc } = await __mgTrace.wait(3, () => (sb.from('user_course').select('course').eq('user', uid)));
     const takenIds = [...new Set((uc || []).map((r) => r.course).filter(Boolean))];
-    completed.value = (await fetchCourses(sb, takenIds, false))
+    completed.value = (await __mgTrace.wait(4, () => (fetchCourses(sb, takenIds, false))))
         .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
     const aids = user.value?.articles || [];
     if (aids.length) {
-        const { data: arts } = await sb.from('articles')
+        const { data: arts } = await __mgTrace.wait(5, () => (sb.from('articles')
             .select('id, "Title", "Image", "Category", slug, "Publish_date"')
             .in('id', aids).eq('Status', 'Опубликовано')
-            .order('Publish_date', { ascending: false });
+            .order('Publish_date', { ascending: false })));
         articles.value = arts || [];
     }
-    loading.value = false;
-    await nextTick();
+    loading.value = false; __mgTrace.ready();
+    await __mgTrace.wait(6, () => (nextTick()));
     // Reveal via a single reactive ancestor class (not per-element classList, which Vue re-renders
     // during the stat count-up would wipe). CSS staggers by --i.
     ready.value = true;
     setupStats();
+
+    });
 }
 
 function setupStats() {

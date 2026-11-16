@@ -162,6 +162,8 @@
 </template>
 
 <script setup>
+import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
+
 import { ref, reactive, onMounted, nextTick } from 'vue';
 import { getSupabase, readStoredSession, authCookieUser, signOutUser } from '@/_front/chrome/headerAccount.js';
 import { listBlockedUserIds, unblockUser } from '@/_front/moderation/moderationApi.js';
@@ -209,11 +211,12 @@ function initials(name) {
 function clearErr() { err.value = ''; }
 
 async function load() {
+    return tracePage('ProfileEditPage', () => loading.value, async (__mgTrace) => {
     sb = getSupabase();
     uid.value = readStoredSession()?.user?.id || authCookieUser()?.id || null;
-    if (!sb || !uid.value) { loading.value = false; return; }
+    if (!sb || !uid.value) { loading.value = false; __mgTrace.ready(); return; }
 
-    const { data } = await sb.from('users').select(COLS).eq('id', uid.value).limit(1);
+    const { data } = await __mgTrace.wait(1, () => (sb.from('users').select(COLS).eq('id', uid.value).limit(1)));
     const row = data?.[0];
     if (row) {
         Object.assign(user, row);
@@ -224,9 +227,11 @@ async function load() {
         hideMy.value = !!(row.hide && row.hide.my);
     }
     loadSubs();
-    loading.value = false;
-    await nextTick();
+    loading.value = false; __mgTrace.ready();
+    await __mgTrace.wait(2, () => (nextTick()));
     ready.value = true;
+
+    });
 }
 
 async function loadSubs() {

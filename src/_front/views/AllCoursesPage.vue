@@ -144,6 +144,8 @@
 </template>
 
 <script setup>
+import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
+
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import CoursePrice from '@/_front/components/CoursePrice.vue';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
@@ -321,34 +323,37 @@ function courseWord(n) {
 }
 
 async function load() {
+    return tracePage('AllCoursesPage', () => loading.value, async (__mgTrace) => {
     const sb = getSupabase();
-    if (!sb) { loading.value = false; return; }
+    if (!sb) { loading.value = false; __mgTrace.ready(); return; }
     const cancelTimeout = loadTimeout('all_course_catalog'); // logs loading_timeout if the catalog query hangs >15s
     buyerId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null; // guest = null (no supabase call)
     // timeout+retry: a stalled request (flaky/throttled mobile) auto-retries instead of hanging the spinner
     let data = null;
     try {
-        ({ data } = await sbWithRetry('all_course_catalog', () => sb.from('course')
+        ({ data } = await __mgTrace.wait(1, () => (sbWithRetry('all_course_catalog', () => sb.from('course')
             .select('id, "Title", "Price", "Free", old_price, "Category", slug, owner, video_id, cover, "Less_Id", comment, rating, created_at')
             .eq('ModStatus', 'Опубликовано')
             .eq('Buy', true)   // «Доступен к покупке» — не показываем в каталоге снятые с продажи (но опубликованные) курсы
-            .order('created_at', { ascending: false })));
+            .order('created_at', { ascending: false })))));
     } catch (e) { /* retries exhausted — render empty state (already logged) instead of an endless spinner */ }
     cancelTimeout(); // key query returned (or gave up) → cancel the watchdog
     courses.value = data || [];
     // The catalog is ready — clear the spinner NOW, before the secondary authors query. That query
     // only fills in card footer names; if it stalls on flaky mobile the grid is already rendered, so
     // it can never leave the user stuck on «загрузка». (A raw await here used to hang the whole page.)
-    loading.value = false;
-    await nextTick();
+    loading.value = false; __mgTrace.ready();
+    await __mgTrace.wait(2, () => (nextTick()));
     ready.value = true;
     // authors (school / teacher) — name for the card footer, name+photo for the quick-view popup.
     const ownerIds = [...new Set(courses.value.map((c) => c.owner).filter(Boolean))];
     if (ownerIds.length) {
         let us = null;
-        try { ({ data: us } = await sbWithRetry('catalog_authors', () => sb.from('users').select('id, "Name", "Photo"').in('id', ownerIds))); } catch (e) { /* logged */ }
+        try { ({ data: us } = await __mgTrace.wait(3, () => (sbWithRetry('catalog_authors', () => sb.from('users').select('id, "Name", "Photo"').in('id', ownerIds))))); } catch (e) { /* logged */ }
         authorsById.value = Object.fromEntries((us || []).map((u) => [u.id, u]));
     }
+
+    });
 }
 
 onMounted(() => { ensureFonts(); load(); });

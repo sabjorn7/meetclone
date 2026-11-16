@@ -1,3 +1,4 @@
+import { sessionDiagnostic, traceCall } from '@/_front/chrome/sessionDiagnostic.js';
 import type { BetterFetchPlugin, BetterFetchOption } from '@better-fetch/fetch';
 import { createFetch } from '@better-fetch/fetch';
 import { getServerUrl } from './backendWorkflows.js';
@@ -48,6 +49,7 @@ const baseFetch = createFetch({
  });
 
 async function wwServerClient<T>(url: string, options?: BetterFetchOption): Promise<T> {
+    const queueTrace = sessionDiagnostic?.begin('api-queue', 'api');
     if (activeRequests >= WW_CONCURRENCY) {
         await new Promise<void>(resolve => queue.push({ resolve }));
     } else {
@@ -55,7 +57,8 @@ async function wwServerClient<T>(url: string, options?: BetterFetchOption): Prom
     }
 
     try {
-        return await baseFetch(url, options);
+        queueTrace?.end();
+        return await traceCall('api-call', 'api', () => baseFetch(url, options));
     } finally {
         activeRequests--;
         processQueue();

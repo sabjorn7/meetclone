@@ -193,6 +193,8 @@
 </template>
 
 <script setup>
+import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
+
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
@@ -445,6 +447,7 @@ async function loadCheatsheet(courseId) {
 }
 
 async function load() {
+    return tracePage('MyCoursePage', () => loading.value, async (__mgTrace) => {
     sb = getSupabase();
     myId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null;
     // Постепенное включение нативного VOD-плеера: пересчитываем после получения user_id (стабильный бакет).
@@ -454,17 +457,17 @@ async function load() {
 
     // guest → login
     if (!myId.value) { window.location.href = '/login'; return; }
-    if (!sb || !courseId) { loading.value = false; return; }
+    if (!sb || !courseId) { loading.value = false; __mgTrace.ready(); return; }
 
-    const { data } = await sb.from('course')
+    const { data } = await __mgTrace.wait(1, () => (sb.from('course')
         .select('id, "Title", "Less_Id", "Free", "DurationLong", owner, slug, rating, comment, video_id')
-        .eq('id', courseId).limit(1);
+        .eq('id', courseId).limit(1)));
     course.value = data?.[0] || null;
-    if (!course.value) { loading.value = false; return; }
+    if (!course.value) { loading.value = false; __mgTrace.ready(); return; }
 
     // ── access gate (RLS off — frontend is the only guard) ───────────────
     if (!course.value.Free) {
-        const { data: uc } = await sb.from('user_course').select('id, buy, end_period, created_at').eq('course', course.value.id).eq('user', myId.value).limit(1);
+        const { data: uc } = await __mgTrace.wait(2, () => (sb.from('user_course').select('id, buy, end_period, created_at').eq('course', course.value.id).eq('user', myId.value).limit(1)));
         const row = uc?.[0];
         if (!row) { window.location.href = courseHref(); return; }   // paid + not owned → buy page
         userCourseId.value = row.id;
@@ -482,18 +485,18 @@ async function load() {
         .then(null, (e) => { try { console.warn('[home] last_open update failed', e); } catch (_) { /* noop */ } });
 
     // current user (name/photo stamped into a comment) + prefill the star input with their existing grade
-    const { data: meRow } = await sb.from('users').select('"Name", "Photo"').eq('id', myId.value).limit(1);
+    const { data: meRow } = await __mgTrace.wait(3, () => (sb.from('users').select('"Name", "Photo"').eq('id', myId.value).limit(1)));
     me.value = meRow?.[0] || null;
     if (myRating.value) formRating.value = myRating.value;
 
     // author + lessons (in the course's Less_Id order)
     if (course.value.owner) {
-        const { data: au } = await sb.from('users').select('id, "Name", "Photo"').eq('id', course.value.owner).limit(1);
+        const { data: au } = await __mgTrace.wait(4, () => (sb.from('users').select('id, "Name", "Photo"').eq('id', course.value.owner).limit(1)));
         author.value = au?.[0] || null;
     }
     const lids = course.value.Less_Id || [];
     if (lids.length) {
-        const { data: ls } = await sb.from('lessons').select('id, "Title", "Descr", "File", video_id, ban_list').in('id', lids);
+        const { data: ls } = await __mgTrace.wait(5, () => (sb.from('lessons').select('id, "Title", "Descr", "File", video_id, ban_list').in('id', lids)));
         const byId = Object.fromEntries((ls || []).map((l) => [l.id, l]));
         // Enforce per-lesson bans: a user in a lesson's ban_list must NOT see it (the WeWeb viewer did
         // `not(contains(ban_list, user.id))`). Skipping this was an access regression — banned users
@@ -505,12 +508,14 @@ async function load() {
     }
     if (lessons.value.length) selectLesson(lessons.value[0].id);
 
-    loading.value = false;
-    await nextTick();
+    loading.value = false; __mgTrace.ready();
+    await __mgTrace.wait(6, () => (nextTick()));
     ready.value = true;
 
     // Конспект — фоном, не блокирует отрисовку страницы (и marked/DOMPurify грузятся лениво).
     loadCheatsheet(course.value.id);
+
+    });
 }
 
 // Stall watchdog: if the embed iframe hasn't fired @load within VIDEO_STALL_MS after the user hit

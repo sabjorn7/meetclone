@@ -1,3 +1,4 @@
+import '@/_front/chrome/sessionDiagnostic.js';
 import { createApp } from 'vue';
 import axios from 'axios';
 import { VueCookieNext } from 'vue-cookie-next';

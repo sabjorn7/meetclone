@@ -1,0 +1,252 @@
+[
+  {
+    "page": "HomePage",
+    "point": 1,
+    "baselineLine": 209
+  },
+  {
+    "page": "HomePage",
+    "point": 2,
+    "baselineLine": 215
+  },
+  {
+    "page": "HomePage",
+    "point": 3,
+    "baselineLine": 222
+  },
+  {
+    "page": "HomePage",
+    "point": 4,
+    "baselineLine": 237
+  },
+  {
+    "page": "HomePage",
+    "point": 5,
+    "baselineLine": 273
+  },
+  {
+    "page": "HomePage",
+    "point": 6,
+    "baselineLine": 281
+  },
+  {
+    "page": "HomePage",
+    "point": 7,
+    "baselineLine": 288
+  },
+  {
+    "page": "HomePage",
+    "point": 8,
+    "baselineLine": 299
+  },
+  {
+    "page": "HomePage",
+    "point": 9,
+    "baselineLine": 303
+  },
+  {
+    "page": "AllCoursesPage",
+    "point": 1,
+    "baselineLine": 331
+  },
+  {
+    "page": "AllCoursesPage",
+    "point": 2,
+    "baselineLine": 343
+  },
+  {
+    "page": "AllCoursesPage",
+    "point": 3,
+    "baselineLine": 349
+  },
+  {
+    "page": "CoursePage",
+    "point": 1,
+    "baselineLine": 386
+  },
+  {
+    "page": "CoursePage",
+    "point": 2,
+    "baselineLine": 399
+  },
+  {
+    "page": "CoursePage",
+    "point": 3,
+    "baselineLine": 404
+  },
+  {
+    "page": "CoursePage",
+    "point": 4,
+    "baselineLine": 409
+  },
+  {
+    "page": "CoursePage",
+    "point": 5,
+    "baselineLine": 414
+  },
+  {
+    "page": "CoursePage",
+    "point": 6,
+    "baselineLine": 416
+  },
+  {
+    "page": "CoursePage",
+    "point": 7,
+    "baselineLine": 427
+  },
+  {
+    "page": "MyCoursePage",
+    "point": 1,
+    "baselineLine": 459
+  },
+  {
+    "page": "MyCoursePage",
+    "point": 2,
+    "baselineLine": 467
+  },
+  {
+    "page": "MyCoursePage",
+    "point": 3,
+    "baselineLine": 485
+  },
+  {
+    "page": "MyCoursePage",
+    "point": 4,
+    "baselineLine": 491
+  },
+  {
+    "page": "MyCoursePage",
+    "point": 5,
+    "baselineLine": 496
+  },
+  {
+    "page": "MyCoursePage",
+    "point": 6,
+    "baselineLine": 509
+  },
+  {
+    "page": "ClubsPage",
+    "point": 1,
+    "baselineLine": 139
+  },
+  {
+    "page": "ClubsPage",
+    "point": 2,
+    "baselineLine": 147
+  },
+  {
+    "page": "ClubsPage",
+    "point": 3,
+    "baselineLine": 155
+  },
+  {
+    "page": "ClubsPage",
+    "point": 4,
+    "baselineLine": 164
+  },
+  {
+    "page": "ClubsPage",
+    "point": 5,
+    "baselineLine": 173
+  },
+  {
+    "page": "ClubsPage",
+    "point": 6,
+    "baselineLine": 178
+  },
+  {
+    "page": "ArticlesPage",
+    "point": 1,
+    "baselineLine": 140
+  },
+  {
+    "page": "ArticlesPage",
+    "point": 2,
+    "baselineLine": 147
+  },
+  {
+    "page": "ArticlesPage",
+    "point": 3,
+    "baselineLine": 149
+  },
+  {
+    "page": "ArticlesPage",
+    "point": 4,
+    "baselineLine": 156
+  },
+  {
+    "page": "UsersPage",
+    "point": 1,
+    "baselineLine": 172
+  },
+  {
+    "page": "ProfilePage",
+    "point": 1,
+    "baselineLine": 312
+  },
+  {
+    "page": "ProfilePage",
+    "point": 2,
+    "baselineLine": 318
+  },
+  {
+    "page": "ProfilePage",
+    "point": 3,
+    "baselineLine": 323
+  },
+  {
+    "page": "ProfilePage",
+    "point": 4,
+    "baselineLine": 325
+  },
+  {
+    "page": "ProfilePage",
+    "point": 5,
+    "baselineLine": 329
+  },
+  {
+    "page": "ProfilePage",
+    "point": 6,
+    "baselineLine": 336
+  },
+  {
+    "page": "ProfileEditPage",
+    "point": 1,
+    "baselineLine": 216
+  },
+  {
+    "page": "ProfileEditPage",
+    "point": 2,
+    "baselineLine": 228
+  },
+  {
+    "page": "ArticlePage",
+    "point": 1,
+    "baselineLine": 298
+  },
+  {
+    "page": "ArticlePage",
+    "point": 2,
+    "baselineLine": 305
+  },
+  {
+    "page": "ArticlePage",
+    "point": 3,
+    "baselineLine": 322
+  },
+  {
+    "page": "ArticlePage",
+    "point": 4,
+    "baselineLine": 325
+  },
+  {
+    "page": "EventsPage",
+    "point": 1,
+    "baselineLine": 134
+  },
+  {
+    "page": "EventsPage",
+    "point": 2,
+    "baselineLine": 139
+  }
+]

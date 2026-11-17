@@ -12,6 +12,7 @@ const confirmationEmail = url => ({ html: fs.readFileSync(new URL('./fixtures/au
 import { build } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
+const autoDiagnostic = process.argv.includes('--automatic-diagnostic');
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const work=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'meetguru-registration-vk-')));
 fs.symlinkSync(path.join(root,'node_modules'),path.join(work,'node_modules'),'dir');
@@ -21,6 +22,7 @@ fs.writeFileSync(path.join(work,'logger.js'),'export const logClientEvent=()=>{}
 fs.writeFileSync(path.join(work,'guard.js'),'export const guardedTimeout=async task=>task;');
 fs.writeFileSync(path.join(work,'main.js'),`
 import {createApp} from 'vue';import {createRouter,createWebHistory} from 'vue-router';import {createClient} from '@supabase/supabase-js';
+${autoDiagnostic ? `import {instrumentAuth,instrumentRouter} from ${JSON.stringify(path.join(root,'src/_front/chrome/sessionDiagnostic.js'))};` : ''}
 import Registration from ${JSON.stringify(path.join(root,'src/_front/views/RegistrationPage.vue'))};
 import Login from ${JSON.stringify(path.join(root,'src/_front/views/LoginPage.vue'))};
 import AuthPlugin from ${JSON.stringify(path.join(root,'src/components/plugins/plugin-1fa0dd68-5069-436c-9a7d-3b54c340f1fa/src/wwPlugin.js'))};
@@ -43,11 +45,13 @@ const auth={...AuthPlugin,publicInstance:{auth:{
  signInWithPassword:async credentials=>{record('email-login',{email:credentials.email});return window.loginError?{error:{message:window.loginError}}:{data:{session:{user:{id:'11111111-1111-4111-8111-111111111111'}}},error:null};},
  getSession:()=>callbackAuth?callbackAuth.getSession():Promise.resolve({data:{session:null}})
 }},refreshAuthUser:async session=>{record('email-session',{id:session.user.id});return session.user;},verifyOTP:async value=>{record('verifyOTP',value);}};
+${autoDiagnostic ? 'instrumentAuth(auth.publicInstance);' : ''}
 window.wwLib={wwPlugins:{supabaseAuth:auth},wwLog:{error(){}},manager:false};
 const router=createRouter({history:createWebHistory(),routes:[{path:'/registration',component:Registration},{path:'/login',component:Login},{path:'/welcome',component:{template:'<h1 id="welcome">Welcome fixture</h1>'}}]});
+${autoDiagnostic ? 'instrumentRouter(router);' : ''}
 createApp({template:'<router-view />'}).use(router).mount('#app');window.fixtureReady=true;
 `);
-await build({root:work,configFile:false,plugins:[vue({template:{transformAssetUrls:false}})],logLevel:'error',build:{outDir:'dist'},resolve:{alias:[
+await build({root:work,configFile:false,define:{__MG_DIAGNOSTIC_RELEASE__:JSON.stringify('acb1496')},plugins:[vue({template:{transformAssetUrls:false}})],logLevel:'error',build:{outDir:'dist'},resolve:{alias:[
     {find:'@/_front/chrome/headerAccount.js',replacement:path.join(work,'header.js')},
     {find:'@/_front/chrome/errorLogger.js',replacement:path.join(work,'logger.js')},
     {find:'@/_front/chrome/freezeGuard.js',replacement:path.join(work,'guard.js')},
@@ -57,6 +61,8 @@ await build({root:work,configFile:false,plugins:[vue({template:{transformAssetUr
 const user={id:'11111111-1111-4111-8111-111111111111',aud:'authenticated',role:'authenticated',email:'learner@example.test',email_confirmed_at:'2026-11-13T00:00:00Z',app_metadata:{provider:'email'},user_metadata:{},identities:[],created_at:'2026-11-13T00:00:00Z'};
 const network=[],errors=[],checks=[];
 const server=http.createServer((req,res)=>{
+    if(req.url==='/_t/session-diagnostic.json'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({version:1,enabled:autoDiagnostic,sampleRate:1,maxReports:3,thresholdMs:{route:15000,auth:10000,http:20000,page:45000}}));return;}
+    if(req.url.startsWith('/_l/session-v1?')){res.writeHead(204);res.end();return;}
     res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-src 'none'; font-src 'self'");
     if(req.url==='/email-preview'){res.setHeader('Content-Type','text/html');res.end(confirmationEmail(origin+'/synthetic-confirmation').html);return;}
     if(req.url.startsWith('/mock-sb/auth/v1/user')){network.push({method:req.method,path:'/mock-sb/auth/v1/user'});res.setHeader('Content-Type','application/json');res.end(JSON.stringify(user));return;}

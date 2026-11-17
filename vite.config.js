@@ -1,4 +1,7 @@
 import { defineConfig } from 'vite';
+import { execFileSync } from 'node:child_process';
+const diagnosticRelease = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+if (!/^[0-9a-f]{40}$/.test(diagnosticRelease)) throw new Error('Invalid diagnostic release');
 import vue from '@vitejs/plugin-vue';
 import autoprefixer from 'autoprefixer';
 import path from 'path';
@@ -246,6 +249,7 @@ export default defineConfig(({ mode }) => {
         plugins: [vue()],
         base: "/",
         define: {
+            __MG_DIAGNOSTIC_RELEASE__: JSON.stringify(diagnosticRelease),
             global: 'globalThis',
             __VUE_PROD_DEVTOOLS__: mode === 'development',
             __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: mode === 'development',

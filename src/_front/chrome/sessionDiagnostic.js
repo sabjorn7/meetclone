@@ -1,4 +1,6 @@
-// Opt-in, in-memory trace. No timers, storage, automatic uploads, raw URLs or error messages.
+import { createAutomaticDiagnostic } from './sessionDiagnosticAuto.js';
+import { getHiddenMs } from './freezeGuard.js';
+// Shared bounded recorder. Manual mode stays local; automatic delivery has a separate policy.
 const PAGES = new Set(['HomePage', 'AllCoursesPage', 'CoursePage', 'MyCoursePage', 'ClubsPage',
     'ArticlesPage', 'UsersPage', 'ProfilePage', 'ProfileEditPage', 'ArticlePage', 'EventsPage']);
 const STAGES = new Set(['route-transition', 'page-unload', 'auth', 'auth-init', 'http', 'body', 'page-load', 'page-await', 'processing', 'api-queue', 'api-call']);
@@ -16,12 +18,13 @@ function routeKind(route) {
         'profile', 'profile_page', 'events', 'streams', 'faq', 'login', 'registration'].includes(first)
         ? first || 'home' : 'other';
 }
-export function createSessionDiagnostic(now = () => performance.now()) {
-    let sequence = 0, navigation = 0, dropped = 0;
+export function createSessionDiagnostic(now = () => performance.now(), options = {}) {
+    const enabled = () => !options.recording || options.recording();
+    let sequence = 0, navigation = 0, dropped = 0, pageReady = false;
     const events = [], active = new Map();
-    function emit(event) { events.push(event); if (events.length > 240) { events.shift(); dropped++; } }
+    function emit(event) { if (!enabled()) return; events.push(event); if (events.length > 240) { events.shift(); dropped++; } }
     function begin(stage, label = '', loading, point) {
-        if (!STAGES.has(stage)) return { end() {}, ready() {} };
+        if (!enabled() || !STAGES.has(stage)) return { end() {}, ready() {} };
         const id = ++sequence, start = now(), nav = navigation;
         // Labels are constants/categories only, never arguments, route params or table names.
         const safeLabel = PAGES.has(label) || METHODS.includes(label) || ROUTES.has(label) || ['rest', 'auth', 'api'].includes(label) ? label : '';
@@ -31,20 +34,25 @@ export function createSessionDiagnostic(now = () => performance.now()) {
         emit({ id, stage, label: safeLabel, navigation: nav, event: 'begin', at: start, ...site });
         let ended = false;
         return {
-            ready() { emit({ id, stage, event: 'loading-false', navigation: nav, at: now(), ms: now() - start }); },
+            ready() { if (options.automatic && stage==='page-load') pageReady=true; if (options.automatic && active.has(id)) active.get(id).loading=()=>false; emit({ id, stage, event: 'loading-false', navigation: nav, at: now(), ms: now() - start }); },
             end(outcome = 'ok', error, status) {
                 if (ended) return;
-                ended = true; active.delete(id);
+                ended = true; const pending = active.get(id); active.delete(id);
                 const event = { id, stage, navigation: nav, event: 'end', at: now(), ms: now() - start,
                     outcome: ['ok', 'error', 'cancelled', 'superseded'].includes(outcome) ? outcome : 'error' };
                 if (error) event.errorType = errorType(error);
                 if (Number.isInteger(status) && status >= 100 && status <= 599) event.status = status;
                 if (loading) { try { event.loading = !!loading(); } catch (_) {} }
+                if (options.automatic && stage==='page-load') {
+                    if (event.loading===false) pageReady=true;
+                    else if (event.loading===true && pending && enabled()) active.set(id,{...pending,completed:true});
+                }
                 emit(event);
             },
         };
     }
     function call(stage, label, fn, loading) {
+        if (!enabled()) return fn({ end() {}, ready() {} });
         const span = begin(stage, label, loading);
         try {
             // Preserve both successful values and original rejection objects.
@@ -54,15 +62,19 @@ export function createSessionDiagnostic(now = () => performance.now()) {
         } catch (error) { span.end('error', error); throw error; }
     }
     function snapshot() {
-        return { diagnosticVersion: 1, sourceBaseline: '312ce95', capturedAtUTC: new Date().toISOString(), navigation, dropped,
+        if (options.automatic) for (const [id,item] of active) {
+            if (item.completed) { try { if (!item.loading()) { active.delete(id); pageReady=true; } } catch (_) {} }
+        }
+        return { ...(options.automatic ? {pageReady} : {}), diagnosticVersion: 1, sourceBaseline: '312ce95', capturedAtUTC: new Date().toISOString(), navigation, dropped,
             events: events.slice(), pending: [...active.values()].map(item => {
-                const { loading, ...safe } = item;
+                const { loading, completed, ...safe } = item;
                 safe.ms = now() - item.start;
                 if (loading) { try { safe.loading = !!loading(); } catch (_) {} }
                 return safe;
             }) };
     }
     function page(label, loading, fn) {
+        if (!enabled()) return fn({ready() {}, wait(_point, query) { return query(); }});
         return call('page-load', label, span => {
             let processing = begin('processing', label);
             const control = {
@@ -82,15 +94,22 @@ export function createSessionDiagnostic(now = () => performance.now()) {
             }, error => { processing?.end('error', error); throw error; });
         }, loading);
     }
-    return { begin, call, page, snapshot, nextNavigation() { navigation++; },
+    return { begin, call, page, snapshot, enabled, clear() { events.length=0; active.clear(); }, nextNavigation() { navigation++; if (options.automatic) {active.clear();pageReady=false;} },
         existingError(type) {
             if (['vue_error', 'window_error', 'unhandled_rejection', 'resource_error'].includes(type))
                 emit({ stage: 'existing-error', event: type, navigation, at: now() });
+            try { options.onError?.(type); } catch (_) { /* diagnostics never throw */ }
         } };
 }
 
 const enabled = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mg_loading_diag') === '1';
-export const sessionDiagnostic = enabled ? createSessionDiagnostic() : null;
+let automatic;
+export const sessionDiagnostic = typeof window === 'undefined' ? null : createSessionDiagnostic(undefined, enabled ? {} : {
+    automatic: true, recording: () => !automatic || automatic.recording(), onError: type => automatic?.error(type),
+});
+export function automaticOwnsError(type) {
+    return !enabled && ['window_error','vue_error','unhandled_rejection','resource_error'].includes(type);
+}
 export function traceCall(stage, label, fn, loading) {
     return sessionDiagnostic ? sessionDiagnostic.call(stage, label, fn, loading) : fn({ ready() {} });
 }
@@ -135,6 +154,7 @@ export function instrumentFetch(host, diagnostic = sessionDiagnostic) {
     if (!diagnostic || typeof host.fetch !== 'function') return;
     const original = host.fetch;
     host.fetch = function (...args) {
+        if (diagnostic.enabled && !diagnostic.enabled()) return original.apply(this, args);
         let kind;
         try {
             const url = new URL(typeof args[0] === 'string' || args[0] instanceof URL ? args[0] : args[0].url, host.location.origin);
@@ -162,7 +182,7 @@ export function instrumentFetch(host, diagnostic = sessionDiagnostic) {
 }
 
 function installPanel() {
-    if (!sessionDiagnostic) return;
+    if (!enabled || !sessionDiagnostic) return;
     instrumentFetch(window);
     const mount = () => {
         const root = document.createElement('div');
@@ -188,3 +208,13 @@ function installPanel() {
     if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount, { once: true });
 }
 installPanel();
+
+if (!enabled && sessionDiagnostic) {
+    // Capture the native transport before instrumentation; telemetry never traces itself.
+    const transport = window.fetch.bind(window);
+    automatic = createAutomaticDiagnostic({recorder:sessionDiagnostic, fetch:transport,
+        release: typeof __MG_DIAGNOSTIC_RELEASE__ === 'string' ? __MG_DIAGNOSTIC_RELEASE__ : '',
+        hiddenMs:getHiddenMs, visible:()=>document.visibilityState==='visible', online:()=>navigator.onLine!==false});
+    instrumentFetch(window);
+    void automatic.start();
+}

@@ -5,11 +5,17 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 const source = fs.readFileSync(new URL('../src/_front/chrome/sessionDiagnostic.js', import.meta.url));
+let autoMode=false; const reports=[];
 const server = http.createServer((req, res) => {
-    res.setHeader('Content-Type', req.url === '/module.js' ? 'text/javascript' : 'text/html');
+    if (req.url === '/favicon.ico') {res.writeHead(204);return res.end();}
+    if (req.url.startsWith('/_l/session-v1?')) { reports.push({url:req.url,cookie:req.headers.cookie,referer:req.headers.referer}); res.writeHead(204);return res.end(); }
+    res.setHeader('Content-Type', req.url.endsWith('.js') ? 'text/javascript' : 'text/html');
+    if (['/sessionDiagnosticAuto.js','/freezeGuard.js'].includes(req.url)) return res.end(fs.readFileSync(new URL('../src/_front/chrome'+req.url, import.meta.url)));
+    if (req.url === '/_t/session-diagnostic.json') return res.end(JSON.stringify({version:1,enabled:autoMode,sampleRate:1,maxReports:3,thresholdMs:{route:15000,auth:10000,http:20000,page:45000}}));
     if (req.url === '/module.js') return res.end(source);
+    autoMode=req.url.includes('auto=1');
     res.end(`<meta name="viewport" content="width=device-width,initial-scale=1"><header>MeetGuru</header><main>Загрузка…</main><footer>Footer</footer>
-      <script>window.originalFetch=window.fetch;</script><script type="module">
+      <script>window.originalFetch=window.fetch;window.__MG_DIAGNOSTIC_RELEASE__='acb1496';</script><script type="module">
       import {sessionDiagnostic,tracePage} from '/module.js';
       window.diagnostic=sessionDiagnostic;
       if(sessionDiagnostic) {
@@ -50,6 +56,7 @@ try {
     await send('Network.enable', {}, sessionId);
     await send('Network.setBlockedURLs', { urls: ['https://*', 'http://app.meetgu.ru/*', 'http://sb.meetgu.ru/*'] }, sessionId);
     async function navigate(query) {
+        await evaluate('window.fixtureReady=false');
         await send('Page.navigate', { url: `http://127.0.0.1:${port}/${query}` }, sessionId);
         for (let i = 0; i < 100; i++) { if (await evaluate('!!window.fixtureReady')) return; await new Promise(r => setTimeout(r, 30)); }
         throw Error('Fixture did not load');
@@ -72,8 +79,18 @@ try {
     console.log('PASS clipboard unavailable: selected-text fallback works offline');
     await send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }, sessionId);
     await navigate('');
-    assert.equal(await evaluate("window.diagnostic===null && !document.querySelector('#mg-session-diagnostic') && window.fetch===window.originalFetch"), true);
-    console.log('PASS without opt-in: no panel, no fetch replacement');
+    assert.equal(await evaluate("!!window.diagnostic && !document.querySelector('#mg-session-diagnostic')"), true);
+    console.log('PASS without opt-in: hidden recorder, no panel');
+    await navigate('?auto=1');
+    await new Promise(r=>setTimeout(r,150));
+    assert.equal(reports.length,0);
+    await evaluate("document.cookie='private=SECRET'; window.diagnostic.existingError('window_error')");
+    for(let i=0;i<50 && !reports.length;i++)await new Promise(r=>setTimeout(r,20));
+    assert.equal(reports.length,1);
+    assert.equal(reports[0].cookie,undefined);assert.equal(reports[0].referer,undefined);
+    assert(!/SECRET|email|https|token/.test(reports[0].url));
+    assert.equal(await evaluate("!!document.querySelector('#mg-session-diagnostic')"),false);
+    console.log('PASS automatic mode: one numeric report, no cookies/referrer/panel, no success report');
 } finally {
     socket?.close(); chrome.kill(); await new Promise(resolve => server.close(resolve));
 }

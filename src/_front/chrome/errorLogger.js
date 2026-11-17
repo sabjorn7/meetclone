@@ -1,4 +1,4 @@
-import { sessionDiagnostic } from './sessionDiagnostic.js';
+import { sessionDiagnostic, automaticOwnsError } from './sessionDiagnostic.js';
 // Lightweight client error/diagnostics logger → public.client_error_log (insert-only).
 // Purpose: when users report "сайт не грузится", give us real data (what actually failed) instead of
 // only their words — distinguish a deploy-race recurrence (lazy-chunk 404 → resource_error) from a
@@ -71,6 +71,7 @@ function visTag() {
 
 async function send(eventType, message, stack) {
     sessionDiagnostic?.existingError(eventType);
+    if (automaticOwnsError(eventType)) return; // Numeric automatic channel replaces legacy PII-bearing delivery for these events.
     try {
         const key = `${eventType}|${(message || '').slice(0, 120)}`;
         const now = Date.now();
@@ -128,6 +129,7 @@ export function initErrorLogger() {
     // which do not bubble and carry no .error — detect them via the event target's src/href.
     window.addEventListener('error', (e) => {
         if (e?.error) { send('window_error', e.error.message || String(e.message || 'error'), e.error.stack); return; }
+        if (automaticOwnsError('window_error') && e?.target === window && e?.message) { send('window_error', 'Script error', null); return; }
         // Resource load failures. Log our own bundle chunks (a lazy-chunk 404 = deploy-race recurrence)
         // AND an explicit allowlist of CRITICAL external scripts (vkid / unpkg / id.vk.com — the VK ID
         // SDK) so a blocked/throttled CDN load is diagnosable. Everything else (images, weweb icon CDNs)

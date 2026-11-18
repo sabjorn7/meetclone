@@ -1,3 +1,4 @@
+import { createDiagnosticTransport } from './sessionDiagnosticTransport.js';
 // Delivery policy for the existing recorder, not a second event recorder.
 // Wire v1: stage-label-event-point-span-start-ms-outcome-status-loading.
 export const STAGE_CODES = ['route-transition','page-unload','auth','auth-init','http','body','page-load','page-await','processing','api-queue','api-call','existing-error','context'];
@@ -21,54 +22,23 @@ export function encodeSnapshot(snapshot, release, reason) {
     while (build().length > 1100 && rows.length > 1) { rows.shift(); truncated=true; }
     return build();
 }
-export function validConfig(c) {
-    return c?.version===1 && c.enabled===true && Number.isFinite(c.sampleRate) && c.sampleRate>0 && c.sampleRate<=1
-        && c.maxReports===3 && ['route','auth','http','page'].every(k=>Number.isInteger(c.thresholdMs?.[k]) && c.thresholdMs[k]>=1000 && c.thresholdMs[k]<=300000);
-}
 export function createAutomaticDiagnostic({ recorder, fetch, release, now=()=>Date.now(), hiddenMs=()=>0,
-    visible=()=>true, online=()=>true, random=Math.random, schedule=setTimeout, cancel=clearTimeout }) {
-    const draw=random(); let config=null, selected=false, stopped=false, attempts=0, busy=false, timer=null;
-    let last=now(), hidden=hiddenMs(), awake=0, lastConfig=0, lastAttempt=-Infinity;
-    const age=new Map(), reported=new Set();
-    // This is a bounded policy cache of span ages, not another trace buffer.
-    const recording = () => !stopped;
-    function stop() { stopped=true; selected=false; config=null; age.clear(); reported.clear(); recorder.clear(); if(timer!==null)cancel(timer); timer=null; }
-    async function request(url, readText=false) {
-        const controller = new AbortController(); let timeout;
-        const deadline=new Promise((_,reject)=>{timeout=schedule(()=>{controller.abort();reject(Error('diagnostic timeout'));},3000);});
-        try {
-            return await Promise.race([deadline, (async()=>{
-                const r=await fetch(url,{method:'GET',credentials:'omit',referrerPolicy:'no-referrer',cache:'no-store',mode:'same-origin',signal:controller.signal});
-                if(!r.ok)throw Error('diagnostic transport');
-                return readText ? await r.text() : r;
-            })()]);
-        } finally { cancel(timeout); }
-    }
-    async function readConfig() {
-        try {
-            const text=await request('/_t/session-diagnostic.json',true); if(text.length>4096)throw Error();
-            const c=JSON.parse(text); if(!validConfig(c) || draw>=c.sampleRate) {stop();return false;}
-            if(stopped)return false;
-            config=c;selected=true;lastConfig=now();return true;
-        } catch {stop();return false;}
-    }
+    visible=()=>true, online=()=>true, random=Math.random, schedule=setTimeout, cancel=clearTimeout, transport }) {
+    const shared = transport || createDiagnosticTransport({fetch,release,now,visible,online,random,schedule,cancel});
+    let timer=null, last=now(), hidden=hiddenMs(), awake=0;
+    const age=new Map();
+    shared.onStop(()=>{age.clear();recorder.clear();if(timer!==null)cancel(timer);timer=null;});
+    const recording=()=>!shared.state().stopped;
+    const stop=()=>shared.stop();
     async function trigger(reason) {
-        if(!selected || stopped || busy || attempts>=3 || !visible() || !online() || now()-lastAttempt<10000)return;
         const snapshot=recorder.snapshot();
-        const key=`${snapshot.navigation}:${reason}`;
-        if(reported.has(key))return;
-        // Reserve the budget before any asynchronous work. Failed preflight also consumes it.
-        reported.add(key);attempts++;lastAttempt=now();busy=true;
-        try {
-            if(!await readConfig() || !visible() || !online())return;
-            const data=encodeSnapshot(snapshot,release,reason);
-            if(data)await request('/_l/session-v1?d='+data);
-        } catch { /* no retries, no logging of transport errors */ }
-        finally {busy=false;if(attempts>=3)stop();}
+        await shared.send(reason,encodeSnapshot(snapshot,release,reason),`${snapshot.navigation}:${reason}`);
     }
     function tick() {
         timer=null;
-        if(stopped || !selected)return;
+        const state=shared.state();
+        if(state.stopped || !state.selected)return;
+        const config=state.config;
         const current=now(), h=hiddenMs(), delta=current-last;
         const suspended=!visible() || h!==hidden || delta<0 || delta>3000;
         last=current;hidden=h;
@@ -88,16 +58,16 @@ export function createAutomaticDiagnostic({ recorder, fetch, release, now=()=>Da
             for(const id of age.keys())if(!live.has(id))age.delete(id);
         }
         // Expired permission fails closed. Refresh only for selected foreground documents.
-        if(now()-lastConfig>=60000 && visible() && !busy){busy=true;void readConfig().finally(()=>{busy=false;});}
-        if(!stopped)timer=schedule(tick,1000);
+        if(now()-state.lastConfig>=60000 && visible() && !state.busy)void shared.refresh();
+        if(!shared.state().stopped)timer=schedule(tick,1000);
     }
     return {
         recording,
-        async start(){if(!/^[0-9a-f]{7,40}$/.test(release)){stop();return;}if(await readConfig()){last=now();hidden=hiddenMs();timer=schedule(tick,1000);
+        async start(){if(await shared.start() && !shared.state().stopped){last=now();hidden=hiddenMs();timer=schedule(tick,1000);
             const early=recorder.snapshot().events.find(e=>e.stage==='existing-error');
             if(early)void trigger(early.event==='resource_error'?2:1);}},
         error(type){ if(['window_error','vue_error','unhandled_rejection'].includes(type))void trigger(1);else if(type==='resource_error')void trigger(2); },
         stop,
-        state:()=>({selected,stopped,attempts,pendingAges:age.size}),
+        state:()=>({...shared.state(),pendingAges:age.size}),
     };
 }

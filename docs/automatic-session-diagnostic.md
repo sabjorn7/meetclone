@@ -61,3 +61,37 @@ Repeated on main: 17 automatic groups, 11 recorder groups, 6 email helpers, 16 p
 Pre-release server read: enabled flag absent, enabled=false, sampleRate=0, events.log=0 bytes, guard Result=success / ExecMainStatus=0. No server state changed.
 
 Rollback anchor: acb1496a3b815d8a07826e93ea7377b5a83f2ee8, last successful Deploy App https://github.com/sabjorn7/meetclone/actions/runs/43863459666. Rollback after approval: revert the single automatic-diagnostics frontend release commit on current main and push the revert, which invokes the same Deploy App workflow. Keep the server collection disabled. No SQL, service restart or nginx change required; avoid reset/force-push so later unrelated work remains intact.
+
+
+## Early boot timeout correction — local, 17 November
+
+Baseline: published deb369bebe5ce324cd5f4be058595ce908cc81d9. The earlier release sections above describe prior work. This correction is local only: no commit, push, deployment, server changes or collection activation. Current production state was not rechecked during this local task.
+
+The existing template.html 15000 ms watchdog now calls the shared transport with reason 7. Its timer, one-time freeze rearm, 5000 ms CSS unblock and error screen are unchanged. No second boot watchdog or Vue/Supabase dependency. Vite embeds the self-contained transport factory in HTML; sessionDiagnosticAuto imports that same factory and reuses the HTML instance when present. One sampling draw, config permission, dedup map, cooldown and three-attempt budget survive late module loading and SPA navigation. Failed pre-send permission checks consume a reserved attempt. Disabled/unreachable/invalid config fails closed. No new receiver schema or nginx configuration is needed.
+
+Numeric startup points (stage 13, label 0): 0 inline setup; 1 sessionDiagnostic module evaluated; 2 main module body; 3 before initFront; 4 initFront resolved; 5 before router.isReady; 6 router ready; 7 app.mount returned. These are milestones, not proof of first paint or content readiness. A timeout records reached points and a pending row. No resource names, full URLs, messages or client identifiers enter this payload. Module graph download/evaluation failures before point 1 cannot be distinguished from each other by these milestones alone.
+
+Pre-mount module errors are assigned to the existing watchdog's single boot incident. Automatic-mode legacy boot_timeout/boot_late image reports are replaced by this numeric path to avoid duplicate reporting and obey the kill switch. Manual mode and absence of the early transport retain the old watchdog delivery behavior. The error screen is always preserved, even if telemetry throws or is disabled. This is a change to automatic diagnostic routing only, not timeout/UI behavior.
+
+Background and delayed timer callbacks do not emit a stale incident; the original watchdog may rearm once and then report after an eligible foreground window. Repeated boot calls and late successful mount do not repeat a boot report. There is no offline replay: full network loss, config timeout, prolonged suspension, inline JS blocking/CSP or a stopped JS event loop can prevent delivery. Physical Android/iPhone suspension was not tested.
+
+Tests: tests/boot-timeout-diagnostic.browser.mjs serves the actual local built app and local config/receiver, blocks external API calls and uses a mobile viewport. It covers slow main JS, main 404, delayed CSS, unresolved initFront, disabled collection, manual mode, late mount, repeated watchdog calls, hidden tab and clock jumps. Config/receiver must be real local endpoints: after service-worker activation WebKit requests can bypass Playwright route interception; route-only mocks produced a false local 404. Application/service-worker code was not changed to fix that fixture.
+
+New transport unit suite: 13 groups; shared draw/budget, numeric receiver contract, privacy, kill switch, offline/500/hung config headers and body, dedup, pre-mount ownership, timer cleanup. Existing auto suite: 17 groups. Recorder 11, email helper 6, payment unit 16, freezeGuard 11. Browser regressions: Auth/email/VK 26, cart 12, manual/automatic diagnostics 4, built application 3, normal WebKit diagnostics 6. Synthetic credentials/endpoints only; no real email, OAuth login, payment or production write.
+
+Cost: factory source 5738 bytes / gzip 1979 bytes, plus a small bootstrap wrapper in each HTML document; at most eight numeric milestones. Desktop Node factory initialization approximately 1–4 microseconds, not a mobile-device benchmark. Existing single automatic monitor remains; only bounded request deadline timers are added during transport. Initial config fetch moves earlier in the document, not an extra independent config fetch. No successful-load incident delivery. The local Vite build excludes SEO postbuild, which would access production.
+
+Final result: Chrome 8/8 and WebKit 8/8 boot scenarios PASS, including real 15-second waits, plus late-mount and repeated-call assertions. All unit and regression groups listed above PASS. Local Vite production-mode build PASS (without SEO postbuild); git diff --check PASS. Ready for separately authorized publication with collection OFF. No physical iPhone/Android test; real device suspension remains a limitation.
+
+Changed files in this correction: template.html; vite.config.js; src/_front/main.js; src/_front/chrome/sessionDiagnostic.js; src/_front/chrome/sessionDiagnosticAuto.js; new src/_front/chrome/sessionDiagnosticTransport.js; tests/session-diagnostic.browser.mjs; new tests/session-diagnostic-transport.unit.mjs; new tests/boot-timeout-diagnostic.browser.mjs; docs/automatic-session-diagnostic.md. Pre-existing untracked assets/directories were not edited or staged. No commit created.
+
+
+## Boot correction release — 18 November
+
+Publication authorized with collection OFF. Current main and browser-observed production revision: deb369bebe5ce324cd5f4be058595ce908cc81d9. Pre-deploy read confirmed /etc/meetguru-session/enabled absent, config enabled=false / sampleRate=0, events.log zero bytes. Existing Deploy App run 44107664151 succeeded. Scope: only the ten correction files listed above; no server or business-logic changes.
+
+Rollback anchor for THIS correction: deb369bebe5ce324cd5f4be058595ce908cc81d9 (not the older acb1496 anchor). Restore by reverting the single boot-timeout correction commit on current main and publishing through Deploy App; keep collection OFF. Do not reset/force-push or roll back unrelated later commits.
+
+Repeated production build including SEO postbuild succeeded (10 article / 139 course pages); landing build succeeded. Production baseline browser smoke confirmed catalog and login/registration forms, manual offline export, zero JS/CSS failures, zero page exceptions and zero automatic report attempts. Authenticated flows are checked locally using mocks, not live credentials.
+
+Release gate repeated PASS: Chrome boot 8/8, WebKit boot 8/8; Auth/email/VK 26; checkout browser 12; manual/automatic browser 4; built-app browser 3; transport 13, auto 17, recorder 11, email helpers 6, checkout units 16, freezeGuard 11. One sandboxed chained browser invocation stalled; stopped and reran checkout independently with the required local browser permissions, 12/12 PASS. No application change was needed.

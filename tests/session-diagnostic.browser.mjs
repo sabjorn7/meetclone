@@ -10,7 +10,7 @@ const server = http.createServer((req, res) => {
     if (req.url === '/favicon.ico') {res.writeHead(204);return res.end();}
     if (req.url.startsWith('/_l/session-v1?')) { reports.push({url:req.url,cookie:req.headers.cookie,referer:req.headers.referer}); res.writeHead(204);return res.end(); }
     res.setHeader('Content-Type', req.url.endsWith('.js') ? 'text/javascript' : 'text/html');
-    if (['/sessionDiagnosticAuto.js','/freezeGuard.js'].includes(req.url)) return res.end(fs.readFileSync(new URL('../src/_front/chrome'+req.url, import.meta.url)));
+    if (['/sessionDiagnosticAuto.js','/sessionDiagnosticTransport.js','/freezeGuard.js'].includes(req.url)) return res.end(fs.readFileSync(new URL('../src/_front/chrome'+req.url, import.meta.url)));
     if (req.url === '/_t/session-diagnostic.json') return res.end(JSON.stringify({version:1,enabled:autoMode,sampleRate:1,maxReports:3,thresholdMs:{route:15000,auth:10000,http:20000,page:45000}}));
     if (req.url === '/module.js') return res.end(source);
     autoMode=req.url.includes('auto=1');

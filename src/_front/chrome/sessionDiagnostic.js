@@ -102,6 +102,8 @@ export function createSessionDiagnostic(now = () => performance.now(), options =
         } };
 }
 
+export function markBootStage(phase) { try { if (typeof window !== 'undefined') window.__mgSessionTransportV1?.mark(phase); } catch (_) {} }
+markBootStage(1);
 const enabled = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mg_loading_diag') === '1';
 let automatic;
 export const sessionDiagnostic = typeof window === 'undefined' ? null : createSessionDiagnostic(undefined, enabled ? {} : {
@@ -214,7 +216,7 @@ if (!enabled && sessionDiagnostic) {
     const transport = window.fetch.bind(window);
     automatic = createAutomaticDiagnostic({recorder:sessionDiagnostic, fetch:transport,
         release: typeof __MG_DIAGNOSTIC_RELEASE__ === 'string' ? __MG_DIAGNOSTIC_RELEASE__ : '',
-        hiddenMs:getHiddenMs, visible:()=>document.visibilityState==='visible', online:()=>navigator.onLine!==false});
+        transport:window.__mgSessionTransportV1, hiddenMs:getHiddenMs, visible:()=>document.visibilityState==='visible', online:()=>navigator.onLine!==false});
     instrumentFetch(window);
     void automatic.start();
 }

@@ -1,4 +1,5 @@
-import '@/_front/chrome/sessionDiagnostic.js';
+import { markBootStage } from '@/_front/chrome/sessionDiagnostic.js';
+markBootStage(2);
 import { createApp } from 'vue';
 import axios from 'axios';
 import { VueCookieNext } from 'vue-cookie-next';
@@ -118,7 +119,9 @@ const init = async function () {
 
  
  
+    markBootStage(3);
     await wwLib.initFront({ store, router });
+    markBootStage(4);
 
     app.use(router);
 
@@ -126,7 +129,9 @@ const init = async function () {
         wwLib.$store.dispatch('front/setIsScreenSizeActive', { screenSize, isActive });
     });
 
+    markBootStage(5);
     await router.isReady();
+    markBootStage(6);
 
     // We select ourself app element, because Vue does not know how to do it properly (Editor + Front Iframe)
     const el = document.getElementById('app');
@@ -134,7 +139,8 @@ const init = async function () {
     // Defuse the boot watchdog (template.html): the app mounted, so no white-screen beacon.
     try {
         window.__mgMounted = true;
-        if (window.__mgBootFired) { try { new Image().src = '/_l?t=boot_late&m=' + encodeURIComponent('mountedAt=' + Math.round(performance.now()) + ' vs=' + document.visibilityState + (window.__mgWasHidden ? ' wasHidden=1' : '') + (document.getElementById('mg-load-error') ? ' le=1' : '')); } catch (e) {} }
+        markBootStage(7);
+        if (window.__mgBootFired && !window.__mgSessionTransportV1) { try { new Image().src = '/_l?t=boot_late&m=' + encodeURIComponent('mountedAt=' + Math.round(performance.now()) + ' vs=' + document.visibilityState + (window.__mgWasHidden ? ' wasHidden=1' : '') + (document.getElementById('mg-load-error') ? ' le=1' : '')); } catch (e) {} }
     } catch (e) { /* never throw */ }
 
     initHeaderMenuOutsideClick();

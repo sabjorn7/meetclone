@@ -1,7 +1,18 @@
 import { defineConfig } from 'vite';
+import { createDiagnosticTransport } from './src/_front/chrome/sessionDiagnosticTransport.js';
 import { execFileSync } from 'node:child_process';
 const diagnosticRelease = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 if (!/^[0-9a-f]{40}$/.test(diagnosticRelease)) throw new Error('Invalid diagnostic release');
+const earlySessionDiagnostic = `try { (function () {
+    if (new URLSearchParams(window.location.search).get('mg_loading_diag') === '1' || !window.fetch) return;
+    window.__mgSessionTransportV1 = (${createDiagnosticTransport.toString()})({
+        fetch: window.fetch.bind(window), release: ${JSON.stringify(diagnosticRelease)}, bootEnabled: true,
+        visible: function () { return document.visibilityState === 'visible'; },
+        online: function () { return navigator.onLine !== false; }
+    });
+    window.__mgSessionTransportV1.start();
+})(); } catch (_) { /* preserve the existing watchdog if telemetry is unavailable */ }`;
+
 import vue from '@vitejs/plugin-vue';
 import autoprefixer from 'autoprefixer';
 import path from 'path';
@@ -208,6 +219,7 @@ const compiledTemplate = handlebars.compile(template);
 Object.values(pages).forEach(pageConfig => {
     // Compile the template with page metadata
     const html = compiledTemplate({
+        earlySessionDiagnostic,
         title: pageConfig.title,
         lang: pageConfig.lang,
         meta: pageConfig.meta,

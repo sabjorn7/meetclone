@@ -16,7 +16,7 @@
                     :class="{ active: i === active }"
                     role="tab"
                     :aria-selected="i === active"
-                    @click="active = i"
+                    @click="selectTab(i)"
                 >
                     {{ d.label }}
                 </button>
@@ -39,8 +39,8 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 const props = defineProps({
     title: { type: String, required: true },
@@ -50,12 +50,18 @@ const props = defineProps({
 
 // ?tab=<slug> opens directly on the matching doc; default = first.
 const route = useRoute();
+const router = useRouter();
 const initialActive = () => {
     const t = route.query.tab;
-    const i = t ? props.docs.findIndex((d) => d.tab === t) : -1;
+    const i = t ? props.docs.findIndex((d) => d.tab === t || d.aliases?.includes(t)) : -1;
     return i >= 0 ? i : 0;
 };
 const active = ref(initialActive());
+watch(() => route.query.tab, () => { active.value = initialActive(); });
+function selectTab(i) {
+    active.value = i;
+    router.replace({ query: { ...route.query, tab: props.docs[i].tab }, hash: route.hash });
+}
 </script>
 
 <style scoped>

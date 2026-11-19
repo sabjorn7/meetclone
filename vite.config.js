@@ -211,6 +211,29 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
     }
 }
 
+// Legal routes also need physical HTML entries for direct links and refreshes.
+{
+    const legalPages = {
+        documents: 'Документы',
+        rekvizity: 'Реквизиты и юридическая информация',
+        soglashenie: 'Пользовательское соглашение',
+        'soglasie-rasprostranenie': 'Согласие на распространение персональных данных',
+        podpiska: 'Условия подписки и регулярных платежей',
+        cookie: 'Политика в отношении файлов cookie',
+    };
+    const base = Object.values(pages)[0];
+    for (const [slug, label] of Object.entries(legalPages)) {
+        if (Object.values(pages).some(page => page.outputDir === `./${slug}`)) continue;
+        pages[`legal-${slug}-en`] = {
+            ...base,
+            outputDir: `./${slug}`,
+            title: `${label} — МитГуру`,
+            meta: [{ name: 'title', content: `${label} — МитГуру` }],
+            alternateLinks: [],
+        };
+    }
+}
+
 // Read the main HTML template
 const template = fs.readFileSync(path.resolve(__dirname, 'template.html'), 'utf-8');
 const compiledTemplate = handlebars.compile(template);

@@ -1,0 +1,66 @@
+MEETGURU — сверка и подготовка юридических документов, 19.11.2026
+Ветка: fix/legal-documents-20261119. Основа: 098dd9b1eee2f833b9e2873dc1336dd683186573.
+Рабочая копия: /private/tmp/mg-legal-documents-20261119. Коммит, push и deploy НЕ выполнялись.
+Источник: https://drive.google.com/drive/folders/1C7NLUn-MOyK3EF-T4S3TquUya1j67sMp
+Прочитаны все 19 Google Docs (все вкладки: по одной). Снимки полного структурированного источника: /private/tmp/mg-legal-source-20261119; внутренние документы не включены в приложение.
+03 и 13 изменялись в Drive 19.11.2026, хотя дата редакции в тексте — 05.10.2026. Использован актуальный текст на момент чтения.
+
+| Google Drive | Путь сайта | Изменения | Результат |
+|---|---|---|---|
+| [00_legal_register](https://docs.google.com/document/d/1_8mIdwJNQvgMhMfoO2PJ8oH2Gu2jPfWHvwo3GpiOvWI/edit?usp=drivesdk) | — | Реестр размещения | Внутренний; прочитан, не публикуется |
+| [01_admin_instruction](https://docs.google.com/document/d/1LiTLEbofh1NkCtK_OwNfUTteBPTfUi6z4DGzM2MwLgU/edit?usp=drivesdk) | — | Инструкция администратору | Внутренний; не публикуется |
+| [02_programmer_tz](https://docs.google.com/document/d/1FstbjDYvkQgnOodJC_24OQrYzK38MbtUjGMf1XejD2k/edit?usp=drivesdk) | — | ТЗ по checkout и агентской модели | Внутренний; бизнес-логика не изменяется |
+| [03_публичная оферта для покупателей](https://docs.google.com/document/d/13FODunWKKhdDtvDfWkmpdVZ96OVZTSlBD7oKeUhvOYA/edit?usp=drivesdk) | /oferta; ?tab=dogovor; ?tab=kursy | Август 2025 → 05.10.2026; единая оферта покупателей | Готово: oferta_dogovor.html; две прежние вкладки объединены, URL сохранены |
+| [04_политика обработки ПД](https://docs.google.com/document/d/1Wji1qU1Nf5xfbdyDhv4cqOs7RthmNqV5DjdxHn8fjKM/edit?usp=drivesdk) | /politica | Август 2025 → 05.10.2026 | Готово: politika.html |
+| [05_реквизиты и юр инфомрмация](https://docs.google.com/document/d/1tTsFWU_cLcXRnFWxUOY6wTY87fXz220irPI2cixRgOg/edit?usp=drivesdk) | /rekvizity | Та же дата; в Drive нет строки ИНН, добавлен исходный заголовок | Готово: rekvizity.html, дословно по Drive |
+| [06_пользовательское соглашение ](https://docs.google.com/document/d/19pcg06tFj-zMTGHhezK1tgycCpWCEENY0s_Mwp6sbro/edit?usp=drivesdk) | /soglashenie | Та же дата; в Drive нет двух упоминаний ИНН, восстановлен исходный заголовок | Готово: soglashenie.html, дословно по Drive |
+| [07_анкета спикера](https://docs.google.com/document/d/1iYEuV3hjgsHcZoHLXGCT1BJXQNzckLMe-JS9AuiYc_U/edit?usp=drivesdk) | — | Анкета/шаблон полей продавца | Внутренний; не публикуется |
+| [08_шаблон карточки цифрового продукта](https://docs.google.com/document/d/1JwB-ugRQOMXngEYNlL2ORBIEJ1GCiB3kY3Gzo0ZhPpY/edit?usp=drivesdk) | — | Шаблон карточки с переменными | Не публикуется; поля не заполнялись предположениями |
+| [09_условия подписки регулярных платежей](https://docs.google.com/document/d/1fOno7B3xu2j5N_SfAbO5PIV5ApGOqOhEuhEUG-TE61w/edit?usp=drivesdk) | /podpiska | Текст совпадает после учёта вынесенного в оболочку заголовка | Оставлен без замены |
+| [10_согласие на регулярные/рекуррентные платежи](https://docs.google.com/document/d/1QrTJ-ApAta0ZuykGu9DlB-w42d33KqJRyGrKHxiK7AU/edit?usp=drivesdk) | — | Согласие на рекуррентные платежи с [НАЗВАНИЕ], [СУММА] и др. | Незаполненный шаблон; не публикуется |
+| [11_публичная оферта на очные мероприятия](https://docs.google.com/document/d/1R4zfdkZ7HyLnWSz96UyqGYI0YGjRFgFKMNh4UuxtxfI/edit?usp=drivesdk) | /oferta?tab=meropriyatiya | 09.09.2026 → 05.10.2026; реквизиты/подпись по источнику | Готово: oferta_meropriyatiya.html |
+| [12_правила отмены участия и возврат денежных средств очных мероприятий](https://docs.google.com/document/d/1aZdvo7cEQo9Mz16vwcu3IbXPsLA5jAxRNElHR7238Ws/edit?usp=drivesdk) | /vozvrat | 09.09.2026 → 05.10.2026; новые пп.4.4–4.5, примеры расчёта, перенумерация | Готово: pravila_otmeny.html |
+| [13_агентский договор-оферта для спикера](https://docs.google.com/document/d/1jRyeXuZ5KcyNK5gCF8MxIG-0Vx1aYtQR4AUbdVJRX00/edit?usp=drivesdk) | Нет существующего маршрута для договора спикера | Агентская оферта; по реестру предназначена кабинету спикера | Прочитана; не подменяет покупательскую оферту и не подключена без отдельного сценария |
+| [14_приложение 1 к агентскому договору-оферте со спикером](https://docs.google.com/document/d/1uv25cpyfkMpPZAg_2QJ9ckIDu1kv0HkwiWC9VZtQ0qA/edit?usp=drivesdk) | Нет существующего маршрута приложения спикера | Приложение к агентской оферте | Прочитано; подключение вместе с договором спикера — отдельная задача |
+| [15_согласие на получение рекламы и информации](https://docs.google.com/document/d/1RyNAc9_RSaeeZgIISWg1oatphBHLUHpRMxcfBDXGIaA/edit?usp=drivesdk) | Нет существующей страницы рекламного согласия | Содержит текст согласия и внутренние указания «Как оформить», «Что сохранять» | Не публикуется целиком; отделение инструкций потребует согласования |
+| [16_согласие на предоставление ПД спикеров](https://docs.google.com/document/d/1TS57v5eACSqbmvlDKor7cw18gjQzSxcz4_drTuepK6M/edit?usp=drivesdk) | /soglasie-rasprostranenie — действующий текст оставлен | Та же дата, но другой документ: выбор категорий + инструкции для информационной системы | Не подставлен как готовая форма: требуются отдельные настройки/подтверждение пользователя |
+| [17_pd_processing_consent_template](https://docs.google.com/document/d/12qtRNFWReqWkzEE74SFjegSLoVvWN_a0BxHQnSDYarM/edit?usp=drivesdk) | /soglasie — действующий текст оставлен | Универсальный шаблон с незаполненной целью/категориями | Не публикуется; текущий текст не заменён шаблоном |
+| [18_согласие спикера на использование изображ голоса и тд](https://docs.google.com/document/d/1Qx-lSCxoc-f6oRVslnxL6XzSELmpQcbVbg-LiI5wkaY/edit?usp=drivesdk) | — | Согласие спикера с [ФИО СПИКЕРА], [12] | Незаполненный шаблон; не публикуется |
+
+Документ cookie: в папке Drive аналога нет; существующий текст оставлен без изменения.
+
+ТОЧНОСТЬ ПЕРЕНОСА
+Шесть HTML сформированы из textRun Google Docs без переписывания юридического текста. Сохранены порядок и текст непустых абзацев, явная нумерация, ссылки и выделения. Отличается только оформление/незначащие пробелы. В этих исходниках нет нативных таблиц или автоматических списков; все номера написаны в тексте. Существующие таблицы других документов не менялись.
+source-fidelity.json содержит эталонные абзацы, ссылки, идентификаторы источников и SHA-256 снимков. tests/legal-documents.fidelity.py проверяет их против HTML.
+В 05 и 06 удалены только дополнительные упоминания ИНН, отсутствующие в утверждённом источнике. Это фактическое отличие при одинаковой дате, а не собственная юридическая правка. Перед публикацией владелец может проверить этот результат в diff.
+
+ССЫЛКИ И ВКЛАДКИ
+Все 11 опубликованных HTML-текстов сверены с main через реальный браузер: совпадают после нормализации пробелов. Источник production-снимков: /private/tmp/mg-legal-source-20261119/production.json.
+Подтверждены HTTP 404 при прямом открытии /documents, /rekvizity, /soglashenie, /soglasie-rasprostranenie, /podpiska, /cookie. SPA-переходы работают. Причина в сборке: нет физических HTML-точек входа. В vite.config.js добавлены только эти шесть юридических входов; nginx не меняется.
+Текущая LegalPage читает query.tab только при mount. При SPA-переходе между вкладками может оставаться старый текст. Исправлено локально: слежение за tab и синхронизация адреса при выборе вкладки.
+На /oferta остаются две вкладки: «Для покупателей» и «Очные мероприятия». Оба старых URL dogovor и kursy открывают документ 03. Старый oferta_licenziya.html остаётся в Git, но больше не импортируется в страницу и не выдаётся как действующая оферта.
+Footer: четыре существующие ссылки остаются прежними. Checkout корзины (AppHeader.vue:64) ссылается на /oferta?tab=kursy — теперь показывает новый документ 03. EventDetailPage.vue:77–78 ссылается на мероприятие и /vozvrat. RegistrationPage.vue:97–99 — /soglashenie и /politica. Эти компоненты и платёжная/авторизационная логика не изменялись.
+Все локальные ссылки юридических страниц проверены по маршрутам. https://www.meetgu.ru и https://app.meetgu.ru вернули HTTP 200. mailto:adv@meetgu.ru сохранён дословно; отправка писем не выполнялась.
+
+ПРОВЕРКИ
+PASS: fidelity — 6 документов, все абзацы/нумерация/href.
+PASS: Chrome + WebKit, ширины 390/1280 — 64 сценария: 10 страниц, 5 вариантов deep-link и SPA/footer-переходы на каждой комбинации. Нет горизонтального переполнения и JS-ошибок.
+PASS: production-сборка (vite build -l warn). npm postbuild сознательно не запускался: он обращается к production за SEO-данными; SEO-генерация не проверялась.
+PASS: полное собранное приложение, сервер без SPA-fallback — 12 прямых входов/вкладок.
+PASS: Auth/email/VK — 26 сценариев, checkout — 12 сценариев. Все проверки с моками, без настоящих писем, заказов и списаний.
+PASS: git diff --check. Использован существующий Playwright из /private/tmp/mg-browser-tools-kFSaYv; зависимости не устанавливались. Физические iPhone/Android не проверялись.
+
+ПОВТОР ТЕСТОВ
+python3 tests/legal-documents.fidelity.py
+node tests/legal-documents.browser.mjs
+./node_modules/.bin/vite build -l warn
+node tests/legal-documents.build.browser.mjs
+node tests/auth-email.browser.mjs
+node tests/unified-checkout.browser.mjs
+
+ГРАНИЦЫ И ОСТАВШИЕСЯ ВОПРОСЫ
+Это точный перенос утверждённых документов, не юридическая экспертиза и не подтверждение того, что все описанные агентские, фискальные и согласительные процессы уже реализованы. Документы 13–18 требуют отдельных сценариев/разделения инструкций/заполнения полей; ничего не было придумано вместо владельца.
+Действующие согласия /soglasie и /soglasie-rasprostranenie не объявляются соответствующими новым шаблонам Drive: их замена пока не подготовлена как законченный пользовательский сценарий.
+После согласования: отдельный commit/push/deploy с проверкой прямых production-ссылок. Ни production, ни Auth, ни платежи, ни nginx/Supabase/диагностика не изменялись.
+Риск WeWeb: vite.config.js содержит управляемую экспортом карту страниц; новый блок находится отдельно от неё, но повторный экспорт всего файла может потерять ручное добавление.
+Откат после будущей публикации: revert только согласованного коммита и штатный Deploy App; сейчас откатывать production не требуется.

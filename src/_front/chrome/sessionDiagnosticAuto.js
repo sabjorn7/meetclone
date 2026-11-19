@@ -58,7 +58,7 @@ export function createAutomaticDiagnostic({ recorder, fetch, release, now=()=>Da
             for(const id of age.keys())if(!live.has(id))age.delete(id);
         }
         // Expired permission fails closed. Refresh only for selected foreground documents.
-        if(now()-state.lastConfig>=60000 && visible() && !state.busy)void shared.refresh();
+        if(now()-state.lastConfig>=300000 && visible() && !state.busy)void shared.refresh();
         if(!shared.state().stopped)timer=schedule(tick,1000);
     }
     return {

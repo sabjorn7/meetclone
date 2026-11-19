@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {createAutomaticDiagnostic} from '../src/_front/chrome/sessionDiagnosticAuto.js';
+import {createSessionDiagnostic} from '../src/_front/chrome/sessionDiagnostic.js';
+let t=0,n=0,enabled=true;const tasks=new Map(),calls=[];
+const d=createSessionDiagnostic(()=>t,{automatic:true});
+const a=createAutomaticDiagnostic({recorder:d,release:'408932c',now:()=>t,random:()=>0,schedule:(fn,ms)=>{tasks.set(++n,{fn,at:t+ms});return n;},cancel:id=>tasks.delete(id),fetch:async u=>{calls.push(u);return {ok:true,text:async()=>JSON.stringify({version:1,enabled,sampleRate:1,maxReports:3,thresholdMs:{route:15000,auth:10000,http:20000,page:45000}})};}});
+const drain=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
+const step=async()=>{t+=1000;for(const [id,x]of [...tasks])if(x.at<=t){tasks.delete(id);x.fn();}await drain();};
+await a.start();for(let i=0;i<299;i++)await step();assert.equal(calls.length,1);await step();assert.equal(calls.length,2);
+t+=10000;a.error('window_error');await drain();assert.equal(calls.filter(x=>x.startsWith('/_t')).length,3);assert.equal(calls.filter(x=>x.startsWith('/_l')).length,1);
+enabled=false;t+=10000;d.nextNavigation();a.error('window_error');await drain();assert.equal(calls.filter(x=>x.startsWith('/_l')).length,1);assert(a.state().stopped);assert.equal(tasks.size,0);
+console.log('PASS 299s: one initial config; 300s: refresh; error: mandatory preflight; disable: no report and timer removed');

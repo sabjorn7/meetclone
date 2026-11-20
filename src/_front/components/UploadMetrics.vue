@@ -30,7 +30,12 @@ onUnmounted(() => {
     clearInterval(timer); document.removeEventListener('visibilitychange', invalidate);
     window.removeEventListener('offline', invalidate); window.removeEventListener('online', invalidate);
 });
-const view = computed(() => uploadMetricView(props.metrics, clock.value, invalidatedAt.value, unavailable.value));
+const view = computed(() => {
+    // Timer ticks expire stale rates; new chunk props must use a fresh clock too.
+    // Otherwise a fast acknowledgement is newer than the last tick and hides the rate.
+    const now = Math.max(clock.value, performance.now());
+    return uploadMetricView(props.metrics, now, invalidatedAt.value, unavailable.value);
+});
 </script>
 <style scoped>
 .upload-metrics { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink-2, #515b6b); font-size: 0.82rem; line-height: 1.5; font-variant-numeric: tabular-nums; }

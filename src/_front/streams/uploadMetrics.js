@@ -33,7 +33,7 @@ export function uploadMetricView(metrics, now, invalidatedAt = -Infinity, unavai
     const m = metrics || {confirmedBytes: 0, totalBytes: 0, phase: 'preparing'};
     const rate = !unavailable && m.phase === 'uploading' && now - m.updatedAt < UPLOAD_RATE_STALE_MS
         && now >= m.updatedAt && m.sampleStart >= invalidatedAt ? m.bytesPerSecond : null;
-    return {speed: rate > 0 ? `${formatUploadBytes(rate)}/с` : 'Расчёт скорости...',
+    return {speed: rate > 0 ? `${formatUploadBytes(rate)}/с` : '— КБ/с',
         volume: `Подтверждено: ${formatUploadBytes(m.confirmedBytes)} / ${formatUploadBytes(m.totalBytes)}`,
         eta: rate > 0 && m.confirmedBytes < m.totalBytes
             ? `Осталось примерно ${formatUploadTime((m.totalBytes - m.confirmedBytes) / rate)}` : '',

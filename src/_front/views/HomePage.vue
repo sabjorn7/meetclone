@@ -109,6 +109,11 @@
                     </component>
                 </div>
 
+                <div v-else-if="loadError" class="pd-empty" role="status">
+                    <p>Не удалось загрузить ваши курсы. Попробуйте ещё раз.</p>
+                    <button class="pd-btn pd-btn--lg" type="button" :disabled="loading" @click="load">Повторить загрузку</button>
+                </div>
+
                 <div v-else-if="!loading" class="pd-empty">
                     <img class="pd-empty__mascot" src="/images/minime-06.png" alt="" aria-hidden="true" width="626" height="626" />
                     <p>У вас пока нет курсов.</p>
@@ -124,8 +129,9 @@
 <script setup>
 import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
 
-import { ref, computed, onMounted, nextTick } from 'vue';
-import { getSupabase, readStoredSession, authCookieUser, waitForUid } from '@/_front/chrome/headerAccount.js';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { getSupabase } from '@/_front/chrome/headerAccount.js';
+import { observeConfirmedSession } from '@/_front/chrome/confirmedSession.js';
 import { loadTimeout } from '@/_front/chrome/errorLogger.js';
 import { sbWithRetry } from '@/_front/chrome/sbFetch.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
@@ -137,7 +143,29 @@ const courses = ref([]);   // [{ id, course, end_period, created_at, expired }]
 const recent = ref(null);  // { course, end_period, created_at, expired } | null
 const upcoming = ref([]);  // nearest 1–2 future published events (empty ⇒ block hidden)
 const loading = ref(true);
-const ready = ref(false);
+// Public navigation must remain visible while private/API data is pending.
+const ready = ref(true);
+const loadError = ref(false);
+let loadRunning = false;
+let auth, requestVersion = 0, startTimer, disposed = false;
+function clearPersonal() { name.value = ''; courses.value = []; recent.value = null; }
+function sessionChanged(uid) {
+    requestVersion++;
+    clearTimeout(startTimer);
+    clearPersonal();
+    loadRunning = false;
+    loadError.value = false;
+    loading.value = !!uid;
+    // Never call Supabase from inside its onAuthStateChange callback.
+    if (uid) startTimer = setTimeout(() => { if (!disposed) loadPersonal(); }, 0);
+}
+async function load() {
+    if (!auth || loadRunning) return;
+    loading.value = true; loadError.value = false;
+    await auth.refresh();
+    if (!disposed && auth.snapshot().uid) return loadPersonal();
+    if (!disposed) loading.value = false;
+}
 
 const recentEmbed = computed(() => (recent.value?.course?.video_id ? embedUrl(recent.value.course.video_id) : ''));
 
@@ -200,33 +228,46 @@ function pl(n, f) {
     return f[2];
 }
 
-async function load() {
-    return tracePage('HomePage', () => loading.value, async (__mgTrace) => {
+async function checkedQuery(label, query) {
+    const result = await sbWithRetry(label, query);
+    // PostgREST resolves HTTP errors; do not present them as an empty catalog/account.
+    if (result?.error) throw result.error;
+    return result;
+}
+
+async function loadPersonal() {
+    if (loadRunning) return;
+    const session = auth.snapshot();
+    if (!session.uid) return;
+    const version = ++requestVersion;
+    const valid = () => !disposed && version === requestVersion && auth.current(session);
+    loadRunning = true;
+    clearPersonal();
+    loading.value = true;
+    loadError.value = false;
+    let cancelTimeout = () => {};
+    try {
+    return await tracePage('HomePage', () => loading.value, async (__mgTrace) => {
     const sb = getSupabase();
-    // uid from localStorage OR the sb-access-token cookie. The cookie is domain-scoped to .meetgu.ru
-    // (shared across meetgu.ru + app.meetgu.ru) while localStorage is per-origin, so a user who signed
-    // in on one host has no localStorage session on the other — without the cookie fallback uid would
-    // be null there and «Ваши курсы» would render empty. Same fallback as MyCoursePage/ProfileEditPage.
-    // Wait for the auth session to be restored before deciding there's no user — a one-shot read here
-    // loses the boot race on slow mobile and renders «Ваши курсы» empty forever until a manual reload.
-    const uid = (!sb) ? null : await __mgTrace.wait(1, () => (waitForUid()));
-    if (!sb || !uid) { loading.value = false; __mgTrace.ready(); return; }
-    const cancelTimeout = loadTimeout('home_personal_data'); // logs loading_timeout if the personal load hangs >15s
+    const uid = session.uid;
+    if (!sb || !valid()) return;
+    cancelTimeout = loadTimeout('home_personal_data'); // logs loading_timeout if the personal load hangs >15s
 
     // timeout+retry on the personal queries so a stalled request (flaky/throttled mobile) recovers
     let urows = null;
-    try { ({ data: urows } = await __mgTrace.wait(2, () => (sbWithRetry('home_user', () => sb.from('users').select('"Name", last_open').eq('id', uid).limit(1))))); } catch (e) { /* logged */ }
+    try { ({ data: urows } = await __mgTrace.wait(2, () => (checkedQuery('home_user', () => sb.from('users').select('"Name", last_open').eq('id', uid).limit(1))))); } catch (e) { throw e; }
+    if (!valid()) return;
     const user = urows?.[0] || {};
-    name.value = (user.Name || '').split(/\s+/)[0] || user.Name || '';
 
     // the user's course enrollments (one row per course access window)
     let ucs = null;
     try {
-        ({ data: ucs } = await __mgTrace.wait(3, () => (sbWithRetry('home_user_course', () => sb.from('user_course')
+        ({ data: ucs } = await __mgTrace.wait(3, () => (checkedQuery('home_user_course', () => sb.from('user_course')
             .select('id, course, end_period, created_at')
             .eq('user', uid)
             .order('created_at', { ascending: false })))));
-    } catch (e) { /* logged */ }
+    } catch (e) { throw e; }
+    if (!valid()) return;
     const rows = ucs || [];
 
     // fetch the course details for every referenced course (enrollments + last_open) in one query
@@ -237,15 +278,16 @@ async function load() {
         // the whole «загрузка» spinner — wrap it so a stalled request aborts and retries instead.
         let cs = null;
         try {
-            ({ data: cs } = await __mgTrace.wait(4, () => (sbWithRetry('home_courses', () => sb.from('course')
+            ({ data: cs } = await __mgTrace.wait(4, () => (checkedQuery('home_courses', () => sb.from('course')
                 .select('id, "Title", "Category", slug, "DurationLong", video_id, owner, "ModStatus"')
                 .in('id', ids)))));
-        } catch (e) { /* logged */ }
+        } catch (e) { throw e; }
         // Exclude hidden backing courses (paid streams 'Трансляции' / events 'Мероприятия', all
         // 'Черновик') so they don't appear as broken "courses" (slug=null) in «Ваши курсы».
         byId = Object.fromEntries((cs || []).filter((c) => c.ModStatus !== 'Черновик').map((c) => [c.id, c]));
     }
 
+    if (!valid()) return;
     // "Ваши курсы": dedupe to one entry per course (keep the newest enrollment window)
     const seen = new Set();
     const list = [];
@@ -255,6 +297,7 @@ async function load() {
         seen.add(r.course);
         list.push({ id: r.id, course, end_period: r.end_period, created_at: r.created_at, expired: isExpired(r, course) });
     }
+    name.value = (user.Name || '').split(/\s+/)[0] || user.Name || '';
     courses.value = list;
     cancelTimeout(); // personal data (name + courses) loaded → cancel the watchdog
 
@@ -269,26 +312,34 @@ async function load() {
             : { course: byId[user.last_open], end_period: null, created_at: null, expired: false, owned: false };
     }
 
-    // Primary personal data (name + «Ваши курсы») is ready — clear the spinner NOW, BEFORE the
-    // secondary "upcoming" block below. That block does more network calls; if any of them stalls
-    // on flaky mobile the page is already rendered, so it can never hang «загрузка» for the user.
+    // Publish the personal snapshot atomically; public metadata loads independently.
     loading.value = false; __mgTrace.ready();
     await __mgTrace.wait(5, () => (nextTick()));
     ready.value = true;
+    });
+    } catch (e) {
+        if (valid()) { clearPersonal(); loadError.value = true; }
+    } finally {
+        cancelTimeout();
+        if (valid()) { loading.value = false; loadRunning = false; }
+    }
+}
 
+async function loadUpcoming(sb) {
+    // Public metadata: independent of personal identity; SDK fetch tracing still applies.
     // "Ближайшие мероприятия и эфиры": nearest FUTURE published events + scheduled streams, merged
     // and sorted by date (nearest-first). Public — block hidden when none.
     try {
         const now = Date.now();
         // future published events
-        const evs = await __mgTrace.wait(6, () => (listPublishedEvents(sb)));
+        const evs = await sbWithRetry('home_public_events', () => listPublishedEvents(sb));
         const futureEvents = (evs || [])
             .filter((e) => e.starts_at && new Date(e.starts_at).getTime() > now)
             .map((e) => ({ ...e, _kind: 'event' }));
         // future scheduled streams (эфиры) — same card shape; author = "speaker"
         let futureStreams = [];
         try {
-            const streams = await __mgTrace.wait(7, () => (listAllStreams(sb)));
+            const streams = await sbWithRetry('home_public_streams', () => listAllStreams(sb));
             futureStreams = (streams || [])
                 .filter((s) => s.status === 'scheduled' && s.scheduled_at && new Date(s.scheduled_at).getTime() > now)
                 .map((s) => ({ id: s.id, title: s.title, cover_url: s.cover_url, starts_at: s.scheduled_at, speaker: s.authorUser?.Name || '', location: null, _kind: 'stream' }));
@@ -299,11 +350,11 @@ async function load() {
         // enrich only the EVENT rows with speaker names (streams already carry theirs)
         const eventIds = upcoming.value.filter((x) => x._kind === 'event').map((x) => x.id);
         if (eventIds.length) {
-            const { data: erows } = await __mgTrace.wait(8, () => (sbWithRetry('home_event_speakers', () => sb.from('events').select('id, speaker_id').in('id', eventIds))));
+            const { data: erows } = await checkedQuery('home_event_speakers', () => sb.from('events').select('id, speaker_id').in('id', eventIds));
             const spkIds = [...new Set((erows || []).map((r) => r.speaker_id).filter(Boolean))];
             let nameById = {};
             if (spkIds.length) {
-                const { data: us } = await __mgTrace.wait(9, () => (sbWithRetry('home_speaker_names', () => sb.from('users').select('id, "Name"').in('id', spkIds))));
+                const { data: us } = await checkedQuery('home_speaker_names', () => sb.from('users').select('id, "Name"').in('id', spkIds));
                 nameById = Object.fromEntries((us || []).map((u) => [u.id, u.Name]));
             }
             const spkByEvent = Object.fromEntries((erows || []).map((r) => [r.id, nameById[r.speaker_id] || '']));
@@ -311,10 +362,18 @@ async function load() {
         }
     } catch (e) { upcoming.value = []; }
 
-    });
 }
-
-onMounted(() => { ensureFonts(); load(); });
+onMounted(() => {
+    ensureFonts();
+    const sb = getSupabase();
+    if (!sb) { loading.value = false; loadError.value = true; return; }
+    auth = observeConfirmedSession(sb, sessionChanged, () => { loading.value = false; loadError.value = true; });
+    auth.refresh();
+    loadUpcoming(sb);
+});
+onBeforeUnmount(() => {
+    disposed = true; requestVersion++; clearTimeout(startTimer); auth?.stop(); clearPersonal();
+});
 
 function ensureFonts() {
     if (document.getElementById('pd-fonts')) return;

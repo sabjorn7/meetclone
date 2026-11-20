@@ -1,0 +1,25 @@
+Release checks — 2026-11-20
+Base / production before deployment: 2ff25ceb55676df25ccbeb7d977ec0bebb8f3061.
+Product scope: HomePage.vue, AllCoursesPage.vue, confirmedSession.js only.
+Public shell independent of Auth/profile; personal state requires current SDK
+session; logout/expiry/account changes invalidate requests and buyer cache.
+No second SDK client; no server access policy, payment algorithm or diagnostics changes.
+
+Repeated before release: 136 PASS.
+46 session-race browser cases (Chrome/WebKit), 38 real SDK/lock/access cases
+(Chrome/WebKit), 26 Auth/email/VK (Chrome), 12 checkout (Chrome),
+10 boot/recovery (Chrome/WebKit), 4 full-app lock cases (Chrome/WebKit).
+Vite build without SEO postbuild: PASS. git diff --check: PASS.
+Tests use synthetic identities and API responses; no real payments or signups.
+Browser tools use the existing external Playwright installation; no dependencies changed.
+
+Public read-only baseline: HTML identifies 2ff25ceb, preloader present;
+diagnostic configuration enabled=true, sampleRate=0.25, maxReports=3.
+Production checks are guest/read-only; authenticated transitions covered locally.
+No approved real test account was supplied; do not claim real OAuth/payment validation.
+
+Rollback target: 2ff25ceb55676df25ccbeb7d977ec0bebb8f3061.
+After publication revert this release commit on current main and run normal
+Deploy App via push. Do not force-reset unrelated subsequent changes.
+Client-side state guards do not replace backend RLS. Already transmitted writes
+cannot be cancelled by hiding UI. TCP/main.js delivery remains a separate issue.

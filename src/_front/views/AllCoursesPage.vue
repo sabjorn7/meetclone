@@ -77,6 +77,11 @@
                     </button>
                 </div>
 
+                <div v-else-if="loadError" class="pd-empty" role="status">
+                    <p>Не удалось загрузить каталог. Проверьте соединение и повторите попытку.</p>
+                    <button class="pd-btn pd-btn--lg" type="button" :disabled="loading" @click="load">Повторить загрузку</button>
+                </div>
+
                 <div v-else-if="!loading" class="pd-empty">
                     <img class="pd-empty__mascot" src="/images/minime-06.png" alt="" aria-hidden="true" width="626" height="626" />
                     <p>По вашему запросу курсов не нашлось.</p>
@@ -148,7 +153,8 @@ import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
 
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import CoursePrice from '@/_front/components/CoursePrice.vue';
-import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
+import { getSupabase } from '@/_front/chrome/headerAccount.js';
+import { observeConfirmedSession } from '@/_front/chrome/confirmedSession.js';
 import { loadTimeout } from '@/_front/chrome/errorLogger.js';
 import { sbWithRetry } from '@/_front/chrome/sbFetch.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
@@ -157,7 +163,17 @@ import { getBuyerRow, ownsCourse, enrollFree, addToCart, courseInCart } from '@/
 const courses = ref([]);
 const authorsById = ref({});
 const loading = ref(true);
-const ready = ref(false);
+// Public navigation must remain visible while private/API data is pending.
+const ready = ref(true);
+const loadError = ref(false);
+let loadRunning = false;
+let auth, purchaseVersion = 0;
+function sessionChanged() {
+    purchaseVersion++; buying.value = false;
+    buyer.value = null;
+    qvInCart.value = false; qvOwns.value = false; buyError.value = '';
+    qv.value = null;
+}
 
 const selectedCat = ref('all');
 const query = ref('');
@@ -165,7 +181,6 @@ const freeOnly = ref(false);
 
 // quick-view popup + purchase state
 const qv = ref(null);            // the course shown in the quick-view popup (null = closed)
-const buyerId = ref(null);       // logged-in user's id (null = guest)
 const buyer = ref(null);         // full users row (resolved lazily on first buy)
 const buying = ref(false);
 const buyError = ref('');
@@ -268,10 +283,13 @@ function openQuickView(c) {
     const sb = getSupabase();
     if (!sb) return;
     const patch = (extra) => { if (qv.value?.id === c.id && qvStats.value) qvStats.value = { ...qvStats.value, ...extra }; };
+    const session = auth?.snapshot();
+    const activeView = qv.value;
+    const valid = () => auth?.current(session) && qv.value === activeView;
     // cart state (paid, logged-in) — drives the "В корзине" label
-    if (buyerId.value && !c.Free) courseInCart(sb, c.id, buyerId.value).then((v) => { if (qv.value?.id === c.id) qvInCart.value = v; }).catch(() => {});
+    if (session?.uid && !c.Free) courseInCart(sb, c.id, session.uid).then((v) => { if (valid()) qvInCart.value = v; }).catch(() => {});
     // ownership → "Уже в библиотеке" (same source of truth as CoursePage: a user_course row)
-    if (buyerId.value) ownsCourse(sb, c.id, buyerId.value).then((v) => { if (qv.value?.id === c.id) qvOwns.value = v; }).catch(() => {});
+    if (session?.uid) ownsCourse(sb, c.id, session.uid).then((v) => { if (valid()) qvOwns.value = v; }).catch(() => {});
     // materials = lessons that carry a File
     if (lids.length) {
         sb.from('lessons').select('id, "File"').in('id', lids)
@@ -293,25 +311,34 @@ function openHeaderCart() { setTimeout(() => window.dispatchEvent(new CustomEven
 async function buyFromQuickView() {
     if (buying.value || !qv.value) return;
     buyError.value = '';
-    if (!buyerId.value) { qv.value = null; showAuthModal.value = true; return; } // guest → login prompt
+    const session = auth?.snapshot();
+    const selected = qv.value;
+    const purchase = ++purchaseVersion;
+    const valid = () => purchase === purchaseVersion && auth?.current(session) && qv.value === selected;
+    if (!session?.uid) { qv.value = null; showAuthModal.value = true; return; } // guest → login prompt
     if (!qv.value.Free && qvInCart.value) { openHeaderCart(); return; }
     buying.value = true;
     try {
         const sb = getSupabase();
-        if (!buyer.value) buyer.value = await getBuyerRow(sb, buyerId.value);
+        const resolvedBuyer = buyer.value || await sbWithRetry('catalog_buyer', () => valid() ? getBuyerRow(sb, session.uid) : null);
+        if (!valid()) return;
+        buyer.value = resolvedBuyer;
         if (!buyer.value) throw new Error('Не удалось определить пользователя.');
         if (qv.value.Free) {
             await enrollFree(sb, { buyer: buyer.value, course: qv.value });
-            window.location.assign(`/my_courses?course=${qv.value.id}`); // open THAT course's player
+            if (!valid()) return;
+            window.location.assign(`/my_courses?course=${selected.id}`); // open THAT course's player
         } else {
             await addToCart(sb, { buyer: buyer.value, course: qv.value });
+            if (!valid()) return;
             qvInCart.value = true;
             openHeaderCart();
         }
     } catch (e) {
+        if (!valid()) return;
         buyError.value = e?.message || 'Не удалось добавить в корзину. Попробуйте ещё раз.';
     } finally {
-        buying.value = false;
+        if (purchase === purchaseVersion) buying.value = false;
     }
 }
 function courseWord(n) {
@@ -322,21 +349,33 @@ function courseWord(n) {
     return 'курсов';
 }
 
+async function checkedQuery(label, query) {
+    const result = await sbWithRetry(label, query);
+    // PostgREST resolves HTTP errors; do not present them as an empty catalog/account.
+    if (result?.error) throw result.error;
+    return result;
+}
+
 async function load() {
-    return tracePage('AllCoursesPage', () => loading.value, async (__mgTrace) => {
+    if (loadRunning) return;
+    loadRunning = true;
+    loading.value = true;
+    loadError.value = false;
+    let cancelTimeout = () => {};
+    try {
+    return await tracePage('AllCoursesPage', () => loading.value, async (__mgTrace) => {
     const sb = getSupabase();
     if (!sb) { loading.value = false; __mgTrace.ready(); return; }
-    const cancelTimeout = loadTimeout('all_course_catalog'); // logs loading_timeout if the catalog query hangs >15s
-    buyerId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null; // guest = null (no supabase call)
+    cancelTimeout = loadTimeout('all_course_catalog'); // logs loading_timeout if the catalog query hangs >15s
     // timeout+retry: a stalled request (flaky/throttled mobile) auto-retries instead of hanging the spinner
     let data = null;
     try {
-        ({ data } = await __mgTrace.wait(1, () => (sbWithRetry('all_course_catalog', () => sb.from('course')
+        ({ data } = await __mgTrace.wait(1, () => (checkedQuery('all_course_catalog', () => sb.from('course')
             .select('id, "Title", "Price", "Free", old_price, "Category", slug, owner, video_id, cover, "Less_Id", comment, rating, created_at')
             .eq('ModStatus', 'Опубликовано')
             .eq('Buy', true)   // «Доступен к покупке» — не показываем в каталоге снятые с продажи (но опубликованные) курсы
             .order('created_at', { ascending: false })))));
-    } catch (e) { /* retries exhausted — render empty state (already logged) instead of an endless spinner */ }
+    } catch (e) { throw e; }
     cancelTimeout(); // key query returned (or gave up) → cancel the watchdog
     courses.value = data || [];
     // The catalog is ready — clear the spinner NOW, before the secondary authors query. That query
@@ -354,9 +393,21 @@ async function load() {
     }
 
     });
+    } catch (e) {
+        loadError.value = true;
+    } finally {
+        cancelTimeout();
+        loading.value = false;
+        loadRunning = false;
+    }
 }
 
-onMounted(() => { ensureFonts(); load(); });
+onMounted(() => {
+    ensureFonts();
+    const sb = getSupabase();
+    if (sb) { auth = observeConfirmedSession(sb, sessionChanged); auth.refresh(); }
+    load();
+});
 
 // Any open overlay (quick-view or auth modal) locks body scroll and closes on Escape.
 const anyOverlay = computed(() => !!qv.value || showAuthModal.value);
@@ -367,6 +418,7 @@ watch(anyOverlay, (open) => {
     else document.removeEventListener('keydown', onOverlayKey);
 });
 onBeforeUnmount(() => {
+    auth?.stop(); sessionChanged(null);
     document.body.style.overflow = '';
     document.removeEventListener('keydown', onOverlayKey);
 });

@@ -150,7 +150,7 @@
             <div class="pd-dialog" role="dialog" aria-modal="true">
                 <div class="pd-dialog__head">
                     <h2 class="pd-dialog__title">{{ editing.isCreate ? 'Новый курс' : 'Редактирование курса' }}</h2>
-                    <button type="button" class="pd-x" aria-label="Закрыть" @click="closeModal">
+                    <button type="button" class="pd-x" aria-label="Закрыть" :disabled="videoUploading || videoCancelling" @click="closeModal">
                         <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
                     </button>
                 </div>
@@ -291,27 +291,29 @@
                             <div class="pd-vprog__bar"><span :style="{ transform: `scaleX(${videoProgress / 100})` }"></span></div>
                             <span class="pd-vprog__t">Загрузка… {{ videoProgress }}%</span>
                             <UploadMetrics :metrics="videoMetrics" />
+                            <button type="button" class="pd-btn pd-btn--dangerghost pd-btn--sm" :disabled="videoCancelling || videoSaving" @click="cancelVideoUpload">{{ videoCancelling ? 'Отмена и удаление…' : videoSaving ? 'Сохранение…' : 'Отменить загрузку' }}</button>
                         </div>
                         <template v-else-if="editing.video_id">
                             <div class="pd-vframe"><iframe :src="embedUrl(editing.video_id, { autoplay: false })" title="Тизер курса" frameborder="0" allowfullscreen allow="fullscreen; picture-in-picture"></iframe></div>
                             <div class="pd-vactions">
                                 <label class="pd-btn pd-btn--ghost pd-btn--sm pd-upl">
                                     <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Заменить
-                                    <input type="file" accept="video/*" class="pd-hidden-file" :disabled="videoUploading" @change="onCourseVideo" />
+                                    <input type="file" accept="video/*" class="pd-hidden-file" :disabled="videoUploading || videoCancelling" @change="onCourseVideo" />
                                 </label>
                                 <button type="button" class="pd-btn pd-btn--dangerghost pd-btn--sm" :disabled="videoBusy" @click="removeCourseVideo">{{ videoBusy ? 'Удаляем…' : 'Удалить' }}</button>
                             </div>
                         </template>
-                        <div v-else-if="editing.resume_video_id" class="pd-vresume">
+                        <div v-if="!videoUploading && editing.resume_video_id" class="pd-vresume">
                             <p class="pd-hint">Загрузка «{{ editing.resume_name || 'видео' }}» не завершена. Выберите тот же файл, чтобы продолжить.</p>
                             <label class="pd-btn pd-btn--sm pd-upl">
                                 <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Продолжить загрузку
-                                <input type="file" accept="video/*" class="pd-hidden-file" @change="onCourseVideo" />
+                                <input type="file" accept="video/*" class="pd-hidden-file" :disabled="videoCancelling" @change="onCourseVideo" />
                             </label>
+                            <button type="button" class="pd-btn pd-btn--dangerghost pd-btn--sm" :disabled="videoCancelling" @click="discardVideoUpload('course', editing, 'course')">{{ videoCancelling ? 'Удаление…' : 'Удалить незавершённую загрузку' }}</button>
                         </div>
-                        <label v-else class="pd-btn pd-btn--ghost pd-btn--sm pd-upl">
+                        <label v-if="!videoUploading && !editing.resume_video_id && !editing.video_id" class="pd-btn pd-btn--ghost pd-btn--sm pd-upl">
                             <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Загрузить тизер
-                            <input type="file" accept="video/*" class="pd-hidden-file" @change="onCourseVideo" />
+                            <input type="file" accept="video/*" class="pd-hidden-file" :disabled="videoCancelling" @change="onCourseVideo" />
                         </label>
                         <p v-if="videoError && videoTarget === 'course'" class="pd-formerr pd-formerr--inline">{{ videoError }}</p>
                     </div>
@@ -406,7 +408,7 @@
                 <div class="pd-dialog__foot">
                     <button v-if="!editing.isCreate" type="button" class="pd-btn pd-btn--danger" :disabled="!form" @click="confirmDelete = true">Удалить курс</button>
                     <span class="pd-spacer"></span>
-                    <button type="button" class="pd-btn pd-btn--ghost" @click="closeModal">Отменить</button>
+                    <button type="button" class="pd-btn pd-btn--ghost" :disabled="videoUploading || videoCancelling" @click="closeModal">Отменить</button>
                     <button type="button" class="pd-btn" :disabled="saving || !form || !form.Title.trim() || !editable" @click="saveCourse">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
                 </div>
 
@@ -429,7 +431,7 @@
             <div class="pd-dialog pd-dialog--sm" role="dialog" aria-modal="true">
                 <div class="pd-dialog__head">
                     <h2 class="pd-dialog__title">Урок</h2>
-                    <button type="button" class="pd-x" aria-label="Закрыть" @click="closeLessonEdit">
+                    <button type="button" class="pd-x" aria-label="Закрыть" :disabled="videoUploading || videoCancelling" @click="closeLessonEdit">
                         <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
                     </button>
                 </div>
@@ -465,27 +467,29 @@
                             <div class="pd-vprog__bar"><span :style="{ transform: `scaleX(${videoProgress / 100})` }"></span></div>
                             <span class="pd-vprog__t">Загрузка… {{ videoProgress }}%</span>
                             <UploadMetrics :metrics="videoMetrics" />
+                            <button type="button" class="pd-btn pd-btn--dangerghost pd-btn--sm" :disabled="videoCancelling || videoSaving" @click="cancelVideoUpload">{{ videoCancelling ? 'Отмена и удаление…' : videoSaving ? 'Сохранение…' : 'Отменить загрузку' }}</button>
                         </div>
                         <template v-else-if="lessonEditing.video_id">
                             <div class="pd-vframe"><iframe :src="embedUrl(lessonEditing.video_id, { autoplay: false })" title="Видео урока" frameborder="0" allowfullscreen allow="fullscreen; picture-in-picture"></iframe></div>
                             <div class="pd-vactions">
                                 <label class="pd-btn pd-btn--ghost pd-btn--sm pd-upl">
                                     <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Заменить
-                                    <input type="file" accept="video/*" class="pd-hidden-file" :disabled="videoUploading" @change="onLessonVideo" />
+                                    <input type="file" accept="video/*" class="pd-hidden-file" :disabled="videoUploading || videoCancelling" @change="onLessonVideo" />
                                 </label>
                                 <button type="button" class="pd-btn pd-btn--dangerghost pd-btn--sm" :disabled="videoBusy" @click="removeLessonVideo">{{ videoBusy ? 'Удаляем…' : 'Удалить' }}</button>
                             </div>
                         </template>
-                        <div v-else-if="lessonEditing.resume_video_id" class="pd-vresume">
+                        <div v-if="!videoUploading && lessonEditing.resume_video_id" class="pd-vresume">
                             <p class="pd-hint">Загрузка «{{ lessonEditing.resume_name || 'видео' }}» не завершена. Выберите тот же файл, чтобы продолжить.</p>
                             <label class="pd-btn pd-btn--sm pd-upl">
                                 <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Продолжить загрузку
-                                <input type="file" accept="video/*" class="pd-hidden-file" @change="onLessonVideo" />
+                                <input type="file" accept="video/*" class="pd-hidden-file" :disabled="videoCancelling" @change="onLessonVideo" />
                             </label>
+                            <button type="button" class="pd-btn pd-btn--dangerghost pd-btn--sm" :disabled="videoCancelling" @click="discardVideoUpload('lessons', lessonEditing, 'lesson')">{{ videoCancelling ? 'Удаление…' : 'Удалить незавершённую загрузку' }}</button>
                         </div>
-                        <label v-else class="pd-btn pd-btn--ghost pd-btn--sm pd-upl">
+                        <label v-if="!videoUploading && !lessonEditing.resume_video_id && !lessonEditing.video_id" class="pd-btn pd-btn--ghost pd-btn--sm pd-upl">
                             <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M12 15V3m0 0l-4 4m4-4l4 4M5 21h14"/></svg> Загрузить видео
-                            <input type="file" accept="video/*" class="pd-hidden-file" @change="onLessonVideo" />
+                            <input type="file" accept="video/*" class="pd-hidden-file" :disabled="videoCancelling" @change="onLessonVideo" />
                         </label>
                     </div>
 
@@ -528,7 +532,7 @@
                 <p v-if="videoError && videoTarget !== 'course'" class="pd-formerr">{{ videoError }}</p>
                 <div class="pd-dialog__foot">
                     <span class="pd-spacer"></span>
-                    <button type="button" class="pd-btn pd-btn--ghost" @click="closeLessonEdit">Закрыть</button>
+                    <button type="button" class="pd-btn pd-btn--ghost" :disabled="videoUploading || videoCancelling" @click="closeLessonEdit">Закрыть</button>
                     <button type="button" class="pd-btn" :disabled="lessonSaving" @click="saveLessonMeta">{{ lessonSaving ? 'Сохраняем…' : 'Сохранить' }}</button>
                 </div>
             </div>
@@ -564,6 +568,7 @@
 </template>
 
 <script setup>
+import { removeUnfinishedUpload, removeCancelledResult } from '../streams/uploadCancellation.js';
 import UploadMetrics from '../components/UploadMetrics.vue';
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { getSupabase, readStoredSession, authCookieUser, loadUser } from '@/_front/chrome/headerAccount.js';
@@ -628,6 +633,9 @@ const lessonsIncomplete = ref(false);
 const videoUploading = ref(false); // true while a chunked upload runs (blocks a second one)
 const videoProgress = ref(0);
 const videoMetrics = ref(null);
+const videoCancelling = ref(false);
+const videoSaving = ref(false);
+let videoJob = null;
 const videoTarget = ref(null);     // 'lesson' | 'course' — which surface the progress bar belongs to
 const videoBusy = ref(false);      // delete/replace
 const videoError = ref('');
@@ -812,7 +820,7 @@ async function openEdit(c) {
         formLoading.value = false;
     }
 }
-function closeModal() { editing.value = null; form.value = null; justCreated.value = false; }
+function closeModal() { if (videoUploading.value || videoCancelling.value) return; editing.value = null; form.value = null; justCreated.value = false; }
 
 async function saveCourse() {
     if (saving.value || !form.value || !editable.value) return;
@@ -1043,7 +1051,7 @@ function openLessonEdit(lesson) {
     lessonError.value = '';
     loadLessonBans(lesson);
 }
-function closeLessonEdit() { lessonEditing.value = null; lessonForm.value = null; banned.value = []; banResults.value = []; banSearch.value = ''; }
+function closeLessonEdit() { if (videoUploading.value || videoCancelling.value) return; lessonEditing.value = null; lessonForm.value = null; banned.value = []; banResults.value = []; banSearch.value = ''; }
 async function saveLessonMeta() {
     if (!lessonEditing.value || lessonSaving.value || !lessonForm.value || !editable.value) return;
     lessonSaving.value = true; lessonError.value = '';
@@ -1126,34 +1134,82 @@ function patchCourse(id, p) {
 }
 // Chunked resumable upload; resume checkpoints are persisted to the row's resume_* columns (parity with
 // the WeWeb uploader) so an interrupted upload can pick up where it stopped.
+const emptyResume = { resume_video_id: null, resume_chunk: null, resume_name: null };
+async function persistVideoPatch(table, id, values, patch) {
+    const { error } = await sb.from(table).update(values).eq('id', id);
+    if (error) throw new Error('Не удалось сохранить состояние видео. Повторите действие.');
+    patch(values);
+}
+async function cleanupVideoJob(job) {
+    if (job.newUUID) {
+        await removeCancelledResult({apiBaseUrl: PEERTUBE_ORIGIN, token: job.token, uuid: job.newUUID, previousVideoId: job.previousVideoId});
+    } else if (job.uploadId) {
+        await removeUnfinishedUpload({apiBaseUrl: PEERTUBE_ORIGIN, token: job.token, uploadId: job.uploadId, uncertainFinal: job.uncertainFinal});
+    }
+    await persistVideoPatch(job.table, job.id, emptyResume, job.patch);
+}
+function cancelVideoUpload() {
+    if (!videoJob || !videoUploading.value || videoSaving.value || videoCancelling.value) return;
+    videoCancelling.value = true;
+    videoJob.controller.abort();
+}
+async function discardVideoUpload(table, row, which) {
+    if (!editable.value || videoUploading.value || videoCancelling.value || !row?.resume_video_id) return;
+    if (!window.confirm('Удалить незавершённую загрузку? Продолжить её будет нельзя. Готовое видео останется без изменений.')) return;
+    videoCancelling.value = true; videoTarget.value = which; videoError.value = '';
+    const patch = values => table === 'course' ? patchCourse(row.id, values) : patchLesson(row.id, values);
+    const job = videoJob?.id === row.id && videoJob?.table === table ? videoJob
+        : {table, id: row.id, uploadId: row.resume_video_id, previousVideoId: row.video_id, patch};
+    try {
+        job.token = await getUploadToken(sb);
+        await cleanupVideoJob(job);
+        if (videoJob === job) videoJob = null;
+    } catch (_) { videoError.value = 'Не удалось удалить незавершённую загрузку. Данные для повторной попытки сохранены.'; }
+    finally { videoCancelling.value = false; }
+}
 async function runVideoUpload(table, row, file, patch, which) {
-    if (videoUploading.value || !editable.value) return;
+    if (videoUploading.value || videoCancelling.value || !editable.value) return;
     videoUploading.value = true; videoProgress.value = 0; videoTarget.value = which; videoError.value = '';
     videoMetrics.value = { totalBytes: file.size, confirmedBytes: row.resume_video_id ? Number(row.resume_chunk || 0) : 0, phase: 'preparing' };
+    const job = {table, id: row.id, patch, previousVideoId: row.video_id, uploadId: row.resume_video_id || null, controller: new AbortController(), token: null, newUUID: null, uncertainFinal: false};
+    videoJob = job;
     try {
-        const token = await getUploadToken(sb);
-        await sb.from(table).update({ resume_name: file.name }).eq('id', row.id);
+        job.token = await getUploadToken(sb);
+        if (job.controller.signal.aborted) throw new DOMException('Upload cancelled', 'AbortError');
+        await persistVideoPatch(table, row.id, {resume_name: file.name}, patch);
         const result = await uploadVideo({
-            token, file,
-            resumeUploadId: row.resume_video_id || null,
-            resumeStart: row.resume_video_id ? Number(row.resume_chunk || 0) : 0,
-            onInit: (uid) => sb.from(table).update({ resume_video_id: uid }).eq('id', row.id),
-            onChunk: (pos) => sb.from(table).update({ resume_chunk: String(pos) }).eq('id', row.id),
-            onProgress: (p) => { videoProgress.value = p; },
-            onMetrics: (value) => { videoMetrics.value = value; },
+            token: job.token, file, signal: job.controller.signal,
+            onFinalChunk: () => { job.uncertainFinal = true; },
+            resumeUploadId: job.uploadId,
+            resumeStart: job.uploadId ? Number(row.resume_chunk || 0) : 0,
+            onInit: async uid => {
+                job.uploadId = uid;
+                // Keep the ID locally even if the checkpoint write fails.
+                patch({resume_video_id: uid});
+                await persistVideoPatch(table, row.id, {resume_video_id: uid}, patch);
+            },
+            onChunk: pos => persistVideoPatch(table, row.id, {resume_chunk: String(pos)}, patch),
+            onProgress: p => { videoProgress.value = p; },
+            onMetrics: value => { videoMetrics.value = value; },
         });
+        job.newUUID = result.uuid;
+        if (job.controller.signal.aborted) throw new DOMException('Upload cancelled', 'AbortError');
         const size = await fetchVideoSize(result.uuid);
-        const done = { video_id: result.uuid, video_size: size, resume_video_id: null, resume_chunk: null, resume_name: null };
-        await sb.from(table).update(done).eq('id', row.id);
-        patch(done);
+        if (job.controller.signal.aborted) throw new DOMException('Upload cancelled', 'AbortError');
+        videoSaving.value = true; // Do not race cancellation against the final DB commit.
+        await persistVideoPatch(table, row.id, {video_id: result.uuid, video_size: size, ...emptyResume}, patch);
+        videoJob = null;
     } catch (e) {
-        if (e?.message !== 'cancelled') videoError.value = `Не удалось загрузить видео: ${e?.message || 'ошибка'}`;
+        if (job.controller.signal.aborted) {
+            try { await cleanupVideoJob(job); videoJob = null; }
+            catch (_) { videoError.value = 'Передача остановлена, но удаление не подтверждено. Повторите удаление незавершённой загрузки.'; }
+        } else if (e?.message !== 'cancelled') videoError.value = `Не удалось загрузить видео: ${e?.message || 'ошибка'}`;
     } finally {
-        videoUploading.value = false; videoTarget.value = null;
+        videoUploading.value = false; videoCancelling.value = false; videoSaving.value = false;
     }
 }
 async function runVideoDelete(table, row, patch) {
-    if (videoBusy.value || !editable.value) return;
+    if (videoBusy.value || videoUploading.value || videoCancelling.value || !editable.value) return;
     videoBusy.value = true; videoError.value = '';
     try {
         if (row.video_id) { try { await deleteLive(sb, row.video_id); } catch (_) { /* already gone */ } }

@@ -30,6 +30,8 @@ const SuperadminPage = () => import('./views/SuperadminPage.vue');
 const MyFinancePage = () => import('./views/MyFinancePage.vue');
 import PoliticaPage from './views/legal/PoliticaPage.vue';
 import OfertaPage from './views/legal/OfertaPage.vue';
+import SpeakerAgreementPage from './views/legal/SpeakerAgreementPage.vue';
+import SpeakerAgreementAppendixPage from './views/legal/SpeakerAgreementAppendixPage.vue';
 import ContactsPage from './views/ContactsPage.vue';
 import SoglasiePage from './views/legal/SoglasiePage.vue';
 import VozvratPage from './views/legal/VozvratPage.vue';
@@ -282,6 +284,8 @@ const registerRoute = (page, lang, forcedPath) => {
 // views/). Registered BEFORE the WeWeb loop so they win route matching, and the matching WeWeb
 // page (wwPath) is skipped so there's no duplicate path.
 const PAGE_OVERRIDES = [
+    { path: '/speaker-agreement', name: 'legal-speaker-agreement', component: SpeakerAgreementPage },
+    { path: '/speaker-agreement-appendix', name: 'legal-speaker-agreement-appendix', component: SpeakerAgreementAppendixPage },
     { path: '/contacts', name: 'contacts', component: ContactsPage, wwPath: 'contacts' },
     { path: '/politica', name: 'legal-politica', component: PoliticaPage, wwPath: 'politica' },
     { path: '/oferta', name: 'legal-oferta', component: OfertaPage, wwPath: 'oferta' },

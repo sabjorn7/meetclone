@@ -214,6 +214,8 @@ const pages = {"cf9f551f-e733-4934-a682-535575cb7c70-en":{"outputDir":"./promo",
 // Legal routes also need physical HTML entries for direct links and refreshes.
 {
     const legalPages = {
+        'speaker-agreement': 'Агентский договор-оферта для спикеров',
+        'speaker-agreement-appendix': 'Приложение № 1 к агентскому договору-оферте',
         documents: 'Документы',
         rekvizity: 'Реквизиты и юридическая информация',
         soglashenie: 'Пользовательское соглашение',

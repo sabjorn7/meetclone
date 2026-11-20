@@ -15,7 +15,7 @@ const server=http.createServer((req,res)=>{
 await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin='http://127.0.0.1:'+server.address().port;
 const b=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});
 try{const c=await b.newContext({serviceWorkers:'block'});await c.route('**/*',r=>r.request().method()==='GET'&&new URL(r.request().url()).origin===origin?r.continue():r.fulfill({status:200,contentType:'application/json',body:'[]'}));const p=await c.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.name));
-for(const route of ['documents','oferta','oferta?tab=kursy','oferta?tab=meropriyatiya','politica','rekvizity','soglashenie','podpiska','vozvrat','soglasie','soglasie-rasprostranenie','cookie']){
+for(const route of ['speaker-agreement','speaker-agreement-appendix','documents','oferta','oferta?tab=kursy','oferta?tab=meropriyatiya','politica','rekvizity','soglashenie','podpiska','vozvrat','soglasie','soglasie-rasprostranenie','cookie']){
  const response=await p.goto(origin+'/'+route);assert.equal(response.status(),200);await p.locator(route==='documents'?'.dp-list':'.lp-prose').waitFor({timeout:30000});assert.equal(errors.length,0,errors.join(','));console.log('PASS full built app direct entry /'+route);
 }
 }finally{await b.close();await new Promise(r=>server.close(r));}

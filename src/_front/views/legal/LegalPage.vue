@@ -24,6 +24,10 @@
 
             <article class="lp-prose" v-html="docs[active].html"></article>
 
+            <nav v-if="relatedLinks.length" class="lp-links" aria-label="Связанные документы">
+                <a v-for="link in relatedLinks" :key="link.href" :href="link.href">{{ link.label }}</a>
+            </nav>
+
             <nav class="lp-links" aria-label="Юридические документы">
                 <a href="/politica">Политика конфиденциальности</a>
                 <a href="/oferta">Оферта</a>
@@ -46,6 +50,7 @@ const props = defineProps({
     title: { type: String, required: true },
     // [{ label, html, tab? }]. One item → no tabs; many → tabbed. Optional `tab` = deep-link slug.
     docs: { type: Array, required: true },
+    relatedLinks: { type: Array, default: () => [] },
 });
 
 // ?tab=<slug> opens directly on the matching doc; default = first.

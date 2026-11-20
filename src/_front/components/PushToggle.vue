@@ -15,8 +15,23 @@
         <!-- заблокировано в настройках браузера -->
         <p v-else-if="mode === 'denied'" class="pt__hint">Уведомления заблокированы в настройках браузера.</p>
 
+        <p v-else-if="mode === 'checking'" class="pt__hint" role="status">Проверяем подключение уведомлений…</p>
+        <template v-else-if="mode === 'sync_error'">
+            <span class="pt__msg" role="status">Не удалось подключить уведомления.</span>
+            <button type="button" class="pt__btn" :disabled="busy" @click="refresh">Повторить</button>
+        </template>
+        <template v-else-if="mode === 'disable_error'">
+            <span class="pt__msg" role="status">Не удалось выключить уведомления.</span>
+            <button type="button" class="pt__btn" :disabled="busy" @click="disable">Повторить выключение</button>
+        </template>
+        <template v-else-if="mode === 'account_disabled'">
+            <span class="pt__hint">Уведомления выключены в настройках аккаунта.</span>
+            <a class="pt__link" href="/profile">Настройки профиля</a>
+        </template>
+        <span v-if="msg && mode !== 'off'" class="pt__msg" role="status">{{ msg }}</span>
+
         <!-- можно включить -->
-        <template v-else-if="mode === 'off'">
+        <template v-if="mode === 'off'">
             <button type="button" class="pt__btn" :disabled="busy" @click="enable">{{ busy ? '…' : '🔔 Включить уведомления' }}</button>
             <span v-if="msg" class="pt__msg">{{ msg }}</span>
         </template>
@@ -26,12 +41,12 @@
 <script setup>
 // Переиспользуемая кнопка подписки на веб-пуши. Видна ВСЕМ залогиненным (не гостям).
 // Разрешение запрашивается ТОЛЬКО по клику. Сервер/allowlist не трогает.
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { isPushSupported, subscribeToPush, unsubscribeFromPush, pushState } from '@/_front/chrome/pushClient.js';
 import { readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 
 const visible = ref(false);
-const mode = ref('');     // 'off' | 'subscribed' | 'denied' | 'ios-hint'
+const mode = ref(''); // browser, account and server synchronization states
 const busy = ref(false);
 const msg = ref('');
 
@@ -49,14 +64,20 @@ function isStandalone() {
         || (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches);
 }
 
+let disposed = false;
 async function refresh() {
-    if (!isLoggedIn()) { visible.value = false; return; }          // гостям не показываем
+    if (busy.value || disposed) return;
+    if (!isLoggedIn()) { visible.value = false; return; }
     if (isIOS() && !isStandalone()) { mode.value = 'ios-hint'; visible.value = true; return; }
     if (!isPushSupported()) { visible.value = false; return; }
-    const s = await pushState();                                   // 'subscribed'|'off'|'denied'|'unsupported'
-    if (s === 'unsupported') { visible.value = false; return; }
-    mode.value = s;
-    visible.value = true;
+    visible.value = true; mode.value = 'checking'; busy.value = true; msg.value = '';
+    try {
+        const state = await pushState();
+        if (disposed) return;
+        if (!isLoggedIn() || state === 'unsupported') { visible.value = false; return; }
+        mode.value = state;
+    } catch (_) { if (!disposed) mode.value = 'sync_error'; }
+    finally { busy.value = false; }
 }
 
 async function enable() {
@@ -76,6 +97,8 @@ async function enable() {
         };
         msg.value = m[r.reason] || 'Не удалось включить уведомления.';
         if (r.reason === 'denied') mode.value = 'denied';
+        if (r.reason === 'account_disabled') { mode.value = 'account_disabled'; msg.value = ''; }
+        if (['sync_error', 'save_failed'].includes(r.reason)) { mode.value = 'sync_error'; msg.value = ''; }
     } catch (_) { msg.value = 'Ошибка. Попробуйте ещё раз.'; }
     finally { busy.value = false; }
 }
@@ -83,12 +106,22 @@ async function enable() {
 async function disable() {
     if (busy.value) return;
     busy.value = true; msg.value = '';
-    try { await unsubscribeFromPush(); mode.value = 'off'; }
-    catch (_) { msg.value = 'Не удалось выключить.'; }
+    try { const result = await unsubscribeFromPush(); if (result.ok) mode.value = 'off'; else { mode.value = 'disable_error'; msg.value = ''; } }
+    catch (_) { mode.value = 'disable_error'; msg.value = ''; }
     finally { busy.value = false; }
 }
 
-onMounted(refresh);
+function resume() { if (!document.hidden && mode.value !== 'disable_error') void refresh(); }
+onMounted(() => {
+    void refresh();
+    document.addEventListener('visibilitychange', resume);
+    window.addEventListener('pageshow', resume);
+});
+onUnmounted(() => {
+    disposed = true;
+    document.removeEventListener('visibilitychange', resume);
+    window.removeEventListener('pageshow', resume);
+});
 </script>
 
 <style scoped>

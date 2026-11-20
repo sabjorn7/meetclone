@@ -3,6 +3,20 @@
     <head>
         <meta charset="utf-8" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <style>
+            /* Standalone HTML placeholder; Vue replaces it when #app mounts. */
+            #mg-boot-loading { box-sizing:border-box; min-height:100vh; min-height:100svh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 24px; background:#fff; color:#1f2733; text-align:center; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+            #mg-boot-loading .mg-boot-logo { font-size:38px; line-height:1.2; font-weight:800; letter-spacing:-.03em; }
+            #mg-boot-loading .mg-boot-logo span { color:#2563eb; }
+            #mg-boot-loading .mg-boot-caption { margin:18px 0 0; color:#526174; font-size:16px; line-height:1.5; }
+            #mg-boot-loading .mg-boot-track { width:80px; height:3px; margin-top:28px; overflow:hidden; border-radius:3px; background:#e2e8f0; }
+            #mg-boot-loading .mg-boot-track::after { content:""; display:block; width:32px; height:100%; border-radius:inherit; background:#2563eb; animation:mg-boot-travel 1.4s ease-in-out infinite alternate; }
+            @keyframes mg-boot-travel { from { transform:translateX(0); } to { transform:translateX(48px); } }
+            #mg-boot-msg button { min-height:44px; max-width:100%; }
+            #mg-boot-msg button:focus-visible { outline:3px solid #1f2733; outline-offset:4px; }
+            #mg-boot-msg button:disabled { opacity:.65; cursor:wait!important; }
+            @media (prefers-reduced-motion:reduce) { #mg-boot-loading .mg-boot-track::after { animation:none; transform:translateX(24px); } }
+        </style>
         <script>
         /* boot watchdog: if the app hasn't mounted in 15s (bundle didn't load / auth stalled / white
            screen), fire a GET beacon to /_l with what loaded — the in-bundle logger can't report a
@@ -106,15 +120,19 @@
                 }
                 // На legacy-браузере (nomodule уже показал «браузер устарел») оверлей НЕ показываем.
                 // Если уже показан экран ошибки загрузки (#mg-load-error из роутера) — тоже не рисуем,
-                // чтобы два оверлея не наложились. Иначе — сообщение + кнопка «Обновить» (БЕЗ
+                // чтобы два оверлея не наложились. Иначе — сообщение + кнопка «Повторить загрузку» (БЕЗ
                 // автоповторов); снять при позднем монтировании (boot_late).
                 if (!window.__mgLegacy && !document.getElementById('mg-boot-msg') && !document.getElementById('mg-load-error')) {
                   var box = document.createElement('div'); box.id = 'mg-boot-msg';
-                  box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#fff;color:#1f2733;text-align:center;padding:24px;font:16px/1.45 Raleway,system-ui,-apple-system,sans-serif');
-                  box.innerHTML = '<div>Сайт загружается дольше обычного.<br>Проверьте соединение.</div>';
-                  var btn = document.createElement('button'); btn.type = 'button'; btn.textContent = 'Обновить';
-                  btn.setAttribute('style', 'padding:11px 22px;border:none;border-radius:8px;cursor:pointer;color:#fff;background:#2563eb;font:600 16px Raleway,system-ui,sans-serif');
-                  btn.onclick = function () { location.reload(); };
+                  box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#fff;color:#1f2733;text-align:center;padding:24px;font:16px/1.45 system-ui,-apple-system,sans-serif');
+                  box.innerHTML = '<div role="alert">Сайт загружается дольше обычного.<br>Проверьте соединение.</div>';
+                  var btn = document.createElement('button'); btn.type = 'button'; btn.textContent = 'Повторить загрузку';
+                  btn.setAttribute('style', 'padding:11px 22px;border:none;border-radius:8px;cursor:pointer;color:#fff;background:#2563eb;font:600 16px system-ui,-apple-system,sans-serif');
+                  btn.onclick = function () {
+                    if (btn.disabled) return;
+                    btn.disabled = true;
+                    try { location.reload(); } catch (e) { btn.disabled = false; }
+                  };
                   box.appendChild(btn); document.body.appendChild(box);
                   var poll = setInterval(function () {
                     if (window.__mgMounted) { clearInterval(poll); var e = document.getElementById('mg-boot-msg'); if (e && e.parentNode) e.parentNode.removeChild(e); }
@@ -336,12 +354,17 @@
     </head>
     <body style="margin: 0; font-family: var(--ww-default-font-family, unset)">
         <noscript>
+            <style>#mg-boot-loading { display:none; }</style>
             <strong>
                 We're sorry but this website doesn't work properly without JavaScript enabled. Please enable it to
                 continue.
             </strong>
         </noscript>
-        <div id="app"><div id="mg-boot-loading" style="min-height:60vh;display:flex;align-items:center;justify-content:center;color:#94a3b8;font:15px/1.4 Raleway,system-ui,-apple-system,sans-serif">Загрузка…</div></div>
+        <div id="app"><div id="mg-boot-loading" role="status" aria-live="polite" aria-atomic="true">
+            <div class="mg-boot-logo" role="img" aria-label="MeetGuru">meetguru<span aria-hidden="true">.</span></div>
+            <p class="mg-boot-caption">Загружаем платформу</p>
+            <div class="mg-boot-track" aria-hidden="true"></div>
+        </div></div>
         {{{scripts.body}}}
         <script type="module" src="/src/_front/main.js"></script>
         <script nomodule>

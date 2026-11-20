@@ -1,9 +1,11 @@
 // Actual built application + unmodified inline watchdog. Faults injected only in local browser.
 import fs from 'node:fs';import path from 'node:path';import http from 'node:http';import assert from 'node:assert/strict';
 import {chromium,webkit} from '/private/tmp/mg-browser-tools-kFSaYv/node_modules/playwright/index.mjs';
+// Capture the independent system-font loader without waiting for unrelated application fonts.
+process.env.PW_TEST_SCREENSHOT_NO_FONTS_READY='1';
 const root=new URL('../dist/',import.meta.url).pathname;
 const html=fs.readFileSync(path.join(root,'all_course/index.html'),'utf8');
-const entry=html.match(/<script\b[^>]*type="module"[^>]*src="([^"]+)"/)[1];
+const entry=[...html.matchAll(/<script\b[^>]*type="module"[^>]*src="([^"]+)"/g)].map(m=>m[1]).find(src=>/\/main-[^/]+\.js$/.test(src));
 const css=[...html.matchAll(/<link\b[^>]*rel="stylesheet"[^>]*href="([^"]+)"/g)].map(m=>m[1]);
 assert(entry.includes('/assets/'));assert(css.length);
 let localFixture;
@@ -19,9 +21,10 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin='http://127.0.
 const isWebkit=process.argv.includes('--webkit');
 const browser=isWebkit?await webkit.launch({headless:true}):await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
 const results=[];
+const artifacts=new URL('../reviews/2026-11-20-boot-loader/',import.meta.url).pathname;fs.mkdirSync(artifacts,{recursive:true});
 try{
  for(const kind of ['slow-main-js','failed-main-js','slow-css','pending-init-front','disabled-server','manual-mode'].filter(x=>!process.argv.some(a=>a.startsWith('--case='))||process.argv.includes('--case='+x))){
-  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:'block'});
   const observations={kind,configRequests:0,automaticReports:0,legacyBoot:0,legacyLate:0};let release;localFixture=observations;
   const gate=new Promise(r=>release=r);
   await context.route('**/*',async route=>{
@@ -41,7 +44,33 @@ try{
   });
   const page=await context.newPage();
   await page.goto(origin+'/all_course/'+(kind==='manual-mode'?'?mg_loading_diag=1':''),{waitUntil:'commit',timeout:10000});
+  if(kind==='slow-main-js') {
+   await page.waitForTimeout(500);
+   assert.equal(await page.locator('#mg-boot-loading').getAttribute('role'),'status');
+   assert.equal(await page.locator('.mg-boot-caption').textContent(),'Загружаем платформу');
+   for(const width of [320,390,1440]) {
+    await page.setViewportSize({width,height:width===1440?900:844});
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    assert(await page.locator('#mg-boot-loading').isVisible());
+    await page.screenshot({path:path.join(artifacts,`${isWebkit?'webkit':'chrome'}-loading-${width}.png`)});
+   }
+   await page.emulateMedia({reducedMotion:'reduce'});
+   assert.equal(await page.locator('.mg-boot-track').evaluate(el=>getComputedStyle(el,'::after').animationName),'none');
+   await page.screenshot({path:path.join(artifacts,`${isWebkit?'webkit':'chrome'}-reduced-motion.png`)});
+   await page.emulateMedia({reducedMotion:'no-preference'});
+   assert.equal(await page.locator('.mg-boot-track').evaluate(el=>getComputedStyle(el,'::after').animationName),'mg-boot-travel');
+   await page.setViewportSize({width:390,height:844});
+  }
   await page.waitForTimeout(16500);
+  if(kind==='slow-main-js') {
+   const button=page.locator('#mg-boot-msg button');
+   assert.equal(await button.textContent(),'Повторить загрузку');
+   await page.keyboard.press(isWebkit?'Alt+Tab':'Tab');
+   assert(await button.evaluate(el=>el===document.activeElement));
+   assert.equal(await button.evaluate(el=>getComputedStyle(el).outlineStyle),'solid');
+   assert((await button.boundingBox()).height>=44);
+   await page.screenshot({path:path.join(artifacts,`${isWebkit?'webkit':'chrome'}-timeout-keyboard.png`)});
+  }
   Object.assign(observations,await page.evaluate(()=>({mounted:window.__mgMounted,fired:window.__mgBootFired,overlay:!!document.getElementById('mg-boot-msg'),message:document.getElementById('mg-boot-msg')?.textContent,readyState:document.readyState,visibility:document.visibilityState,initBlocked:!!window.__fixtureInitBlocked,reattachedCSS:document.querySelectorAll('[data-mg-reattached]').length,transportState:window.__mgSessionTransportV1?(({selected,stopped,attempts,phase,bootObserved,busy})=>({selected,stopped,attempts,phase,bootObserved,busy}))(window.__mgSessionTransportV1.state()):null})));
   console.log(JSON.stringify({checkpoint:observations}));
   if(kind!=='slow-css'){assert(observations.overlay);assert(observations.message.includes('Сайт загружается дольше обычного'));assert.equal(observations.legacyBoot,kind==='manual-mode'?1:0);}
@@ -51,11 +80,11 @@ try{
   if(kind==='slow-css')assert(observations.reattachedCSS>0);
   if(kind==='failed-main-js'){await page.evaluate(()=>{for(let i=0;i<1000;i++)window.__mgSessionTransportV1.boot(true);});await page.waitForTimeout(200);assert.equal(observations.automaticReports,1);}
   delete observations.message;results.push(observations);console.log(JSON.stringify(observations));
-  release();if(kind==='slow-main-js'){await page.waitForTimeout(2000);assert.equal(await page.evaluate(()=>window.__mgMounted),true);assert.equal(observations.automaticReports,1);assert.equal(observations.legacyLate,0);assert.equal(await page.evaluate(()=>window.__mgSessionTransportV1.state().attempts),1);console.log(JSON.stringify({kind:'late-js',mounted:true,automaticReports:observations.automaticReports,sharedAttempts:1}));}
+  release();if(kind==='slow-main-js'){await page.waitForTimeout(2000);assert.equal(await page.evaluate(()=>window.__mgMounted),true);assert.equal(await page.locator('#mg-boot-loading, #mg-boot-msg').count(),0);assert.equal(observations.automaticReports,1);assert.equal(observations.legacyLate,0);assert.equal(await page.evaluate(()=>window.__mgSessionTransportV1.state().attempts),1);console.log(JSON.stringify({kind:'late-js',mounted:true,automaticReports:observations.automaticReports,sharedAttempts:1}));}
   await context.close();
  }
  for (const mode of ['hidden-resume','sleep-jump']) {
-  const context=await browser.newContext();localFixture={kind:mode,configRequests:0,automaticReports:0};
+  const context=await browser.newContext({serviceWorkers:'block'});localFixture={kind:mode,configRequests:0,automaticReports:0};
   await context.addInitScript(()=>{window.__testHidden=false;Object.defineProperty(document,'visibilityState',{get:()=>window.__testHidden?'hidden':'visible'});});
   await context.route('**/*',route=>{
    const u=new URL(route.request().url());

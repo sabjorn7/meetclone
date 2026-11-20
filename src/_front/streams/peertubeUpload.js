@@ -17,6 +17,7 @@
 // deployed WeWeb page data — replicating them here adds no new exposure. The root fix is moving the token
 // exchange server-side (n8n / edge function); tracked as SF-1 in SECURITY_FINDINGS.md.
 
+import { createUploadMetrics } from './uploadMetrics.js';
 import { getPeertubeToken, PEERTUBE_ORIGIN } from './peertubeLive.js';
 
 const CLIENT_ID = 'rf2ju4r862ak1j05xl4sfrybsnjkh9xp';
@@ -85,7 +86,7 @@ export async function getUploadToken(supabase) {
  */
 export async function uploadVideo({
     token, file, channelId = CHANNEL_ID, apiBaseUrl = PEERTUBE_ORIGIN,
-    resumeUploadId = null, resumeStart = 0, onInit, onChunk, onProgress, shouldCancel,
+    resumeUploadId = null, resumeStart = 0, onInit, onChunk, onProgress, onMetrics, shouldCancel,
 }) {
     const totalSize = file.size;
     const fileName = file.name;
@@ -94,6 +95,8 @@ export async function uploadVideo({
     let uploadId = resumeUploadId || '';
     let start = resumeUploadId ? Number(resumeStart) || 0 : 0;
 
+    const metrics = createUploadMetrics(totalSize, start, onMetrics);
+    try {
     if (!uploadId) {
         const initRes = await fetch(`${apiBaseUrl}/api/v1/videos/upload-resumable`, {
             method: 'POST',
@@ -115,6 +118,7 @@ export async function uploadVideo({
         if (shouldCancel && shouldCancel()) throw new Error('cancelled');
         const end = Math.min(start + CHUNK_SIZE - 1, totalSize - 1);
         const chunk = file.slice(start, end + 1);
+        metrics.begin();
         const res = await fetch(`${apiBaseUrl}/api/v1/videos/upload-resumable?upload_id=${uploadId}`, {
             method: 'PUT',
             headers: {
@@ -129,10 +133,13 @@ export async function uploadVideo({
             const range = res.headers.get('Range');
             if (range) {
                 start = parseInt(range.split('-')[1], 10) + 1;
+                metrics.confirm(start);
                 if (onChunk) await onChunk(start);
             }
             if (onProgress) onProgress(Math.floor((start / totalSize) * 100));
         } else if (res.ok) {
+            metrics.confirm(end + 1);
+            metrics.state('finalizing');
             let video = null;
             try { video = (await res.json())?.video || null; } catch (_) { /* empty body */ }
             if (!video?.uuid) {
@@ -146,12 +153,17 @@ export async function uploadVideo({
                 if (!video?.uuid) throw new Error('UUID видео не получен после загрузки');
             }
             if (onProgress) onProgress(100);
+            metrics.state('complete');
             return { id: video.id, shortUUID: video.shortUUID, uuid: video.uuid };
         } else {
             throw new Error(`Ошибка загрузки чанка (${res.status})`);
         }
     }
     throw new Error('Загрузка завершилась без подтверждения видео');
+    } catch (error) {
+        metrics.state(error?.message === 'cancelled' ? 'cancelled' : 'error');
+        throw error;
+    }
 }
 
 /** File-size (bytes) of an uploaded video, read back from PeerTube (stored as lessons/course.video_size). */

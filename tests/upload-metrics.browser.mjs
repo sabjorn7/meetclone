@@ -1,0 +1,44 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import http from 'node:http';
+import assert from 'node:assert/strict';
+import {build} from 'vite';
+import vue from '@vitejs/plugin-vue';
+const {chromium,webkit}=await import('/private/tmp/mg-browser-tools-kFSaYv/node_modules/playwright/index.mjs');
+const root=path.resolve(new URL('..',import.meta.url).pathname),temp=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'mg-upload-metrics-test-')));
+fs.symlinkSync(path.join(root,'node_modules'),path.join(temp,'node_modules'));
+fs.writeFileSync(path.join(temp,'index.html'),'<html lang="ru"><meta name="viewport" content="width=device-width,initial-scale=1"><div id="app"></div><script type="module" src="/main.js"></script></html>');
+fs.writeFileSync(path.join(temp,'main.js'),`import {createApp,h,ref} from 'vue';
+import Metrics from '${root}/src/_front/components/UploadMetrics.vue';
+import {uploadVideo} from '${root}/src/_front/streams/peertubeUpload.js';
+const metrics=ref(null),progress=ref(0);const f=window.fixture={metrics:null,pending:null,checkpoint:0,cancel:false,result:null,error:null,ranges:[],failObserver:false};
+const originalFetch=window.fetch;window.fetch=(url,opts)=>{if(!String(url).startsWith('https://upload.invalid/'))return originalFetch(url,opts);if(opts.method==='POST')return Promise.resolve({ok:true,headers:new Headers({location:'?upload_id=fake'})});if(opts.method==='PUT'){f.ranges.push(opts.headers['Content-Range']);return new Promise(resolve=>{f.pending={resolve,size:opts.body.size};});}throw Error('Unexpected request');};
+f.ack=(status,end)=>{const pending=f.pending;f.pending=null;pending.resolve({status,ok:status>=200&&status<300,headers:new Headers(end===undefined?{}:{Range:'bytes=0-'+end}),json:async()=>({video:{id:1,uuid:'fake-video',shortUUID:'short'}})});};
+f.start=(resume=0)=>{f.error=null;f.result=null;f.cancel=false;f.ranges=[];progress.value=0;
+const file=new File([new Uint8Array(20*1024*1024)],'fixture.mp4');
+metrics.value={totalBytes:file.size,confirmedBytes:resume,phase:'preparing'};
+f.promise=uploadVideo({token:'fixture',file,apiBaseUrl:'https://upload.invalid',resumeUploadId:resume?'fake':null,resumeStart:resume,onChunk:n=>{f.checkpoint=n;},onProgress:n=>progress.value=n,shouldCancel:()=>f.cancel,onMetrics:m=>{f.metrics=m;metrics.value=m;if(f.failObserver)throw Error('observer');}}).then(r=>f.result=r,e=>f.error=e.message);};
+createApp({render:()=>h('main',{style:'max-width:600px;padding:16px;font-family:Arial'},[h('h2','Видео урока'),h('progress',{max:100,value:progress.value,style:'width:100%'}),h(Metrics,{metrics:metrics.value})])}).mount('#app');`);
+await build({root:temp,configFile:false,logLevel:'error',plugins:[{name:'no-live-token-module',enforce:'pre',resolveId(id){if(id.endsWith('peertubeLive.js'))return '\0mock-live';},load(id){if(id==='\0mock-live')return "export const PEERTUBE_ORIGIN='https://upload.invalid';export const getPeertubeToken=()=>{throw Error('Token exchange forbidden')};";}},vue()],build:{outDir:'dist'}});
+const server=http.createServer((req,res)=>{const url=new URL(req.url,'http://localhost');const file=path.join(temp,'dist',url.pathname.startsWith('/assets/')?url.pathname:'index.html');res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(file));});await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin='http://127.0.0.1:'+server.address().port;
+const MB=1024*1024;let count=0;
+try{for(const engine of [chromium,webkit]){
+const b=await engine.launch(engine===chromium?{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}:{});
+try{const c=await b.newContext({viewport:{width:390,height:700}});await c.route('**/*',r=>r.request().url().startsWith(origin)?r.continue():r.abort());const p=await c.newPage();const errors=[];p.on('pageerror',e=>errors.push(e.name));await p.clock.install();await p.goto(origin);await p.waitForFunction(()=>!!window.fixture);
+const start=async n=>{await p.evaluate(n=>window.fixture.start(n),n);await p.waitForFunction(()=>!!window.fixture.pending);};
+const ack=async(status,end)=>{await p.evaluate(([s,e])=>window.fixture.ack(s,e),[status,end]);};
+const text=()=>p.locator('.upload-metrics').innerText();
+await start(0);await p.clock.runFor(4000);assert((await text()).includes('Расчёт скорости'));assert.equal(await p.evaluate(()=>fixture.metrics.confirmedBytes),0);await ack(308,5*MB-1);await p.waitForFunction(()=>fixture.checkpoint===5*1024*1024);assert((await text()).includes('Расчёт скорости'));await p.clock.runFor(6000);await ack(308,10*MB-1);await p.waitForFunction(()=>fixture.checkpoint===10*1024*1024);await p.clock.runFor(1000);assert(Math.abs((await p.evaluate(()=>fixture.metrics.bytesPerSecond))-MB)<MB*.03);assert((await text()).includes('/с'));assert((await text()).includes('10 МБ / 20 МБ'));assert(/Осталось примерно 1[01] с/.test(await text()));console.log('PASS',engine.name(),'confirmed bytes, weighted speed, ETA, slow pending chunk');count++;
+await p.clock.runFor(11000);assert((await text()).includes('Расчёт скорости'));assert(!(await text()).includes('Осталось'));assert.equal(await p.evaluate(()=>fixture.metrics.confirmedBytes),10*MB);console.log('PASS stale speed hidden without unconfirmed bytes');count++;
+await p.screenshot({path:path.join(temp,engine.name()+'-mobile.png')});
+await ack(408);await p.waitForFunction(()=>fixture.error!==null);assert.equal(await p.evaluate(()=>fixture.metrics.confirmedBytes),10*MB);assert.equal(await p.evaluate(()=>fixture.metrics.bytesPerSecond),null);assert((await p.evaluate(()=>fixture.error)).includes('408'));console.log('PASS 408 retains confirmed checkpoint and clears rate');count++;
+await start(10*MB);assert((await text()).includes('10 МБ / 20 МБ'));assert((await text()).includes('Расчёт скорости'));assert.equal(await p.evaluate(()=>fixture.ranges[0]),'bytes 10485760-15728639/20971520');await p.clock.runFor(4000);await ack(308,15*MB-1);await p.waitForFunction(()=>fixture.checkpoint===15*1024*1024);assert((await text()).includes('Расчёт скорости'));await p.clock.runFor(4000);await ack(200);await p.waitForFunction(()=>!!fixture.result);assert.equal(await p.evaluate(()=>fixture.result.uuid),'fake-video');assert.equal(await p.evaluate(()=>fixture.metrics.confirmedBytes),20*MB);assert.equal(await p.evaluate(()=>fixture.metrics.phase),'complete');console.log('PASS resume starts at checkpoint without old rate, completes');count++;
+await start(0);await p.clock.runFor(2000);await p.evaluate(()=>fixture.cancel=true);await ack(308,5*MB-1);await p.waitForFunction(()=>fixture.error==='cancelled');assert.equal(await p.evaluate(()=>fixture.ranges.length),1);assert.equal(await p.evaluate(()=>fixture.metrics.phase),'cancelled');console.log('PASS cancellation between chunks unchanged');count++;
+await start(0);await p.clock.runFor(3000);await ack(308);await p.waitForFunction(()=>fixture.ranges.length===2);assert.equal(await p.evaluate(()=>fixture.metrics.confirmedBytes),0);assert((await text()).includes('Расчёт скорости'));await ack(408);await p.waitForFunction(()=>!!fixture.error);console.log('PASS missing Range does not credit bytes');count++;
+await p.evaluate(()=>fixture.failObserver=true);await start(15*MB);await p.clock.runFor(2000);await ack(200);await p.waitForFunction(()=>!!fixture.result);console.log('PASS observer failure cannot fail upload');count++;
+await p.evaluate(()=>fixture.failObserver=false);await start(0);await p.clock.runFor(2000);await ack(308,5*MB-1);await p.waitForFunction(()=>!!fixture.pending);await p.clock.runFor(2000);await ack(308,10*MB-1);await p.clock.runFor(1000);assert((await text()).includes('/с'));await p.evaluate(()=>window.dispatchEvent(new Event('offline')));assert((await text()).includes('Расчёт скорости'));await p.evaluate(()=>window.dispatchEvent(new Event('online')));assert((await text()).includes('Расчёт скорости'));await ack(408);await p.waitForFunction(()=>!!fixture.error);console.log('PASS network pause invalidates stale samples');count++;
+assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.deepEqual(errors,[]);await p.setViewportSize({width:1280,height:800});await p.screenshot({path:path.join(temp,engine.name()+'-desktop.png')});
+}finally{await b.close();}}
+console.log('PASS total',count,'screenshots',temp);
+}finally{await new Promise(r=>server.close(r));}

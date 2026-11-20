@@ -290,6 +290,7 @@
                         <div v-if="videoUploading && videoTarget === 'course'" class="pd-vprog">
                             <div class="pd-vprog__bar"><span :style="{ transform: `scaleX(${videoProgress / 100})` }"></span></div>
                             <span class="pd-vprog__t">Загрузка… {{ videoProgress }}%</span>
+                            <UploadMetrics :metrics="videoMetrics" />
                         </div>
                         <template v-else-if="editing.video_id">
                             <div class="pd-vframe"><iframe :src="embedUrl(editing.video_id, { autoplay: false })" title="Тизер курса" frameborder="0" allowfullscreen allow="fullscreen; picture-in-picture"></iframe></div>
@@ -463,6 +464,7 @@
                         <div v-if="videoUploading && videoTarget === 'lesson'" class="pd-vprog">
                             <div class="pd-vprog__bar"><span :style="{ transform: `scaleX(${videoProgress / 100})` }"></span></div>
                             <span class="pd-vprog__t">Загрузка… {{ videoProgress }}%</span>
+                            <UploadMetrics :metrics="videoMetrics" />
                         </div>
                         <template v-else-if="lessonEditing.video_id">
                             <div class="pd-vframe"><iframe :src="embedUrl(lessonEditing.video_id, { autoplay: false })" title="Видео урока" frameborder="0" allowfullscreen allow="fullscreen; picture-in-picture"></iframe></div>
@@ -562,6 +564,7 @@
 </template>
 
 <script setup>
+import UploadMetrics from '../components/UploadMetrics.vue';
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { getSupabase, readStoredSession, authCookieUser, loadUser } from '@/_front/chrome/headerAccount.js';
 import { getUploadToken, uploadVideo, fetchVideoSize, PEERTUBE_ORIGIN } from '@/_front/streams/peertubeUpload.js';
@@ -624,6 +627,7 @@ const lessonsIncomplete = ref(false);
 // ── Phase 4: PeerTube video (lesson video + course teaser) ──
 const videoUploading = ref(false); // true while a chunked upload runs (blocks a second one)
 const videoProgress = ref(0);
+const videoMetrics = ref(null);
 const videoTarget = ref(null);     // 'lesson' | 'course' — which surface the progress bar belongs to
 const videoBusy = ref(false);      // delete/replace
 const videoError = ref('');
@@ -1125,6 +1129,7 @@ function patchCourse(id, p) {
 async function runVideoUpload(table, row, file, patch, which) {
     if (videoUploading.value || !editable.value) return;
     videoUploading.value = true; videoProgress.value = 0; videoTarget.value = which; videoError.value = '';
+    videoMetrics.value = { totalBytes: file.size, confirmedBytes: row.resume_video_id ? Number(row.resume_chunk || 0) : 0, phase: 'preparing' };
     try {
         const token = await getUploadToken(sb);
         await sb.from(table).update({ resume_name: file.name }).eq('id', row.id);
@@ -1135,6 +1140,7 @@ async function runVideoUpload(table, row, file, patch, which) {
             onInit: (uid) => sb.from(table).update({ resume_video_id: uid }).eq('id', row.id),
             onChunk: (pos) => sb.from(table).update({ resume_chunk: String(pos) }).eq('id', row.id),
             onProgress: (p) => { videoProgress.value = p; },
+            onMetrics: (value) => { videoMetrics.value = value; },
         });
         const size = await fetchVideoSize(result.uuid);
         const done = { video_id: result.uuid, video_size: size, resume_video_id: null, resume_chunk: null, resume_name: null };

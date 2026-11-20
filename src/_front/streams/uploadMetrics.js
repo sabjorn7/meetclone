@@ -37,7 +37,7 @@ export function uploadMetricView(metrics, now, invalidatedAt = -Infinity, unavai
         volume: `Подтверждено: ${formatUploadBytes(m.confirmedBytes)} / ${formatUploadBytes(m.totalBytes)}`,
         eta: rate > 0 && m.confirmedBytes < m.totalBytes
             ? `Осталось примерно ${formatUploadTime((m.totalBytes - m.confirmedBytes) / rate)}` : '',
-        status: m.phase === 'finalizing' ? 'Видео передано. Подтверждение результата...' : m.phase === 'complete' ? 'Видео передано. Сохранение...' : ''};
+        status: m.phase === 'paused' ? 'Загрузка на паузе' : m.phase === 'finalizing' ? 'Видео передано. Подтверждение результата...' : m.phase === 'complete' ? 'Видео передано. Сохранение...' : ''};
 }
 export function formatUploadBytes(bytes) {
     const unit = bytes >= 1024 * 1024 ? 1024 * 1024 : 1024;

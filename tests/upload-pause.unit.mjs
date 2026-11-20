@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {createUploadPause} from '../src/_front/streams/uploadPause.js';
+const states=[]; const pause=createUploadPause(s=>states.push(s)); const controller=new AbortController();
+await pause.wait(controller.signal); assert.deepEqual(states,[]);
+pause.request();pause.request();assert.deepEqual(states,['pausing']);
+let completed=false;const pending=pause.wait(controller.signal).then(()=>completed=true);
+await Promise.resolve();assert.equal(completed,false);assert.equal(states.at(-1),'paused');
+pause.resume();await pending;assert.equal(completed,true);assert.equal(states.at(-1),'running');
+pause.request();const cancelled=pause.wait(controller.signal);controller.abort();await assert.rejects(cancelled,{name:'AbortError'});
+await assert.rejects(pause.wait(controller.signal),{name:'AbortError'});
+const final=createUploadPause();final.finalizing();final.request();await final.wait();
+const observer=createUploadPause(()=>{throw Error('observer');});observer.request();observer.resume();await observer.wait();
+console.log('PASS pause wait, repeated request, resume, cancellation, pre-aborted signal, finalization and observer failure');

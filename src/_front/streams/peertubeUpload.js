@@ -86,7 +86,7 @@ export async function getUploadToken(supabase) {
  */
 export async function uploadVideo({
     token, file, channelId = CHANNEL_ID, apiBaseUrl = PEERTUBE_ORIGIN,
-    resumeUploadId = null, resumeStart = 0, onInit, onChunk, onProgress, onMetrics, shouldCancel, signal, onFinalChunk,
+    resumeUploadId = null, resumeStart = 0, onInit, onChunk, onProgress, onMetrics, shouldCancel, signal, onFinalChunk, pause,
 }) {
     const totalSize = file.size;
     const fileName = file.name;
@@ -116,11 +116,12 @@ export async function uploadVideo({
     }
 
     while (start < totalSize) {
+        await pause?.wait(signal, () => metrics.state('paused'));
         if (signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError');
         if (shouldCancel && shouldCancel()) throw new Error('cancelled');
         const end = Math.min(start + CHUNK_SIZE - 1, totalSize - 1);
         const chunk = file.slice(start, end + 1);
-        if (end + 1 === totalSize) onFinalChunk?.();
+        if (end + 1 === totalSize) { pause?.finalizing(); onFinalChunk?.(); }
         metrics.begin();
         const res = await fetch(`${apiBaseUrl}/api/v1/videos/upload-resumable?upload_id=${uploadId}`, {
             method: 'PUT',

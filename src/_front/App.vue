@@ -4,18 +4,22 @@
     <!-- wwFront:start -->
     <router-view />
     <!-- wwFront:end -->
+    <UploadQueuePanel v-if="uploadQueueState.length" />
     <AppFooter v-if="useNewChrome" />
     <InstallPrompt v-if="useNewChrome" />
 </template>
 
 <script>
-import { reactive, computed, provide, watch } from 'vue';
+import { reactive, computed, provide, watch, defineAsyncComponent } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppHeader from '@/_front/chrome/AppHeader.vue';
 import AppFooter from '@/_front/chrome/AppFooter.vue';
 import AuthBanner from '@/_front/chrome/AuthBanner.vue';
 import InstallPrompt from '@/_front/chrome/InstallPrompt.vue';
 import { isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
+
+import {uploadQueueState} from './streams/uploadQueueState.js';
+const UploadQueuePanel = defineAsyncComponent(() => import('./components/UploadQueuePanel.vue'));
 
 // The new MeetGuru chrome (AppHeader/AppFooter) is the DEFAULT on every route. This is a denylist,
 // not an allowlist: to fast-rollback a single page to the old WeWeb chrome, add its normalized path
@@ -45,7 +49,7 @@ const CHROME_EXCLUDE = [
 const CHROME_EXCLUDE_PREFIX = [];
 
 export default {
-    components: { AppHeader, AppFooter, AuthBanner, InstallPrompt },
+    components: { UploadQueuePanel, AppHeader, AppFooter, AuthBanner, InstallPrompt },
     setup() {
         const wwFrontState = reactive({
             lang: computed(() => wwLib.$store.getters['front/getLang']),
@@ -80,7 +84,7 @@ export default {
         }
         watch(() => route.path, redirectGuestFromHome, { immediate: true });
 
-        return { useNewChrome };
+        return { useNewChrome, uploadQueueState };
     },
 };
 </script>

@@ -150,7 +150,7 @@
             <div class="pd-dialog" role="dialog" aria-modal="true">
                 <div class="pd-dialog__head">
                     <h2 class="pd-dialog__title">{{ editing.isCreate ? 'Новый курс' : 'Редактирование курса' }}</h2>
-                    <button type="button" class="pd-x" aria-label="Закрыть" :disabled="videoUploading || videoCancelling" @click="closeModal">
+                    <button type="button" class="pd-x" aria-label="Закрыть" @click="closeModal">
                         <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
                     </button>
                 </div>
@@ -289,9 +289,13 @@
                         <span class="pd-money__h">Тизер курса</span>
                         <div v-if="videoUploading && videoTarget === 'course'" class="pd-vprog">
                             <div class="pd-vprog__bar"><span :style="{ transform: `scaleX(${videoProgress / 100})` }"></span></div>
-                            <span class="pd-vprog__t">Загрузка… {{ videoProgress }}%</span>
+                            <span class="pd-vprog__t">{{ videoPauseState === 'queued' ? 'В очереди' : 'Загрузка: ' + videoProgress + '%' }}</span>
+                            <span v-if="currentVideoJob?.error" role="status">{{ currentVideoJob.error }} Проверьте панель загрузок.</span>
                             <UploadMetrics :metrics="videoMetrics" />
-                            <button type="button" class="pd-btn pd-btn--dangerghost pd-btn--sm" :disabled="videoCancelling || videoSaving" @click="cancelVideoUpload">{{ videoCancelling ? 'Отмена и удаление…' : videoSaving ? 'Сохранение…' : 'Отменить загрузку' }}</button>
+                            <button v-if="currentVideoJob?.canRetry" type="button" class="pd-btn pd-btn--ghost pd-btn--sm" @click="queueAction('retry')">Повторить загрузку</button>
+                            <button type="button" class="pd-btn pd-btn--ghost pd-btn--sm" :disabled="videoCancelling || videoSaving || ['finalizing','preparing','error','cleanup_error','interrupted'].includes(videoPauseState)" @click="toggleVideoPause">{{ ['paused','pausing','paused_queue'].includes(videoPauseState) ? 'Продолжить' : 'Пауза' }}</button>
+                            <span v-if="videoPauseState === 'pausing' && !videoCancelling" role="status">Останавливаем после текущего блока…</span>
+                            <button type="button" class="pd-btn pd-btn--dangerghost pd-btn--sm" :disabled="videoCancelling || videoSaving" @click="cancelVideoUpload">{{ videoCancelling ? 'Отмена и удаление…' : videoSaving ? 'Сохранение…' : videoPauseState === 'cleanup_error' ? 'Повторить удаление' : 'Отменить загрузку' }}</button>
                         </div>
                         <template v-else-if="editing.video_id">
                             <div class="pd-vframe"><iframe :src="embedUrl(editing.video_id, { autoplay: false })" title="Тизер курса" frameborder="0" allowfullscreen allow="fullscreen; picture-in-picture"></iframe></div>
@@ -408,7 +412,7 @@
                 <div class="pd-dialog__foot">
                     <button v-if="!editing.isCreate" type="button" class="pd-btn pd-btn--danger" :disabled="!form" @click="confirmDelete = true">Удалить курс</button>
                     <span class="pd-spacer"></span>
-                    <button type="button" class="pd-btn pd-btn--ghost" :disabled="videoUploading || videoCancelling" @click="closeModal">Отменить</button>
+                    <button type="button" class="pd-btn pd-btn--ghost" @click="closeModal">Отменить</button>
                     <button type="button" class="pd-btn" :disabled="saving || !form || !form.Title.trim() || !editable" @click="saveCourse">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
                 </div>
 
@@ -431,7 +435,7 @@
             <div class="pd-dialog pd-dialog--sm" role="dialog" aria-modal="true">
                 <div class="pd-dialog__head">
                     <h2 class="pd-dialog__title">Урок</h2>
-                    <button type="button" class="pd-x" aria-label="Закрыть" :disabled="videoUploading || videoCancelling" @click="closeLessonEdit">
+                    <button type="button" class="pd-x" aria-label="Закрыть" @click="closeLessonEdit">
                         <svg viewBox="0 0 24 24" class="pd-ic" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
                     </button>
                 </div>
@@ -465,9 +469,13 @@
                         <span class="pd-field__lb">Видео урока</span>
                         <div v-if="videoUploading && videoTarget === 'lesson'" class="pd-vprog">
                             <div class="pd-vprog__bar"><span :style="{ transform: `scaleX(${videoProgress / 100})` }"></span></div>
-                            <span class="pd-vprog__t">Загрузка… {{ videoProgress }}%</span>
+                            <span class="pd-vprog__t">{{ videoPauseState === 'queued' ? 'В очереди' : 'Загрузка: ' + videoProgress + '%' }}</span>
+                            <span v-if="currentVideoJob?.error" role="status">{{ currentVideoJob.error }} Проверьте панель загрузок.</span>
                             <UploadMetrics :metrics="videoMetrics" />
-                            <button type="button" class="pd-btn pd-btn--dangerghost pd-btn--sm" :disabled="videoCancelling || videoSaving" @click="cancelVideoUpload">{{ videoCancelling ? 'Отмена и удаление…' : videoSaving ? 'Сохранение…' : 'Отменить загрузку' }}</button>
+                            <button v-if="currentVideoJob?.canRetry" type="button" class="pd-btn pd-btn--ghost pd-btn--sm" @click="queueAction('retry')">Повторить загрузку</button>
+                            <button type="button" class="pd-btn pd-btn--ghost pd-btn--sm" :disabled="videoCancelling || videoSaving || ['finalizing','preparing','error','cleanup_error','interrupted'].includes(videoPauseState)" @click="toggleVideoPause">{{ ['paused','pausing','paused_queue'].includes(videoPauseState) ? 'Продолжить' : 'Пауза' }}</button>
+                            <span v-if="videoPauseState === 'pausing' && !videoCancelling" role="status">Останавливаем после текущего блока…</span>
+                            <button type="button" class="pd-btn pd-btn--dangerghost pd-btn--sm" :disabled="videoCancelling || videoSaving" @click="cancelVideoUpload">{{ videoCancelling ? 'Отмена и удаление…' : videoSaving ? 'Сохранение…' : videoPauseState === 'cleanup_error' ? 'Повторить удаление' : 'Отменить загрузку' }}</button>
                         </div>
                         <template v-else-if="lessonEditing.video_id">
                             <div class="pd-vframe"><iframe :src="embedUrl(lessonEditing.video_id, { autoplay: false })" title="Видео урока" frameborder="0" allowfullscreen allow="fullscreen; picture-in-picture"></iframe></div>
@@ -532,7 +540,7 @@
                 <p v-if="videoError && videoTarget !== 'course'" class="pd-formerr">{{ videoError }}</p>
                 <div class="pd-dialog__foot">
                     <span class="pd-spacer"></span>
-                    <button type="button" class="pd-btn pd-btn--ghost" :disabled="videoUploading || videoCancelling" @click="closeLessonEdit">Закрыть</button>
+                    <button type="button" class="pd-btn pd-btn--ghost" @click="closeLessonEdit">Закрыть</button>
                     <button type="button" class="pd-btn" :disabled="lessonSaving" @click="saveLessonMeta">{{ lessonSaving ? 'Сохраняем…' : 'Сохранить' }}</button>
                 </div>
             </div>
@@ -568,11 +576,11 @@
 </template>
 
 <script setup>
-import { removeUnfinishedUpload, removeCancelledResult } from '../streams/uploadCancellation.js';
+import {uploadQueueState, getUploadQueue} from '../streams/uploadQueueState.js';
 import UploadMetrics from '../components/UploadMetrics.vue';
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { getSupabase, readStoredSession, authCookieUser, loadUser } from '@/_front/chrome/headerAccount.js';
-import { getUploadToken, uploadVideo, fetchVideoSize, PEERTUBE_ORIGIN } from '@/_front/streams/peertubeUpload.js';
+import { getUploadToken } from '@/_front/streams/peertubeUpload.js';
 import { deleteLive, embedUrl } from '@/_front/streams/peertubeLive.js';
 
 const CREATORS = ['Спикер', 'Учебное заведение', 'admin'];
@@ -630,13 +638,18 @@ const lessonBusyId = ref(null);    // row-level spinner (reorder/delete)
 const lessonsIncomplete = ref(false);
 
 // ── Phase 4: PeerTube video (lesson video + course teaser) ──
-const videoUploading = ref(false); // true while a chunked upload runs (blocks a second one)
-const videoProgress = ref(0);
-const videoMetrics = ref(null);
-const videoCancelling = ref(false);
-const videoSaving = ref(false);
-let videoJob = null;
-const videoTarget = ref(null);     // 'lesson' | 'course' — which surface the progress bar belongs to
+const currentVideoJob = computed(() => {
+    const row = lessonEditing.value || editing.value;
+    const table = lessonEditing.value ? 'lessons' : 'course';
+    return row && uploadQueueState.value.find(j => j.table === table && j.id === row.id && !['complete','cancelled'].includes(j.state));
+});
+const videoUploading = computed(() => !!currentVideoJob.value);
+const videoProgress = computed(() => currentVideoJob.value?.progress || 0);
+const videoMetrics = computed(() => currentVideoJob.value?.metrics || null);
+const videoCancelling = computed(() => currentVideoJob.value?.state === 'cancelling');
+const videoSaving = computed(() => currentVideoJob.value?.state === 'saving');
+const videoPauseState = computed(() => currentVideoJob.value?.state || 'running');
+const videoTarget = computed(() => currentVideoJob.value?.table === 'lessons' ? 'lesson' : 'course');
 const videoBusy = ref(false);      // delete/replace
 const videoError = ref('');
 const coverBusy = ref(false);      // course cover image upload/remove
@@ -820,7 +833,7 @@ async function openEdit(c) {
         formLoading.value = false;
     }
 }
-function closeModal() { if (videoUploading.value || videoCancelling.value) return; editing.value = null; form.value = null; justCreated.value = false; }
+function closeModal() { editing.value = null; form.value = null; justCreated.value = false; }
 
 async function saveCourse() {
     if (saving.value || !form.value || !editable.value) return;
@@ -906,6 +919,7 @@ function nextStatusAction() {
 }
 async function setStatus(to) {
     if (statusBusy.value || !editing.value || editing.value.isCreate) return;
+    if (courseHasUploads(editing.value.id)) { formError.value = 'Дождитесь загрузок этого курса или отмените их в панели загрузок.'; return; }
     statusBusy.value = true; formError.value = '';
     try {
         const id = editing.value.id;
@@ -926,6 +940,7 @@ async function setStatus(to) {
 
 async function deleteCourse() {
     if (deleting.value || editing.value?.isCreate) return;
+    if (courseHasUploads(editing.value?.id)) { formError.value = 'Сначала завершите или отмените загрузки этого курса.'; return; }
     deleting.value = true; formError.value = '';
     try {
         const id = editing.value.id;
@@ -1025,7 +1040,7 @@ async function loadLessons(c) {
         // flag it so the Less_Id-writing edits (add/delete/reorder) refuse to run and can't
         // persist a shortened array over the real one.
         lessonsIncomplete.value = loaded.some((l) => !l);
-        lessons.value = loaded.filter(Boolean); // keep Less_Id order
+        lessons.value = loaded.filter(Boolean); applyUploadPatches(); // keep Less_Id order
         if (lessonsIncomplete.value) lessonError.value = 'Часть уроков не загрузилась. Редактирование заблокировано, чтобы не потерять их — обновите страницу.';
     } catch (e) { lessonsIncomplete.value = true; lessonError.value = 'Не удалось загрузить уроки. Редактирование заблокировано — обновите страницу.'; }
     finally { lessonsLoading.value = false; }
@@ -1051,7 +1066,7 @@ function openLessonEdit(lesson) {
     lessonError.value = '';
     loadLessonBans(lesson);
 }
-function closeLessonEdit() { if (videoUploading.value || videoCancelling.value) return; lessonEditing.value = null; lessonForm.value = null; banned.value = []; banResults.value = []; banSearch.value = ''; }
+function closeLessonEdit() { lessonEditing.value = null; lessonForm.value = null; banned.value = []; banResults.value = []; banSearch.value = ''; }
 async function saveLessonMeta() {
     if (!lessonEditing.value || lessonSaving.value || !lessonForm.value || !editable.value) return;
     lessonSaving.value = true; lessonError.value = '';
@@ -1067,6 +1082,7 @@ async function saveLessonMeta() {
     finally { lessonSaving.value = false; }
 }
 async function deleteLesson(lesson) {
+    if (uploadQueueState.value.some(j => j.table === 'lessons' && j.id === lesson.id && !['complete','cancelled'].includes(j.state))) { lessonError.value = 'Сначала завершите или отмените загрузку этого урока.'; return; }
     if (lessonBusyId.value || !editable.value || lessonsIncomplete.value) return;
     lessonBusyId.value = lesson.id; lessonError.value = '';
     try {
@@ -1132,82 +1148,41 @@ function patchCourse(id, p) {
     courses.value = courses.value.map((c) => (c.id === id ? { ...c, ...p } : c));
     if (editing.value?.id === id) editing.value = { ...editing.value, ...p };
 }
-// Chunked resumable upload; resume checkpoints are persisted to the row's resume_* columns (parity with
-// the WeWeb uploader) so an interrupted upload can pick up where it stopped.
-const emptyResume = { resume_video_id: null, resume_chunk: null, resume_name: null };
-async function persistVideoPatch(table, id, values, patch) {
-    const { error } = await sb.from(table).update(values).eq('id', id);
-    if (error) throw new Error('Не удалось сохранить состояние видео. Повторите действие.');
-    patch(values);
-}
-async function cleanupVideoJob(job) {
-    if (job.newUUID) {
-        await removeCancelledResult({apiBaseUrl: PEERTUBE_ORIGIN, token: job.token, uuid: job.newUUID, previousVideoId: job.previousVideoId});
-    } else if (job.uploadId) {
-        await removeUnfinishedUpload({apiBaseUrl: PEERTUBE_ORIGIN, token: job.token, uploadId: job.uploadId, uncertainFinal: job.uncertainFinal});
+function courseHasUploads(id) { return uploadQueueState.value.some(j => j.courseId === id && !['complete','cancelled'].includes(j.state)); }
+const appliedUploadRevisions = new Map(uploadQueueState.value.map(j => [j.key, j.revision]));
+function applyUploadPatches() {
+    for (const job of uploadQueueState.value) {
+        if (!job.revision || appliedUploadRevisions.get(job.key) === job.revision) continue;
+        appliedUploadRevisions.set(job.key, job.revision);
+        if (job.table === 'course') patchCourse(job.id, job.patch);
+        else patchLesson(job.id, job.patch);
     }
-    await persistVideoPatch(job.table, job.id, emptyResume, job.patch);
 }
-function cancelVideoUpload() {
-    if (!videoJob || !videoUploading.value || videoSaving.value || videoCancelling.value) return;
-    videoCancelling.value = true;
-    videoJob.controller.abort();
+watch(uploadQueueState, applyUploadPatches);
+watch([() => editing.value?.id, () => lessonEditing.value?.id], applyUploadPatches);
+async function queueAction(action) {
+    const key = currentVideoJob.value?.key;
+    if (!key) return;
+    try { (await getUploadQueue())[action](key); }
+    catch (_) { videoError.value = 'Не удалось изменить загрузку. Проверьте общую панель загрузок.'; }
 }
-async function discardVideoUpload(table, row, which) {
-    if (!editable.value || videoUploading.value || videoCancelling.value || !row?.resume_video_id) return;
+function toggleVideoPause() { void queueAction(['paused','pausing','paused_queue'].includes(videoPauseState.value) ? 'resume' : 'pause'); }
+function cancelVideoUpload() { void queueAction('cancel'); }
+async function discardVideoUpload(table, row) {
+    if (!editable.value || videoUploading.value || !row?.resume_video_id) return;
     if (!window.confirm('Удалить незавершённую загрузку? Продолжить её будет нельзя. Готовое видео останется без изменений.')) return;
-    videoCancelling.value = true; videoTarget.value = which; videoError.value = '';
-    const patch = values => table === 'course' ? patchCourse(row.id, values) : patchLesson(row.id, values);
-    const job = videoJob?.id === row.id && videoJob?.table === table ? videoJob
-        : {table, id: row.id, uploadId: row.resume_video_id, previousVideoId: row.video_id, patch};
-    try {
-        job.token = await getUploadToken(sb);
-        await cleanupVideoJob(job);
-        if (videoJob === job) videoJob = null;
-    } catch (_) { videoError.value = 'Не удалось удалить незавершённую загрузку. Данные для повторной попытки сохранены.'; }
-    finally { videoCancelling.value = false; }
+    await enqueueVideo(table, row, null, true);
 }
-async function runVideoUpload(table, row, file, patch, which) {
-    if (videoUploading.value || videoCancelling.value || !editable.value) return;
-    videoUploading.value = true; videoProgress.value = 0; videoTarget.value = which; videoError.value = '';
-    videoMetrics.value = { totalBytes: file.size, confirmedBytes: row.resume_video_id ? Number(row.resume_chunk || 0) : 0, phase: 'preparing' };
-    const job = {table, id: row.id, patch, previousVideoId: row.video_id, uploadId: row.resume_video_id || null, controller: new AbortController(), token: null, newUUID: null, uncertainFinal: false};
-    videoJob = job;
-    try {
-        job.token = await getUploadToken(sb);
-        if (job.controller.signal.aborted) throw new DOMException('Upload cancelled', 'AbortError');
-        await persistVideoPatch(table, row.id, {resume_name: file.name}, patch);
-        const result = await uploadVideo({
-            token: job.token, file, signal: job.controller.signal,
-            onFinalChunk: () => { job.uncertainFinal = true; },
-            resumeUploadId: job.uploadId,
-            resumeStart: job.uploadId ? Number(row.resume_chunk || 0) : 0,
-            onInit: async uid => {
-                job.uploadId = uid;
-                // Keep the ID locally even if the checkpoint write fails.
-                patch({resume_video_id: uid});
-                await persistVideoPatch(table, row.id, {resume_video_id: uid}, patch);
-            },
-            onChunk: pos => persistVideoPatch(table, row.id, {resume_chunk: String(pos)}, patch),
-            onProgress: p => { videoProgress.value = p; },
-            onMetrics: value => { videoMetrics.value = value; },
-        });
-        job.newUUID = result.uuid;
-        if (job.controller.signal.aborted) throw new DOMException('Upload cancelled', 'AbortError');
-        const size = await fetchVideoSize(result.uuid);
-        if (job.controller.signal.aborted) throw new DOMException('Upload cancelled', 'AbortError');
-        videoSaving.value = true; // Do not race cancellation against the final DB commit.
-        await persistVideoPatch(table, row.id, {video_id: result.uuid, video_size: size, ...emptyResume}, patch);
-        videoJob = null;
-    } catch (e) {
-        if (job.controller.signal.aborted) {
-            try { await cleanupVideoJob(job); videoJob = null; }
-            catch (_) { videoError.value = 'Передача остановлена, но удаление не подтверждено. Повторите удаление незавершённой загрузки.'; }
-        } else if (e?.message !== 'cancelled') videoError.value = `Не удалось загрузить видео: ${e?.message || 'ошибка'}`;
-    } finally {
-        videoUploading.value = false; videoCancelling.value = false; videoSaving.value = false;
-    }
+async function enqueueVideo(table, row, file, cleanup = false) {
+    if (!editable.value) return;
+    // Capture IDs before awaiting the dynamic import: the author may already open another lesson.
+    const target = {table, row: {...row}, courseId: table === 'course' ? row.id : editing.value?.id,
+        title: `${table === 'course' ? 'Тизер' : 'Урок'}: ${row.Title || 'Без названия'}`, file, cleanup};
+    videoError.value = '';
+    try { (await getUploadQueue()).enqueue(target); }
+    catch (_) { videoError.value = 'Не удалось добавить видео. Проверьте очередь: для урока допустима одна загрузка, всего — до 20.'; }
 }
+function runVideoUpload(table, row, file) { return enqueueVideo(table, row, file); }
 async function runVideoDelete(table, row, patch) {
     if (videoBusy.value || videoUploading.value || videoCancelling.value || !editable.value) return;
     videoBusy.value = true; videoError.value = '';

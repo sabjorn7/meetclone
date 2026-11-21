@@ -188,6 +188,7 @@
                                                 </span>
                                             </a>
                                             <span v-if="m.text" class="pd-msg__text"><ChatMessageText :text="m.text" /></span>
+                                            <ChatLinkPreview v-if="m.text" :text="m.text" :mine="m.creator === myId" />
                                             <span class="pd-msg__time">{{ fmtTime(m.created_at) }}</span>
                                         </div>
                                     </div>
@@ -312,6 +313,7 @@ import { useRoute } from 'vue-router';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import { listBlockedUserIds, blockUser, unblockUser, reportContent } from '@/_front/moderation/moderationApi.js';
 import { uploadChatFile, validateFile, formatBytes, ACCEPT_ATTR, pickAudioFormat, audioRecordingSupported } from '@/_front/helpers/chatAttachments.js';
+import ChatLinkPreview from '@/_front/components/ChatLinkPreview.vue';
 import ChatMessageText from '@/_front/components/ChatMessageText.vue';
 import VoiceMessagePlayer from '@/_front/components/VoiceMessagePlayer.vue';
 import PushToggle from '@/_front/components/PushToggle.vue';

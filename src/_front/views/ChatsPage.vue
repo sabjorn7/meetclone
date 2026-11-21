@@ -187,7 +187,7 @@
                                                     <span v-if="m.attachment_size" class="pd-msg__file-size">{{ formatBytes(m.attachment_size) }}</span>
                                                 </span>
                                             </a>
-                                            <span v-if="m.text" class="pd-msg__text">{{ m.text }}</span>
+                                            <span v-if="m.text" class="pd-msg__text"><ChatMessageText :text="m.text" /></span>
                                             <span class="pd-msg__time">{{ fmtTime(m.created_at) }}</span>
                                         </div>
                                     </div>
@@ -312,6 +312,7 @@ import { useRoute } from 'vue-router';
 import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
 import { listBlockedUserIds, blockUser, unblockUser, reportContent } from '@/_front/moderation/moderationApi.js';
 import { uploadChatFile, validateFile, formatBytes, ACCEPT_ATTR, pickAudioFormat, audioRecordingSupported } from '@/_front/helpers/chatAttachments.js';
+import ChatMessageText from '@/_front/components/ChatMessageText.vue';
 import VoiceMessagePlayer from '@/_front/components/VoiceMessagePlayer.vue';
 import PushToggle from '@/_front/components/PushToggle.vue';
 import { encodeBlobToMp3 } from '@/_front/helpers/mp3Encode.js';
@@ -1025,6 +1026,8 @@ function ensureFonts() {
 .pd-msg__bubble { background: var(--surface); border: 1px solid var(--line); border-radius: 16px 16px 16px 5px; padding: 10px 14px 7px; box-shadow: var(--shadow-sm); }
 .pd-msg.is-mine .pd-msg__bubble { background: var(--blue); border-color: var(--blue); color: #fff; border-radius: 16px 16px 5px 16px; }
 .pd-msg__text { display: block; font-size: 0.98rem; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+.pd-msg__text :deep(.pd-msg__link) { color: var(--blue-ink); }
+.pd-msg.is-mine .pd-msg__text :deep(.pd-msg__link) { color: #fff; }
 .pd-msg__time { display: block; margin-top: 3px; text-align: right; font-size: 0.72rem; color: var(--ink-3); }
 .pd-msg.is-mine .pd-msg__time { color: rgba(255, 255, 255, 0.75); }
 

@@ -1,0 +1,18 @@
+Chat message links — 2026-11-21
+Base d522b3cbb1c1a3df19474a7538f44d9127793441.
+Product: ChatsPage.vue display only, ChatMessageText.vue, messageLinks.js.
+Plain text tokenization, http/https only, www defaults to https, URL validation,
+no credentials, no v-html. Vue escapes text. Final punctuation separated;
+balanced path parentheses retained. Whitespace/newlines preserved verbatim.
+Underlined blue links for received messages, white for sent messages.
+Opening new tab verified with opener=null and noopener noreferrer.
+
+Tests: 12 parser cases PASS; real ChatsPage Chrome/WebKit at 390/1280px PASS
+(4 full scenarios). Text preservation, multiple links, query parameters,
+HTML injection, send/receive in memory, PDF and voice rendering, no overflow.
+Vite build without production SEO postbuild PASS; diff --check PASS.
+No message schema, sender, upload, Auth, server or DB changes.
+Production smoke uses deployed frontend with synthetic REST responses in browser;
+all API writes and WebSockets intercepted. No real users/messages read or written.
+Actual authenticated chat server delivery not exercised; no test account supplied.
+Rollback: revert this release commit and push main through normal Deploy App.

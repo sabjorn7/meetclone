@@ -1,0 +1,13 @@
+Group chat authors release, 2026-11-21
+Base 98a3f349a5f992492280125be88d5beeeffce58d.
+Product change: ChatsPage.vue only. Show every group sender (including self),
+link name/avatar/initials to profile_page using encoded message creator ID.
+Profile lookups are non-blocking; concurrent results merge into latest cache.
+Personal chats keep existing author visibility; all message dates use local
+browser time DD.MM.YYYY · HH:MM. Stored timestamps are unchanged.
+12 group/date Chrome/WebKit tests PASS (390/1280px, Moscow/New York, profile delay/failure).
+4 existing chat link/send/receive/file/voice browser scenarios PASS.
+Vite build without SEO postbuild and git diff --check PASS.
+All chat tests use synthetic data. No actual messages or DB records changed.
+Production smoke uses live assets with REST mocked and WebSockets blocked in browser.
+Rollback target: 98a3f349a5f992492280125be88d5beeeffce58d; revert release commit through normal Deploy App.

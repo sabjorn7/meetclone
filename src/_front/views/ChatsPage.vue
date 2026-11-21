@@ -169,12 +169,12 @@
                                     v-for="m in visibleMessages" :key="m.id"
                                     class="pd-msg" :class="{ 'is-mine': m.creator === myId, 'is-grp': showSender(m) }"
                                 >
-                                    <template v-if="showSender(m)">
+                                    <component v-if="showSender(m)" :is="senderHref(m) ? 'a' : 'span'" :href="senderHref(m)" class="pd-msg__author-avatar" :aria-label="`Профиль: ${senderName(m)}`">
                                         <img v-if="usersById[m.creator]?.Photo" class="pd-msg__ava" :src="usersById[m.creator].Photo" :alt="senderName(m)" />
-                                        <span v-else class="pd-msg__ava pd-msg__ava--i">{{ initials(senderName(m)) }}</span>
-                                    </template>
+                                        <span v-else class="pd-msg__ava pd-msg__ava--i">{{ usersById[m.creator]?.Name ? initials(senderName(m)) : '·' }}</span>
+                                    </component>
                                     <div class="pd-msg__col">
-                                        <span v-if="showSender(m)" class="pd-msg__sender">{{ senderName(m) }}</span>
+                                        <component v-if="showSender(m)" :is="senderHref(m) ? 'a' : 'span'" :href="senderHref(m)" class="pd-msg__sender">{{ senderName(m) }}</component>
                                         <div class="pd-msg__bubble">
                                             <a v-if="m.attachment_url && m.attachment_type === 'image'" class="pd-msg__img" :href="m.attachment_url" target="_blank" rel="noopener">
                                                 <img :src="m.attachment_url" :alt="m.attachment_name || 'Изображение'" loading="lazy" />
@@ -407,7 +407,9 @@ function initials(name) {
 }
 function fmtTime(iso) {
     const d = new Date(iso);
-    return isNaN(d) ? '' : d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    if (!iso || isNaN(d)) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 function isGroup(c) { return c?.is_group === true; }
 function isCreator(c) { return !!c && c.creator === myId.value; }
@@ -420,7 +422,8 @@ function chatTitle(c) {
 function members(c) { return (c?.users || []).map((id) => usersById.value[id]).filter(Boolean); }
 function isUnread(chat) { return !!chat && Array.isArray(chat.read) && !chat.read.includes(myId.value); }
 function senderName(m) { return usersById.value[m.creator]?.Name || 'Участник'; }
-function showSender(m) { return isGroup(activeChat.value) && m.creator !== myId.value; }
+function showSender(m) { return isGroup(activeChat.value); }
+function senderHref(m) { return typeof m.creator === 'string' && m.creator ? `/profile_page?user=${encodeURIComponent(m.creator)}` : undefined; }
 // creator can remove anyone but self via this button-set; anyone can remove (leave) themselves.
 function canRemove(c, uid) { return uid === myId.value ? true : isCreator(c); }
 
@@ -438,7 +441,7 @@ async function load() {
     myChats.value = chats || [];
 
     // resolve the "other" of each 1-on-1 for the list label (groups show title, no lookup needed)
-    await ensureUsers(myChats.value.filter((c) => !isGroup(c)).map((c) => otherId(c)));
+    ensureUsers(myChats.value.filter((c) => !isGroup(c)).map((c) => otherId(c))).catch(() => {});
 
     subscribeChats();
     loading.value = false;
@@ -455,13 +458,12 @@ async function load() {
 async function ensureUsers(ids) {
     const need = [...new Set(ids.filter((id) => id && !usersById.value[id]))];
     if (!need.length) return;
-    const next = { ...usersById.value };
     // chunk the .in() — a single request with 100+ uuids overflows the request URL and fails silently
     for (let i = 0; i < need.length; i += 40) {
         const { data } = await sb.from('users').select('id, "Name", "Photo"').in('id', need.slice(i, i + 40));
-        for (const u of data || []) next[u.id] = u;
+        // Merge against current state: parallel group/sender lookups must not lose each other.
+        usersById.value = { ...usersById.value, ...Object.fromEntries((data || []).map((u) => [u.id, u])) };
     }
-    usersById.value = next;
 }
 
 function onSearch() {
@@ -510,7 +512,7 @@ async function openChat(xId) {
 
 async function afterOpen(chat) {
     msgMenuId.value = null;   // close any open message action menu when switching threads
-    if (isGroup(chat)) await ensureUsers(chat.users || []);   // resolve member names/photos
+    if (isGroup(chat)) ensureUsers(chat.users || []).catch(() => {});   // resolve member names/photos
     await loadMessages(chat.id);
     subscribeMessages(chat.id);
     markRead(chat);
@@ -520,7 +522,7 @@ async function loadMessages(chatId) {
     const { data } = await sb.from('messages').select(MSG_COLS).eq('chat', chatId).order('created_at', { ascending: true });
     messages.value = data || [];
     // resolve any senders not yet known (former members etc.) so group sender labels render
-    await ensureUsers([...new Set((data || []).map((m) => m.creator))]);
+    ensureUsers([...new Set((data || []).map((m) => m.creator))]).catch(() => {});
     scrollBottom();
 }
 
@@ -827,7 +829,7 @@ function subscribeMessages(chatId) {
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat=eq.${chatId}` }, (payload) => {
             const m = payload.new;
             if (!messages.value.some((x) => x.id === m.id)) {
-                if (!usersById.value[m.creator]) ensureUsers([m.creator]);  // resolve group sender label
+                if (!usersById.value[m.creator]) ensureUsers([m.creator]).catch(() => {});  // resolve group sender label
                 messages.value.push(m); scrollBottom();
             }
             // if it's someone else's message and this chat is open, mark read
@@ -1019,6 +1021,11 @@ function ensureFonts() {
 .pd-thread__empty { margin: auto; color: var(--ink-3); }
 .pd-msg { display: flex; align-items: flex-end; gap: 8px; }
 .pd-msg.is-mine { justify-content: flex-end; }
+.pd-msg__author-avatar { display: block; flex: none; border-radius: 50%; text-decoration: none; }
+.pd-msg__author-avatar:focus-visible, .pd-msg__sender:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.pd-msg.is-mine .pd-msg__author-avatar { order: 1; }
+.pd-msg.is-mine .pd-msg__sender { align-self: flex-end; }
+a.pd-msg__sender:hover { text-decoration: underline; }
 .pd-msg__ava { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex: none; margin-bottom: 2px; }
 .pd-msg__ava--i { display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-weight: 700; font-size: 0.66rem; }
 .pd-msg__col { display: flex; flex-direction: column; max-width: 74%; min-width: 0; }

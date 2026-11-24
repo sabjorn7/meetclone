@@ -16,7 +16,7 @@ import AppHeader from '@/_front/chrome/AppHeader.vue';
 import AppFooter from '@/_front/chrome/AppFooter.vue';
 import AuthBanner from '@/_front/chrome/AuthBanner.vue';
 import InstallPrompt from '@/_front/chrome/InstallPrompt.vue';
-import { isLikelyLoggedIn } from '@/_front/chrome/headerAccount.js';
+import { getSupabase } from '@/_front/chrome/headerAccount.js';
 
 import {uploadQueueState} from './streams/uploadQueueState.js';
 const UploadQueuePanel = defineAsyncComponent(() => import('./components/UploadQueuePanel.vue'));
@@ -75,12 +75,22 @@ export default {
         }, { immediate: true });
 
         // The home route "/" is the logged-in dashboard. Guests are redirected to the public catalog
-        // instead of an empty "Здравствуйте, undefined" dashboard. The public marketing landing lives
-        // on the SEPARATE meetgu.ru build (src/_landing/*), not on app.meetgu.ru. "Logged in?" via
-        // isLikelyLoggedIn() (sb-refresh/access cookie OR persisted localStorage; fails OPEN).
-        function redirectGuestFromHome(path) {
+        // only after the SDK confirms there is no session. An empty profile snapshot during
+        // auth restoration is not a guest. HomePage independently gates personal data.
+        async function redirectGuestFromHome(path, _previous, onCleanup) {
             if (normPath(path) !== '/') return;
-            if (!isLikelyLoggedIn()) router.replace('/all_course');
+            let cancelled = false;
+            onCleanup(() => { cancelled = true; });
+            const sb = getSupabase();
+            if (!sb?.auth) return;
+            try {
+                const { data, error } = await sb.auth.getSession();
+                if (!cancelled && normPath(route.path) === '/' && !error && data?.session === null) {
+                    router.replace('/all_course');
+                }
+            } catch (_) {
+                // A temporary Auth failure must not send a returning user to the public catalog.
+            }
         }
         watch(() => route.path, redirectGuestFromHome, { immediate: true });
 

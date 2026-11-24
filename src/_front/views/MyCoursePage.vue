@@ -17,6 +17,10 @@
 <template>
     <main class="pd" :class="{ 'is-ready': ready }">
         <div v-if="loading" class="pd-wrap pd-load">Загрузка…</div>
+        <div v-else-if="authError" class="pd-wrap pd-load" role="alert">
+            <p>Не удалось подтвердить вход. Проверьте соединение и повторите попытку.</p>
+            <button type="button" class="pd-btn" @click="load">Повторить</button>
+        </div>
         <div v-else-if="!course" class="pd-wrap pd-load">
             <p>Курс не найден.</p>
             <a href="/" class="pd-btn">На главную</a>
@@ -197,7 +201,7 @@ import { tracePage } from '@/_front/chrome/sessionDiagnostic.js';
 
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
-import { getSupabase, readStoredSession, authCookieUser } from '@/_front/chrome/headerAccount.js';
+import { getSupabase } from '@/_front/chrome/headerAccount.js';
 import { ownsCourse } from '@/_front/course/coursesApi.js';
 import { embedUrl } from '@/_front/streams/peertubeLive.js';
 import { logClientEvent } from '@/_front/chrome/errorLogger.js';
@@ -215,6 +219,7 @@ let sb = null;
 const myId = ref(null);
 const me = ref(null);
 const loading = ref(true);
+const authError = ref(false);
 const ready = ref(false);
 const course = ref(null);
 const author = ref(null);
@@ -448,15 +453,32 @@ async function loadCheatsheet(courseId) {
 
 async function load() {
     return tracePage('MyCoursePage', () => loading.value, async (__mgTrace) => {
+    loading.value = true;
+    authError.value = false;
     sb = getSupabase();
-    myId.value = readStoredSession()?.user?.id || authCookieUser()?.id || null;
+    // The profile snapshot can still be empty while the SDK restores auth-v2.
+    // Confirm identity through that same SDK before deciding this visitor is a guest.
+    try {
+        if (!sb?.auth) throw new Error('Auth unavailable');
+        const { data, error } = await __mgTrace.wait(0, () => sb.auth.getSession());
+        if (error) throw error;
+        const session = data?.session;
+        if (!session) { window.location.href = '/login'; return; }
+        if (!session.user?.id || !session.access_token || !(Number(session.expires_at) * 1000 > Date.now())) {
+            throw new Error('Session not confirmed');
+        }
+        myId.value = session.user.id;
+    } catch (_) {
+        myId.value = null;
+        authError.value = true;
+        loading.value = false;
+        return;
+    }
     // Постепенное включение нативного VOD-плеера: пересчитываем после получения user_id (стабильный бакет).
     rolloutBucketVal.value = myId.value ? rolloutBucket(myId.value) : null;
     vodNativeOn.value = resolveVodNative(myId.value);
     const courseId = route.query.course || '';
 
-    // guest → login
-    if (!myId.value) { window.location.href = '/login'; return; }
     if (!sb || !courseId) { loading.value = false; __mgTrace.ready(); return; }
 
     const { data } = await __mgTrace.wait(1, () => (sb.from('course')

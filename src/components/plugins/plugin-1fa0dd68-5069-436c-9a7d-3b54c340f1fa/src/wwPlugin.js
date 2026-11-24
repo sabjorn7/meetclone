@@ -1,93 +1,27 @@
 import { instrumentAuth } from '@/_front/chrome/sessionDiagnostic.js';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, isAuthRetryableFetchError } from '@supabase/supabase-js';
 import { getCurrentSupabaseSettings, resolveRuntimeProjectUrl } from './helpers/environmentConfig';
-import { logClientEvent } from '@/_front/chrome/errorLogger.js';
 import { guardedTimeout } from '@/_front/chrome/freezeGuard.js';
 
-// (a') v5 — неблокирующий pre-flight (локальная проверка; см. candA2-wwPlugin.diff.txt)
-const AP_REUSE_MS = 10000, AP_BLOCK_MS = 3000, AP_MARGIN_MS = 3000;
-// (a') выполняется ДО app.mount() — window.vm.$cookie может быть не готов, поэтому работаем с
-// document.cookie НАПРЯМУЮ (тот же path/domain, что signOut(): domain=host и .host для Safari).
-function apCookiePaths() { try { return wwLib.manager ? '/' + wwLib.wwWebsiteData.getInfo().id : '/'; } catch (e) { return '/'; } }
-function apSetCookie(name, value, maxAgeSec) {
-    const path = apCookiePaths(), h = window.location.hostname;
-    const base = `${name}=${encodeURIComponent(value)}; path=${path}; max-age=${maxAgeSec}; samesite=Lax; secure`;
-    try { document.cookie = `${base}; domain=${h}`; } catch (e) {}
-    try { document.cookie = `${base}; domain=.${h}`; } catch (e) {}
+import { authRecoveryOptions, watchAuthRecovery } from '@/_front/chrome/authRecovery.js';
+
+function authBanner(kind) {
+    window.__mgAuthBanner = kind;
+    window.dispatchEvent(new CustomEvent('mg-auth-banner', { detail: kind }));
 }
-function apClearCookies() {
-    for (const n of ['sb-access-token', 'sb-refresh-token']) apSetCookie(n, '', 0);  // max-age=0 → удаление
+function validSession(session) {
+    return !!session?.access_token && !!session.user?.id && Number(session.expires_at) * 1000 > Date.now();
 }
-function apSetCookies(session) {
-    try {
-        if (session?.access_token) apSetCookie('sb-access-token', session.access_token, session.expires_in || 3600);
-        if (session?.refresh_token) apSetCookie('sb-refresh-token', session.refresh_token, 31536000);
-    } catch (e) {}
-}
-function apGuestStorage(sk, st) { const ls = window.localStorage; return {
-    // прячем протухшую сессию от auth-js (иначе он рефрешит её и виснет), пока пользователь не вошёл
-    getItem: k => (k === sk && !st.login ? null : ls.getItem(k)),
-    // ВХОД = запись РЕАЛЬНОЙ сессии (есть access_token). init-очистка auth-js сюда не попадает.
-    setItem: (k, v) => { if (k === sk && !st.login && /"access_token"/.test(v || '')) { st.login = true; apBanner('recovered'); } ls.setItem(k, v); },
-    // КЛЮЧЕВОЕ: removeItem(sk) ДО входа — NO-OP. auth-js на init (и авто-signOut плагина при
-    // refreshAuthUser→«нет юзера») зовёт его и стёр бы реальную, ещё валидную для рефреша сессию →
-    // на следующей загрузке на здоровой сети юзер был бы разлогинен. ПОСЛЕ входа (st.login) защита
-    // снимается — тогда явный выход через плагин (auth.signOut) корректно очищает LS[sk].
-    removeItem: k => { if (k !== sk || st.login) ls.removeItem(k); } }; }
-function apReadRT(sk) { try { return JSON.parse(window.localStorage.getItem(sk) || 'null')?.refresh_token || null; } catch (e) { return null; } }
-function apNeeds(sk) { try { const s = JSON.parse(window.localStorage.getItem(sk) || 'null');
-    if (!s || !s.refresh_token) return false; if (s.expires_at == null) return true;
-    return (s.expires_at * 1000 - Date.now()) < 90 * 1000; } catch (e) { return false; } }
-function apRefresh(p, k, rt) { return fetch(`${p}/auth/v1/token?grant_type=refresh_token`, { method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: k }, body: JSON.stringify({ refresh_token: rt }) })
-    .then(async r => ({ code: r.status, body: await r.json().catch(() => ({})) })).catch(() => ({ code: 0 })); }
-function apApply(sk, b) { if (!b || !b.access_token) return false;
-    if (b.expires_at == null) b.expires_at = Math.floor(Date.now() / 1000) + (b.expires_in || 3600);
-    try { window.localStorage.setItem(sk, JSON.stringify(b)); } catch (e) {}
-    apSetCookies(b);   // document.cookie напрямую (не зависим от window.vm.$cookie до mount)
-    return true; }
-function apClear(sk) { try { window.localStorage.removeItem(sk); } catch (e) {} apClearCookies(); }
-function apBanner(kind) { try { window.__mgAuthBanner = kind; window.dispatchEvent(new CustomEvent('mg-auth-banner', { detail: kind })); } catch (e) {} }
-const apLog = (m, x) => { try { setTimeout(() => { try { logClientEvent('auth_preflight_timeout', m, x); } catch (e) {} }, 0); } catch (e) {} };
-// Тонкая обёртка: любая ОШИБКА pre-flight не должна валить bootstrap — откат к обычному клиенту.
-async function buildSupabaseClient(p, k, sk) {
-    try { return await apBuild(p, k, sk); }
-    catch (e) { try { apLog('ap_build_error', { msg: String(e && e.message || e) }); } catch (e2) {} return createClient(p, k, { auth: { storageKey: sk } }); }
-}
-async function apBuild(p, k, sk) {
-    if (!apNeeds(sk)) return createClient(p, k, { auth: { storageKey: sk } });
-    const sentRT = apReadRT(sk), t0 = Date.now(); const P = apRefresh(p, k, sentRT);
-    // guardedTimeout: если вкладку заморозили (iOS suspend) в течение блокирующего окна, перезапускаем
-    // окно один раз вместо ложного TIMEOUT на пробуждении (ждём настоящий ответ apRefresh).
-    // ВАЖНО: сохраняем handle и гасим его ПОСЛЕ гонки — иначе при победе apRefresh таймер доживает
-    // и может позже перезапуститься/отправить лишний timer_rearmed (лимит 3 общий на страницу).
-    let apTimer = null;
-    const race = await Promise.race([P, new Promise(r => { apTimer = guardedTimeout(() => r('TIMEOUT'), AP_BLOCK_MS, { label: 'auth_preflight_timeout', onRearm: (i) => logClientEvent('timer_rearmed', `${i.label} rearm`, i) }); })]);
-    if (apTimer) apTimer.clear();
-    if (race !== 'TIMEOUT') {
-        if (race.code === 200 && apApply(sk, race.body)) return createClient(p, k, { auth: { storageKey: sk } });
-        if (race.code === 400) { if (apReadRT(sk) === sentRT) apClear(sk); return createClient(p, k, { auth: { storageKey: sk } }); }
+
+function writeSessionCookie(name, value, maxAge) {
+    const path = wwLib.manager ? '/' + wwLib.wwWebsiteData.getInfo().id : '/';
+    for (const domain of [window.location.hostname, '.' + window.location.hostname]) {
+        document.cookie = `${name}=${encodeURIComponent(value)}; path=${path}; domain=${domain}; max-age=${maxAge}; secure; samesite=Lax`;
     }
-    try { window.__mgGuestAuth = true; } catch (e) {}
-    const state = { login: false };
-    const client = createClient(p, k, { auth: { storage: apGuestStorage(sk, state), storageKey: sk, autoRefreshToken: true } });
-    apBanner('offline'); apLog('preflight timeout', { conn: navigator.connection?.effectiveType || null, phase: 'sync', ms: Date.now() - t0 });
-    const allowRetry = (race === 'TIMEOUT') || (race.code === 0); let settled = false;
-    // Применять фоновый результат ТОЛЬКО если сохранённый refresh_token не изменился. removeItem(sk) теперь
-    // no-op, поэтому LS[sk] меняется исключительно по настоящему событию: вход (другой RT) или выход
-    // (clearStoredSession → null). Оба случая ≠ sentRT ⇒ не применяем (не клобберим вход, не воскрешаем выход).
-    const changed = () => apReadRT(sk) !== sentRT;
-    const applySafe = (r, ph) => { if (settled) return true;
-        if (changed()) { settled = true; apLog('late_ignored', { phase: ph, ms: Date.now() - t0 }); return true; }
-        if (r.code === 200 && apApply(sk, r.body)) { settled = true; apLog('recovered', { phase: ph, ms: Date.now() - t0 }); apBanner('recovered'); return true; }
-        if (r.code === 400) { settled = true; apClear(sk); apLog('bg_400', { phase: ph, ms: Date.now() - t0 }); apBanner('reauth'); return true; }
-        return false; };
-    P.then(r => applySafe(r, 'late'));
-    // ретраим ИСХОДНЫМ sentRT (не из LS — его auth-js мог стереть), только внутри reuse-окна, стоп на любом ответе
-    if (allowRetry) (async () => { while (!settled && (Date.now() - t0) < (AP_REUSE_MS - AP_MARGIN_MS)) {
-        await new Promise(r => setTimeout(r, 1000)); if (settled || changed()) return;
-        const r = await apRefresh(p, k, sentRT); if (applySafe(r, 'retry')) return; if (r.code !== 0) return; } })();
-    return client;
+}
+function clearSessionCookies() {
+    writeSessionCookie('mg-auth-v2-access', '', 0);
+    writeSessionCookie('mg-auth-v2-refresh', '', 0);
 }
 
 const maskForLog = value => {
@@ -111,13 +45,25 @@ export default {
         /* wwFront:end */
     },
     async _initAuth() {
-        await this.refreshAuthUser();
+        let timer;
+        try {
+            await Promise.race([
+                this.refreshAuthUser(),
+                new Promise(resolve => { timer = guardedTimeout(() => { this.markAuthPending(); resolve(false); }, 3000, { label: 'auth_preflight_timeout' }); }),
+            ]);
+        } finally { timer?.clear(); }
     },
+    _getUser() {
+        return this.isAuthenticated && validSession({ ...this.user?._session, user: this.user }) ? this.user : null;
+    },
+    // Both names are used by the existing WeWeb auth service.
+    _isAuthenticated() { return this._getIsAuthenticated(); },
+    _getIsAuthenticated() { return !!this._getUser(); },
     _getUserRoles() {
-        return this.user?.roles || [];
+        return this._getUser()?.roles || [];
     },
     _matchRoles(roles) {
-        return roles.every(role => this.user?.roles?.map(({ id }) => id).includes(role));
+        return roles.every(role => this._getUser()?.roles?.map(({ id }) => id).includes(role));
     },
     /*=============================================m_ÔÔ_m=============================================\
         Auth API
@@ -134,25 +80,28 @@ export default {
             if (!runtimeProjectUrl || !effectivePublicKey) return;
 
 
-            this.publicInstance = await buildSupabaseClient(runtimeProjectUrl, effectivePublicKey, wwLib.wwWebsiteData.getInfo().id);
+            this._authSubscription?.unsubscribe();
+            this._stopRecovery?.();
+            this.publicInstance = createClient(runtimeProjectUrl, effectivePublicKey, authRecoveryOptions(runtimeProjectUrl, `${wwLib.wwWebsiteData.getInfo().id}:auth-v2`));
             instrumentAuth(this.publicInstance);
 
             // The same public instance must be shared between supabase and supabase auth
             if (wwLib.wwPlugins.supabase) wwLib.wwPlugins.supabase.syncInstance();
             if (!this.privateInstance && !this.publicInstance) throw new Error('Invalid Supabase Auth configuration.');
-            this.publicInstance.auth.onAuthStateChange(async (event, session) => {
-                if (event === 'SIGNED_OUT') return;
-                if (event == 'USER_DELETED') return this.signOut();
-                if (event == 'USER_UPDATED') {
-                    this.refreshAuthUser(session);
-                }
-                if (event === 'SIGNED_IN') {
-                    this.refreshAuthUser(session);
-                }
-                if (event == 'TOKEN_REFRESHED') {
-                    setCookies(session);
-                }
-            });
+            this._authEpoch = 0;
+            this._lastAuthSession = undefined;
+            this._authSubscription = this.publicInstance.auth.onAuthStateChange((event, session) => {
+                const epoch = ++this._authEpoch;
+                // An event is an invalidation, not proof of the current identity.
+                this._lastAuthSession = undefined;
+                if (event === 'SIGNED_OUT' || event === 'USER_DELETED' ||
+                    !validSession(session) || this.user?.id !== session.user.id) this.clearAuthView();
+                clearTimeout(this._authEventTimer);
+                this._authEventTimer = setTimeout(() => {
+                    if (this._authEpoch === epoch) this.refreshAuthUser().catch(() => this.markAuthPending());
+                }, 0);
+            }).data.subscription;
+            this._stopRecovery = watchAuthRecovery(this.publicInstance, () => this.markAuthPending(), () => this.refreshAuthUser());
         } catch (err) {
             this.publicInstance = null;
             this.privateInstance = null;
@@ -357,55 +306,66 @@ export default {
     signOut() {
         if (!this.publicInstance) throw new Error('Invalid Supabase Auth configuration.');
 
+        this._authEpoch = (this._authEpoch || 0) + 1;
+        this._authRequest = (this._authRequest || 0) + 1;
+        this._lastAuthSession = null;
         this.user = null;
         this.isAuthenticated = false;
-        const path = wwLib.manager ? '/' + wwLib.wwWebsiteData.getInfo().id : '/';
-        window.vm.config.globalProperties.$cookie.removeCookie('sb-access-token', {
-            path,
-            domain: window.location.hostname,
-        });
-        window.vm.config.globalProperties.$cookie.removeCookie('sb-refresh-token', {
-            path,
-            domain: window.location.hostname,
-        });
-        // For safari
-        window.vm.config.globalProperties.$cookie.removeCookie('sb-access-token', {
-            path,
-            domain: '.' + window.location.hostname,
-        });
-        window.vm.config.globalProperties.$cookie.removeCookie('sb-refresh-token', {
-            path,
-            domain: '.' + window.location.hostname,
-        });
+        clearSessionCookies();
         this.publicInstance.auth.signOut();
     },
     // Ensure Retro compatibility for the workflow action fetchUser
     fetchUser() {
         return this.refreshAuthUser();
     },
-    async refreshAuthUser(_session) {
+    clearAuthView() {
+        this.user = null;
+        this.isAuthenticated = false;
+    },
+    markAuthPending() {
+        this.clearAuthView();
+        window.__mgGuestAuth = true;
+        authBanner('offline');
+    },
+    async refreshAuthUser() {
         if (!this.publicInstance) throw new Error('Invalid Supabase Auth configuration.');
-
-        const { data } = await this.publicInstance.auth.getSession();
-        const session = _session || data.session;
-        const user = session ? session.user : data.user;
-        const currentUser = wwLib.wwVariable.getValue(`${this.id}-user`);
-        if (!user) {
-            this.signOut();
+        const request = this._authRequest = (this._authRequest || 0) + 1;
+        const started = this._authEpoch || 0;
+        let result;
+        try { result = await this.publicInstance.auth.getSession(); }
+        catch { if (request === this._authRequest) this.markAuthPending(); return false; }
+        const session = result.data?.session;
+        if (started !== (this._authEpoch || 0) || request !== this._authRequest) return false;
+        if (result.error) {
+            if (isAuthRetryableFetchError(result.error)) this.markAuthPending();
+            else { this.clearAuthView(); clearSessionCookies(); window.__mgGuestAuth = false; authBanner('reauth'); }
             return false;
         }
-        user.roles = await this.getUserRoles(user.id);
-        user._session = {
+        if (!validSession(session)) {
+            this.clearAuthView();
+            if (!session) { clearSessionCookies(); window.__mgGuestAuth = false; authBanner(''); }
+            return false;
+        }
+        const epoch = this._authEpoch || 0;
+        let roles;
+        try { roles = await this.getUserRoles(session.user.id); }
+        catch { if (request === this._authRequest) this.markAuthPending(); return false; }
+        if (request !== this._authRequest || epoch !== (this._authEpoch || 0) || !validSession(session)) return false;
+        const currentUser = wwLib.wwVariable.getValue(`${this.id}-user`);
+        const user = { ...session.user, roles, _session: {
             access_token: session.access_token,
             expires_in: session.expires_in,
             expires_at: session.expires_at,
-            provider_token: session.provider_token || currentUser?._session?.provider_token,
+            provider_token: session.provider_token || (currentUser?.id === session.user.id ? currentUser?._session?.provider_token : null),
             refresh_token: session.refresh_token,
             token_type: session.token_type,
-        };
+        } };
         this.user = user;
         this.isAuthenticated = true;
         setCookies(session);
+        const wasPending = window.__mgGuestAuth;
+        window.__mgGuestAuth = false;
+        if (wasPending) authBanner('recovered');
         return user;
     },
     async getUserRoles(userId) {
@@ -465,45 +425,18 @@ export default {
     },
     async refreshSession() {
         if (!this.publicInstance) throw new Error('Invalid Supabase Auth configuration.');
-        const { data, error } = await this.publicInstance.auth.refreshSession();
+        const { error } = await this.publicInstance.auth.refreshSession();
         if (error) throw new Error(error.message, { cause: error });
-        const currentUser = wwLib.wwVariable.getValue(`${this.id}-user`);
-        const { user, session } = data;
-        if (!user || !session) return;
-        this.user = {
-            ...currentUser,
-            ...user,
-            _session: {
-                access_token: session?.access_token,
-                expires_in: session?.expires_in,
-                expires_at: session?.expires_at,
-                provider_token: currentUser?._session?.provider_token,
-                refresh_token: session?.refresh_token,
-                token_type: session?.token_type,
-            },
-        };
-        this.isAuthenticated = true;
-        setCookies(session);
+        // Re-read the current SDK session; a returned refresh result may already
+        // have been superseded by logout/login before this continuation runs.
+        return this.refreshAuthUser();
     },
 };
 
 
 const setCookies = session => {
-    const path = wwLib.manager ? '/' + wwLib.wwWebsiteData.getInfo().id : '/';
-    window.vm.config.globalProperties.$cookie.setCookie('sb-access-token', session.access_token, {
-        expire: session.expires_in,
-        path,
-        domain: window.location.hostname,
-        secure: true,
-        sameSite: 'Lax',
-    });
-    window.vm.config.globalProperties.$cookie.setCookie('sb-refresh-token', session.refresh_token, {
-        expire: '1y',
-        path,
-        domain: window.location.hostname,
-        secure: true,
-        sameSite: 'Lax',
-    });
+    writeSessionCookie('mg-auth-v2-access', session.access_token, Math.max(0, Math.floor(Number(session.expires_at) - Date.now() / 1000)));
+    writeSessionCookie('mg-auth-v2-refresh', session.refresh_token, 31536000);
 };
 
 const adminFunctions = {

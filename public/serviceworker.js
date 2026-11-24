@@ -91,7 +91,7 @@ self.addEventListener('push', (event) => {
         self.registration.showNotification(title, {
             body,
             icon: '/images/apple-touch-180.png',
-            badge: '/images/apple-touch-180.png',
+            badge: '/images/notification-badge-mg-v2.png',
             data: { url },
             tag,
         }).catch(() => {}),

@@ -5,6 +5,7 @@
         :is="vueComponentName"
         v-if="isRendering"
         ref="component"
+        v-club-chat-scroll="uid"
         :style="elementStyle"
         class="ww-element"
         :class="[state.class || '', `ww-element-${uid}`]"
@@ -22,11 +23,12 @@
     >
         <slot></slot
     ></component>
+    <ClubChatAttachments v-if="isRendering && ['6cd0c16b-3776-40d8-840e-4274d72ceccc', 'c94d00be-3578-4589-9b5c-b8165a92c0bf'].includes(uid)" />
     <!-- wwFront:end -->
  </template>
 
 <script>
-import { computed, ref, toRef, reactive, inject, provide, shallowRef, watch, onUnmounted } from 'vue';
+import { computed, ref, toRef, reactive, inject, provide, shallowRef, watch, onUnmounted, defineAsyncComponent } from 'vue';
 
 import {
     getComponentVueComponentName,
@@ -47,11 +49,17 @@ import { useElementLocalContext } from '@/_front/use/useElementLocalContext';
 
 import { getBackgroundStyle } from '@/_front/helpers/wwBackgroungStyle';
 
+import './clubChat.css';
+import { clubChatScroll } from '../helpers/clubChatScroll.js';
+import { CLUB_MESSAGE_UIDS } from '@/_front/helpers/clubMessageView.js';
+const ClubChatAttachments = defineAsyncComponent(() => import('./ClubChatAttachments.vue'));
+const ClubChatMessage = defineAsyncComponent(() => import('./ClubChatMessage.vue'));
+
 let componentId = 1;
 
 export default {
-    components: {
-     },
+    components: { ClubChatAttachments },
+    directives: { clubChatScroll },
     inject: {
         parentId: { from: '_wwElementUid', default: null },
         wwIsInStretchedSection: { from: '__wwIsInStretchedSection', default: false },
@@ -270,6 +278,8 @@ export default {
     },
     computed: {
         vueComponentName() {
+            // Only the existing desktop/mobile club message templates; all actions/data stay in WeWeb.
+            if (CLUB_MESSAGE_UIDS.has(this.uid)) return ClubChatMessage;
             return getComponentVueComponentName('element', this.uid);
         },
         /*=============================================m_ÔÔ_m=============================================\

@@ -4,7 +4,7 @@ import { sbWithRetry } from './sbFetch.js';
 // Callbacks are synchronous: consumers must defer SDK work until outside the Auth lock.
 export function observeConfirmedSession(client, onChange, onError = () => {}) {
     let uid = null, expiresAt = 0, generation = 0, revision = 0;
-    let known = false, stopped = false, timer, subscription, refreshing;
+    let known = false, stopped = false, timer, eventTimer, subscription, refreshing, lastRecovery = -Infinity;
     function apply(session) {
         clearTimeout(timer);
         const expiry = Number(session?.expires_at) * 1000;
@@ -41,15 +41,35 @@ export function observeConfirmedSession(client, onChange, onError = () => {}) {
     }
     const result = client.auth.onAuthStateChange((event, session) => {
         if (stopped || (event === 'INITIAL_SESSION' && revision > 0)) return;
-        revision++;
-        apply(event === 'SIGNED_OUT' ? null : session);
+        const eventRevision = ++revision;
+        // Events (including BroadcastChannel SIGNED_OUT) carry no source generation.
+        // Hide unconfirmed identity immediately; only a fresh SDK read can restore it.
+        if (event === 'SIGNED_OUT' || event === 'USER_DELETED' || session?.user?.id !== uid) apply(null);
+        clearTimeout(eventTimer);
+        eventTimer = setTimeout(async () => {
+            // Never await SDK work inside onAuthStateChange. Finish an older read,
+            // whose revision guard discards it, before confirming this event.
+            if (refreshing) await refreshing;
+            if (!stopped && revision === eventRevision) refresh();
+        }, 0);
     });
     subscription = result.data?.subscription;
-    document.addEventListener('visibilitychange', checkExpiry);
-    window.addEventListener('pageshow', checkExpiry);
+    function recover() {
+        checkExpiry();
+        if (stopped || document.visibilityState === 'hidden' || navigator.onLine === false || Date.now() - lastRecovery < 30000) return;
+        lastRecovery = Date.now();
+        refresh();
+    }
+    document.addEventListener('visibilitychange', recover);
+    window.addEventListener('pageshow', recover);
+    const offline = () => { lastRecovery = -Infinity; };
+    window.addEventListener('offline', offline);
+    window.addEventListener('online', recover);
     return { snapshot, current, refresh, stop() {
-        stopped = true; generation++; clearTimeout(timer); subscription?.unsubscribe();
-        document.removeEventListener('visibilitychange', checkExpiry);
-        window.removeEventListener('pageshow', checkExpiry);
+        stopped = true; generation++; clearTimeout(timer); clearTimeout(eventTimer); subscription?.unsubscribe();
+        document.removeEventListener('visibilitychange', recover);
+        window.removeEventListener('pageshow', recover);
+        window.removeEventListener('online', recover);
+        window.removeEventListener('offline', offline);
     } };
 }

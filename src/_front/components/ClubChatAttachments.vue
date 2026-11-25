@@ -37,7 +37,7 @@ async function start(){if(busy.value||recording.value||requesting.value||pending
  recorder.start();recording.value=true;timeout=setTimeout(()=>stop(false),300000);
  }catch{cleanup();error.value='Не удалось начать запись. Проверьте микрофон и разрешение браузера.'}finally{requesting.value=false}}
 async function send(){const item=pending.value;if(!item||busy.value)return;busy.value=true;error.value='';try{await sendClubAttachment(getSupabase(),item,current);if(current(item.uid)&&club.value===item.club){clear();await ctx?.component?.methods?.executeWorkflow('b9817663-75ec-436b-b985-ac4399e3fd9f')}}catch{if(!dead)error.value='Не удалось отправить. Вложение сохранено для повторной попытки.'}finally{busy.value=false}}
-async function capability(){enabled.value=false;const generation=++rev;const result=await clubAttachmentsEnabled(getSupabase());if(!dead&&generation===rev)enabled.value=result}
+async function capability(){enabled.value=false;const generation=++rev;const result=await clubAttachmentsEnabled(getSupabase(),club.value);if(!dead&&generation===rev)enabled.value=result}
 watch(()=>readStoredSession()?.user?.id,()=>{rev++;stop(true);clear();enabled.value=false;if(readStoredSession()?.user?.id)capability()});
 watch(club,()=>{rev++;stop(true);clear();capability()});onMounted(capability);onBeforeUnmount(()=>{dead=true;rev++;stop(true);cleanup();clear()});
 </script>

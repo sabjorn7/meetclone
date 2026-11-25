@@ -5,8 +5,9 @@ export function attachmentPath(club,uid,id,ext){
     if(![club,uid,id].every(x=>UUID.test(x||''))||!/^\w{2,5}$/.test(ext))throw Error('invalid_attachment');
     return `${club}/${uid}/${id}.${ext}`;
 }
-export async function clubAttachmentsEnabled(sb){
-    try{const {data,error}=await sb.rpc('club_chat_capabilities');return !error&&data?.attachments===true;}catch{return false}
+export async function clubAttachmentsEnabled(sb,club){
+    if(!UUID.test(club||''))return false;
+    try{const {data,error}=await sb.rpc('club_chat_capabilities',{p_club:club});return !error&&data?.attachments===true;}catch{return false}
 }
 export function prepareClubAttachment(file,club,uid){
     const v=validateFile(file);if(!v.ok)throw Error(v.error);
@@ -14,7 +15,7 @@ export function prepareClubAttachment(file,club,uid){
 }
 export async function sendClubAttachment(sb,item,current){
     if(!current(item.uid))throw Error('session_changed');
-    if(!await clubAttachmentsEnabled(sb))throw Error('attachments_disabled');
+    if(!await clubAttachmentsEnabled(sb,item.club))throw Error('attachments_disabled');
     if(!current(item.uid))throw Error('session_changed');
     if(!item.uploaded){
         const {error}=await sb.storage.from(CLUB_ATTACHMENT_BUCKET).upload(item.path,item.file,{upsert:false,contentType:item.mime});

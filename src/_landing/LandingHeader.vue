@@ -52,7 +52,6 @@
             <a href="https://app.meetgu.ru/clubs">Клуб</a>
             <a href="https://app.meetgu.ru/streams">Трансляции</a>
             <div class="lh__mobile-cta">
-                <a class="lh__login" href="https://app.meetgu.ru/login">Войти</a>
                 <a class="lh__reg" href="https://app.meetgu.ru/registration">Регистрация</a>
             </div>
         </div>
@@ -128,8 +127,10 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
 .lh__mobile { display: none; }
 
 @media (max-width: 860px) {
-    .lh__wrap { padding: 0 20px; }
-    .lh__nav, .lh__cta { display: none; }
+    .lh__wrap { padding: 0 20px; gap: 12px; }
+    .lh__nav, .lh__cta .lh__reg { display: none; }
+    .lh__cta { margin-left: auto; }
+    .lh__cta .lh__login { display: inline-flex; align-items: center; min-height: 44px; }
     .lh__burger { display: flex; }
     .lh__mobile { display: block; border-top: 1px solid #e4e9f1; padding: 12px 20px 20px; background: #fff; }
     .lh__mobile-cap { display: block; margin: 14px 0 6px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #98a0ad; }

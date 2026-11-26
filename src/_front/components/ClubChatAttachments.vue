@@ -9,6 +9,9 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" /><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 19v3" /></svg>
             </button>
         </div>
+        <button v-if="composerUid" type="button" class="club-attachments__send" aria-label="Отправить сообщение" title="Отправить сообщение" :disabled="!hasText" @click="submitText">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 16-3-6-7-2z" /></svg>
+        </button>
         <div v-if="recording" class="pd-recbar">
             <span class="pd-recbar__dot" aria-hidden="true"></span><span class="pd-recbar__hint" role="status">Идёт запись</span>
             <button type="button" class="pd-attach-btn" aria-label="Стоп" title="Остановить запись" @click="stop(false)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /></svg></button>
@@ -33,6 +36,17 @@ import {encodeBlobToMp3} from '../helpers/mp3Encode.js';
 import {clubAttachmentsEnabled,prepareClubAttachment,sendClubAttachment} from '../helpers/clubAttachments.js';
 import VoiceMessagePlayer from './VoiceMessagePlayer.vue';
 const ctx=inject('_wwLibraryComponentContext',null);
+const props=defineProps({composerUid:{type:String,default:''}});
+const composerIds=computed(()=>props.composerUid==='6cd0c16b-3776-40d8-840e-4274d72ceccc'
+    ? {input:'74e334e1-62d0-4e61-afdc-4da3aa011fcf',send:'7a962394-cf77-43b1-8606-bd8ddf2a8e03'}
+    : {input:'2a3dbfa4-eddc-4a3c-9ec4-02a217620d70',send:'5cd08dd6-fdfc-463d-95dd-12c41ac3c8fe'});
+const hasText=computed(()=>Boolean(String(ctx?.component?.variables?.[composerIds.value.input+'-value']||'').trim()));
+function submitText(event){
+    if(!hasText.value)return;
+    // Delegate to the original WeWeb click workflow; do not duplicate database writes.
+    event.currentTarget.parentElement.parentElement.querySelector('.ww-element-'+composerIds.value.send)?.click();
+}
+
 const club=computed(()=>ctx?.component?.variables?.['14d34912-0442-4607-9311-5c9590247a28']?.club?.id);
 const picker=ref(null),enabled=ref(false),pending=ref(null),preview=ref(''),busy=ref(false),recording=ref(false),requesting=ref(false),error=ref('');
 const audioSupported=audioRecordingSupported();let recorder,stream,timeout,rev=0,dead=false,cancelled=false;
@@ -70,6 +84,10 @@ watch(club,()=>{rev++;stop(true);clear();capability()});onMounted(capability);on
 .pd-recbar { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
 .pd-recbar__dot { width: 12px; height: 12px; border-radius: 50%; background: #a82b38; flex: none; }
 .pd-recbar__hint { color: #6b7890; font-size: .86rem; flex: 1; }
+.club-attachments__send { width: 46px; height: 46px; padding: 0; border: 0; border-radius: 50%; background: #2e70dd; color: #fff; display: grid; place-items: center; cursor: pointer; }
+.club-attachments__send svg { width: 22px; height: 22px; fill: currentColor; }
+.club-attachments__send:disabled { opacity: .5; cursor: default; }
+.club-attachments__send:focus-visible { outline: 2px solid #2e70dd; outline-offset: 3px; }
 @media (hover: hover) and (pointer: fine) { .pd-attach-btn:not(:disabled):hover { color: #2e70dd; background: #f1f6fd; } .pd-attach-btn--send:not(:disabled):hover { color: #fff; background: #245bb5; } }
 @media (prefers-reduced-motion: reduce) { .pd-attach-btn { transition: none; } }
 @media (max-width: 600px) { .club-attachments { padding: 0 10px 10px; } }

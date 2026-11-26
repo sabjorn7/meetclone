@@ -23,7 +23,7 @@
     >
         <slot></slot
     ></component>
-    <ClubChatAttachments v-if="isRendering && ['6cd0c16b-3776-40d8-840e-4274d72ceccc', 'c94d00be-3578-4589-9b5c-b8165a92c0bf'].includes(uid)" />
+    <ClubChatAttachments :composer-uid="uid" v-if="isRendering && ['6cd0c16b-3776-40d8-840e-4274d72ceccc', 'c94d00be-3578-4589-9b5c-b8165a92c0bf'].includes(uid)" />
     <!-- wwFront:end -->
  </template>
 
